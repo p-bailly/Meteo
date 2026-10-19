@@ -21,6 +21,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -53,6 +57,8 @@ fun SettingsScreen(
     onModelVisible: (WeatherModel, Boolean) -> Unit,
     meteoFranceKey: String?,
     onSaveKey: (String) -> Unit,
+    windyKey: String?,
+    onSaveWindyKey: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -79,7 +85,25 @@ fun SettingsScreen(
             }
             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
             SectionTitle("Radar Météo-France")
-            KeySettings(meteoFranceKey, onSaveKey)
+            KeySettings(
+                current = meteoFranceKey,
+                onSave = onSaveKey,
+                explanation = "Clé d'API gratuite du portail Météo-France. Pour le radar, s'abonner à « DonneesPubliquesRadar » ; " +
+                    "pour sa prévision à 3 h, aussi à « PrevisionImmediatePrecipitations ». Générer la clé après les " +
+                    "abonnements : une clé ne donne accès qu'aux API souscrites au moment où elle est créée.",
+                portalUrl = "https://portail-api.meteofrance.fr",
+                portalLabel = "Ouvrir le portail Météo-France",
+            )
+            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            SectionTitle("Webcams (Windy)")
+            KeySettings(
+                current = windyKey,
+                onSave = onSaveWindyKey,
+                explanation = "Clé gratuite de l'API Webcams de Windy : créer un compte sur api.windy.com, puis une clé " +
+                    "« Webcams API » avec l'offre gratuite.",
+                portalUrl = "https://api.windy.com/keys",
+                portalLabel = "Ouvrir api.windy.com",
+            )
             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
             SectionTitle("Sources")
             Text(
@@ -125,25 +149,40 @@ private fun ModelRow(model: WeatherModel, visible: Boolean, onVisible: (Boolean)
 }
 
 @Composable
-private fun KeySettings(current: String?, onSave: (String) -> Unit) {
+private fun KeySettings(
+    current: String?,
+    onSave: (String) -> Unit,
+    explanation: String,
+    portalUrl: String,
+    portalLabel: String,
+) {
     val context = LocalContext.current
     var key by rememberSaveable(current) { mutableStateOf(current.orEmpty()) }
+    var visible by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.padding(horizontal = 16.dp)) {
-        Text(
-            "Clé d'API gratuite du portail Météo-France. Pour le radar, s'abonner à « DonneesPubliquesRadar » ; " +
-                "pour sa prévision à 3 h, aussi à « PrevisionImmediatePrecipitations ». Générer la clé après les " +
-                "abonnements : une clé ne donne accès qu'aux API souscrites au moment où elle est créée.",
-            style = MaterialTheme.typography.bodySmall,
-        )
+        Text(explanation, style = MaterialTheme.typography.bodySmall)
         TextButton(onClick = {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://portail-api.meteofrance.fr")))
-        }) { Text("Ouvrir le portail Météo-France") }
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(portalUrl)))
+        }) { Text(portalLabel) }
         OutlinedTextField(
             value = key,
             onValueChange = { key = it.trim() },
             label = { Text("Clé d'API") },
             singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                Row {
+                    IconButton(onClick = { visible = !visible }) {
+                        Icon(
+                            if (visible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = if (visible) "Masquer la clé" else "Afficher la clé",
+                        )
+                    }
+                    if (key.isNotEmpty()) {
+                        IconButton(onClick = { key = "" }) { Icon(Icons.Filled.Clear, contentDescription = "Effacer") }
+                    }
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))

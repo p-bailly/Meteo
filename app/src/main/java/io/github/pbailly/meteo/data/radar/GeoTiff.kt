@@ -42,6 +42,7 @@ object GeoTiff {
     private const val SAMPLE_FORMAT = 339
     private const val MODEL_PIXEL_SCALE = 33550
     private const val MODEL_TIEPOINT = 33922
+    private const val MODEL_TRANSFORMATION = 34264
     private const val GEO_KEY_DIRECTORY = 34735
     private const val GDAL_NODATA = 42113
 
@@ -105,8 +106,10 @@ object GeoTiff {
             }
         }
 
-        val scale = tags[MODEL_PIXEL_SCALE]?.doubles
-        val tie = tags[MODEL_TIEPOINT]?.doubles
+        // Calage : échelle + point de calage, ou à défaut matrice de transformation (GeoServer).
+        val matrix = tags[MODEL_TRANSFORMATION]?.doubles?.takeIf { it.size >= 8 }
+        val scale = tags[MODEL_PIXEL_SCALE]?.doubles ?: matrix?.let { doubleArrayOf(it[0], -it[5], 0.0) }
+        val tie = tags[MODEL_TIEPOINT]?.doubles ?: matrix?.let { doubleArrayOf(0.0, 0.0, 0.0, it[3], it[7], 0.0) }
         // GeoKey 1025 = 2 : le point de calage est le centre du pixel, et non son coin.
         val pixelIsPoint = tags[GEO_KEY_DIRECTORY]?.longs?.let { keys ->
             (4 until keys.size step 4).any { keys[it] == 1025L && keys.getOrNull(it + 3) == 2L }

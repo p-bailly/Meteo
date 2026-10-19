@@ -8,6 +8,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.pbailly.meteo.ui.radar.LayersViewModel
 import io.github.pbailly.meteo.ui.radar.RadarRoute
 import io.github.pbailly.meteo.ui.radar.RadarViewModel
 
@@ -29,11 +30,15 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
     if (showSettings) {
         val radar: RadarViewModel = viewModel()
         val radarState by radar.state.collectAsStateWithLifecycle()
+        val layers: LayersViewModel = viewModel()
+        val layerState by layers.state.collectAsStateWithLifecycle()
         SettingsScreen(
             hiddenModels = state.hiddenModels,
             onModelVisible = viewModel::setModelVisible,
             meteoFranceKey = radarState.apiKey,
             onSaveKey = radar::saveKey,
+            windyKey = layerState.windyKey,
+            onSaveWindyKey = layers::saveWindyKey,
             onBack = { showSettings = false },
         )
     } else if (place != null && showRadar && !showPlaces) {

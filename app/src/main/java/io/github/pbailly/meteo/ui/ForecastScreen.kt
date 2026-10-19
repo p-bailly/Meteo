@@ -231,7 +231,7 @@ private fun CurrentBlock(
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SideButton(Icons.Filled.Radar, "Radar de pluie", onOpenRadar)
+            SideButton(Icons.Filled.Radar, "Cartes : pluie, température, satellite, foudre, webcams", onOpenRadar)
             SideButton(Icons.Filled.BarChart, "Météogrammes", onOpenMeteograms)
         }
     }

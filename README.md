@@ -31,9 +31,16 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
   UK Met Office, MeteoSwiss, GEM) avec leur moyenne.
 - **Prévisibilité** : calculée sur l'accord entre ces 8 modèles (écart des températures, accord sur la
   pluie), de 0 à 100 %.
-- **Radar de pluie Météo-France** (bouton radar en haut) : carte plein écran, légende Bruine → Grêle,
-  frise des heures, animation, et prévision du déplacement des pluies sur 1 heure. Voir ci-dessous pour la clé.
-- **Réglages** (menu ⋮) : modèles affichés dans MultiModèle, clé Météo-France.
+- **Cartes** (bouton radar de la page d'une ville), avec frise des heures et animation :
+  - **Pluie** : radar Météo-France et sa prévision (voir ci-dessous pour la clé) ;
+  - **Température** à 2 m : modèle ICON-EU du DWD (sans clé), heure par heure sur 24 h puis toutes les 3 h
+    jusqu'à 72 h, colorée comme les cases de température de l'app ;
+  - **Satellite** : Meteosat de 3e génération (EUMETSAT, sans clé), une image toutes les 10 min sur 2 h,
+    vraies couleurs le jour, nuages et lumières des villes la nuit ;
+  - **Foudre** : imageur d'éclairs de Meteosat (EUMETSAT, sans clé), éclairs par 5 min sur la dernière heure ;
+  - **Webcams** autour du lieu : Windy, avec une clé gratuite (api.windy.com) à saisir dans les Réglages ;
+    toucher un point affiche l'image et le lien vers la page Windy.
+- **Réglages** (menu ⋮) : modèles affichés dans MultiModèle, clés Météo-France et Windy.
 - Thème clair et sombre, identité « Isobare » (voir `design/`), cache local (pas de nouvel appel pendant 30 min, affichage hors ligne).
 
 ## Radar Météo-France : la clé
