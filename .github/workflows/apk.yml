@@ -1,6 +1,7 @@
 name: APK
 
-# À chaque push : tests, compilation de l'APK signé, puis publication dans la release « apk-latest ».
+# À chaque push : tests et compilation de l'APK signé. Publication dans la release « apk-latest »
+# uniquement depuis la branche par défaut du dépôt (les autres branches gardent l'APK en artefact).
 # Lien direct pour le téléphone : https://github.com/<propriétaire>/<dépôt>/releases/latest/download/meteo.apk
 on:
   push:
@@ -9,8 +10,9 @@ on:
 permissions:
   contents: write
 
+# Une file par branche : un push sur une autre branche n'annule pas la publication en cours.
 concurrency:
-  group: apk-release
+  group: apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -37,6 +39,7 @@ jobs:
           path: meteo.apk
 
       - name: Publier l'APK
+        if: github.ref_name == github.event.repository.default_branch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

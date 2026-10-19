@@ -12,8 +12,8 @@ Application Android de météo, sans publicité, inspirée de Meteoblue. Les pr�
 3. Pour mettre à jour, refaire la même chose : la nouvelle version s'installe par-dessus l'ancienne
    et garde les favoris.
 
-L'APK est recompilé automatiquement par GitHub Actions à chaque modification du code
-(`.github/workflows/apk.yml`).
+L'APK est recompilé automatiquement par GitHub Actions à chaque modification du code, et publié
+seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`).
 
 ## Ce que fait l'app
 
