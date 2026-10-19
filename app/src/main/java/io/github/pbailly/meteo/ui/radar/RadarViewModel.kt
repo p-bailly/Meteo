@@ -6,6 +6,7 @@ import android.util.LruCache
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.pbailly.meteo.data.radar.GeoBounds
+import io.github.pbailly.meteo.data.radar.MeteoFrancePiaf
 import io.github.pbailly.meteo.data.radar.MeteoFranceRadar
 import io.github.pbailly.meteo.data.radar.MotionField
 import io.github.pbailly.meteo.data.radar.Nowcast
@@ -49,23 +50,39 @@ data class RadarUiState(
     val hasKey: Boolean get() = !apiKey.isNullOrBlank()
 }
 
-/** Point de départ de la prévision : la dernière image et le mouvement mesuré des pluies. */
+/** Point de départ de l'extrapolation : la dernière image et le mouvement mesuré des pluies. */
 private class NowcastBase(val time: Instant, val latest: RadarPixels, val motion: MotionField)
+
+/** D'où viennent les images prévues de la frise. */
+private sealed interface ForecastSource {
+    /** Prévision immédiate officielle de Météo-France (PIAF), jusqu'à +3 h. */
+    class Piaf(val frames: List<RadarFrame>) : ForecastSource
+
+    /** Repli : extrapolation calculée par l'app, jusqu'à +1 h. */
+    class Extrapolated(val base: NowcastBase) : ForecastSource
+}
 
 class RadarViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("radar", Application.MODE_PRIVATE)
     private val radar = MeteoFranceRadar(File(app.cacheDir, "radar"))
+    private val piaf = MeteoFrancePiaf(File(app.cacheDir, "piaf"))
+    private var center: Pair<Double, Double>? = null
+    private var piafFrames: List<RadarFrame> = emptyList()
+    private var piafCheckedAt: Instant? = null
+    private var piafNote: String? = null
 
     private val _state = MutableStateFlow(RadarUiState(apiKey = prefs.getString(KEY_API, null)))
     val state: StateFlow<RadarUiState> = _state.asStateFlow()
 
     private var observations: List<RadarFrame> = emptyList()
     private var nowcast: NowcastBase? = null
+    private var forecast: ForecastSource? = null
 
     /** Quelques images décodées en mémoire (8 Mo chacune) ; les autres sont relues ou recalculées. */
     private val bitmaps = LruCache<String, Bitmap>(6)
     private var loadJob: Job? = null
     private var nowcastJob: Job? = null
+    private var piafJob: Job? = null
     private var showJob: Job? = null
     private var playJob: Job? = null
 
@@ -74,15 +91,31 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
         setObservations(radar.stored(), selectLatest = true)
     }
 
+    /** Enregistre la clé ; l'écran radar relance le téléchargement s'il est ouvert. */
     fun saveKey(key: String) {
         prefs.edit().putString(KEY_API, key.trim()).apply()
-        _state.update { it.copy(apiKey = key.trim(), error = null) }
-        refresh()
+        piafCheckedAt = null
+        _state.update { it.copy(apiKey = key.trim().ifEmpty { null }, error = null) }
     }
 
-    /** Vérifie s'il y a une nouvelle image Météo-France et la télécharge (environ 2 Mo). */
-    fun refresh() {
+    /** Lieu autour duquel on demande la prévision Météo-France. */
+    fun setCenter(latitude: Double, longitude: Double) {
+        if (center == latitude to longitude) return
+        center = latitude to longitude
+        // Nouvelle zone : l'ancienne prévision Météo-France ne vaut plus, on la redemandera.
+        piafCheckedAt = null
+        piafFrames = emptyList()
+        chooseForecast()
+        publishSlots(selectLatest = false)
+    }
+
+    /**
+     * Vérifie s'il y a une nouvelle image Météo-France et la télécharge (environ 2 Mo).
+     * La prévision PIAF est revue au plus toutes les [PIAF_INTERVAL], sauf si [force].
+     */
+    fun refresh(force: Boolean = false) {
         val key = _state.value.apiKey?.takeIf { it.isNotBlank() } ?: return
+        if (force) piafCheckedAt = null
         if (loadJob?.isActive == true) return
         _state.update { it.copy(loading = true, error = null) }
         loadJob = viewModelScope.launch {
@@ -93,6 +126,7 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
                     setObservations(list, selectLatest = onLatest && !_state.value.playing)
                 }
                 _state.update { it.copy(loading = false) }
+                refreshPiaf(key)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -136,16 +170,68 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
     private fun setObservations(list: List<RadarFrame>, selectLatest: Boolean) {
         observations = list
         nowcast = null
+        chooseForecast()
         publishSlots(selectLatest)
         computeNowcast()
+    }
+
+    /** La prévision Météo-France si elle couvre la suite de la dernière observation, sinon l'extrapolation. */
+    private fun chooseForecast() {
+        val latest = observations.lastOrNull()?.time
+        val official = piafFrames.filter { latest == null || it.time.isAfter(latest) }
+        val base = nowcast
+        forecast = when {
+            official.isNotEmpty() -> ForecastSource.Piaf(official)
+            base != null -> ForecastSource.Extrapolated(base)
+            else -> null
+        }
+        val note = when (forecast) {
+            is ForecastSource.Piaf -> null
+            is ForecastSource.Extrapolated -> piafNote
+            null -> _state.value.forecastNote
+        }
+        _state.update { it.copy(forecastNote = note) }
+    }
+
+    /** Télécharge la prévision immédiate PIAF de Météo-France autour du lieu (au plus toutes les 10 min). */
+    private fun refreshPiaf(key: String) {
+        val (lat, lon) = center ?: return
+        val latest = observations.lastOrNull() ?: return
+        val checked = piafCheckedAt
+        if (piafJob?.isActive == true || (checked != null && Duration.between(checked, Instant.now()) < PIAF_INTERVAL)) return
+        piafCheckedAt = Instant.now()
+        piafJob = viewModelScope.launch {
+            try {
+                piafFrames = piaf.forecast(key, lat, lon, after = latest.time)
+                piafNote = null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                piafFrames = emptyList()
+                piafNote = if (e is RadarAuthException) {
+                    "Prévision calculée par l'app (1 h). Pour celle de Météo-France (3 h) : s'abonner à " +
+                        "« PrevisionImmediatePrecipitations » sur le portail, puis générer une nouvelle clé."
+                } else {
+                    "Prévision Météo-France indisponible (${e.message ?: e.javaClass.simpleName}) : prévision calculée par l'app (1 h)."
+                }
+            }
+            chooseForecast()
+            publishSlots(selectLatest = false)
+        }
     }
 
     /** Met à jour la frise (observations puis prévisions) en gardant la case affichée si elle existe encore. */
     private fun publishSlots(selectLatest: Boolean) {
         val previous = currentSlot()
-        val base = nowcast
-        val slots = observations.map { RadarSlot(it.time) } +
-            (if (base != null) LEADS.map { RadarSlot(base.time.plusSeconds(it * 60L), it) } else emptyList())
+        val latest = observations.lastOrNull()?.time
+        val forecastSlots = when (val f = forecast) {
+            is ForecastSource.Piaf -> f.frames.map { frame ->
+                RadarSlot(frame.time, latest?.let { Duration.between(it, frame.time).toMinutes().toInt() } ?: 0)
+            }
+            is ForecastSource.Extrapolated -> LEADS.map { RadarSlot(f.base.time.plusSeconds(it * 60L), it) }
+            null -> emptyList()
+        }
+        val slots = observations.map { RadarSlot(it.time) } + forecastSlots
         val latestObservation = observations.lastIndex.coerceAtLeast(0)
         val selected = when {
             slots.isEmpty() -> 0
@@ -166,6 +252,7 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
                 .minByOrNull { abs(Duration.between(it.time, last.time).toMinutes() - IDEAL_GAP) }
         }
         if (latest == null || reference == null) {
+            if (forecast != null) return
             _state.update {
                 it.copy(
                     forecastNote = if (latest == null) null else
@@ -183,11 +270,13 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
                     Nowcast.estimateMotion(older.argb, newer.argb, newer.width, newer.height, minutes)
                 }
                 if (motion == null) {
-                    _state.update { it.copy(forecastNote = "Pas assez de pluie sur la carte pour calculer son déplacement.") }
+                    if (forecast == null) {
+                        _state.update { it.copy(forecastNote = "Pas assez de pluie sur la carte pour calculer son déplacement.") }
+                    }
                     return@launch
                 }
                 nowcast = NowcastBase(latest.time, newer, motion)
-                _state.update { it.copy(forecastNote = null) }
+                chooseForecast()
                 publishSlots(selectLatest = false)
             } catch (e: CancellationException) {
                 throw e
@@ -199,8 +288,14 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun showSelected() {
         val slot = currentSlot() ?: return
-        val base = nowcast
-        val key = if (slot.isForecast) "prevision-${base?.time?.epochSecond}-${slot.leadMinutes}" else "obs-${slot.time.epochSecond}"
+        val source = forecast
+        val official = (source as? ForecastSource.Piaf)?.frames?.firstOrNull { it.time == slot.time }
+        val base = (source as? ForecastSource.Extrapolated)?.base
+        val key = when {
+            !slot.isForecast -> "obs-${slot.time.epochSecond}"
+            official != null -> "piaf-${official.file.path}"
+            else -> "prevision-${base?.time?.epochSecond}-${slot.leadMinutes}"
+        }
         bitmaps.get(key)?.let { cached ->
             _state.update { it.copy(currentImage = cached) }
             return
@@ -208,7 +303,9 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
         showJob?.cancel()
         showJob = viewModelScope.launch {
             try {
-                val bitmap = if (slot.isForecast) {
+                val bitmap = if (official != null) {
+                    radar.image(official)
+                } else if (slot.isForecast) {
                     base ?: return@launch
                     withContext(Dispatchers.Default) {
                         val pixels = Nowcast.extrapolate(base.latest.argb, base.motion, slot.leadMinutes!!.toDouble())
@@ -237,6 +334,8 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
         const val MIN_GAP = 5L
         const val MAX_GAP = 30L
         const val IDEAL_GAP = 15L
+
+        val PIAF_INTERVAL: Duration = Duration.ofMinutes(10)
     }
 }
 

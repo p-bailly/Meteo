@@ -34,7 +34,7 @@ class RadarPixels(val width: Int, val height: Int, val argb: IntArray)
  */
 class MeteoFranceRadar(
     private val dir: File,
-    private val http: (url: String, apiKey: String, accept: String) -> ByteArray = ::defaultGet,
+    private val http: (url: String, apiKey: String, accept: String) -> ByteArray = ::meteoFranceGet,
 ) {
     private val mutex = Mutex()
     private var lookup: MercatorLookup? = null
@@ -124,7 +124,8 @@ class MeteoFranceRadar(
     }
 }
 
-private fun defaultGet(url: String, apiKey: String, accept: String): ByteArray {
+/** GET sur les API Météo-France, avec la clé dans l'en-tête `apikey`. */
+internal fun meteoFranceGet(url: String, apiKey: String, accept: String): ByteArray {
     val connection = URL(url).openConnection() as HttpURLConnection
     try {
         connection.connectTimeout = 15_000
@@ -134,8 +135,8 @@ private fun defaultGet(url: String, apiKey: String, accept: String): ByteArray {
         when (val code = connection.responseCode) {
             in 200..299 -> return connection.inputStream.use { it.readBytes() }
             401, 403 -> throw RadarAuthException()
-            429 -> throw IOException("Trop de demandes au radar Météo-France, réessaie dans quelques minutes")
-            else -> throw IOException("Radar Météo-France : erreur HTTP $code")
+            429 -> throw IOException("Trop de demandes à Météo-France, réessaie dans quelques minutes")
+            else -> throw IOException("Météo-France : erreur HTTP $code")
         }
     } finally {
         connection.disconnect()

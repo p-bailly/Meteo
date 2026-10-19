@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -49,10 +48,15 @@ import androidx.compose.foundation.background
 import kotlin.math.max
 
 @Composable
-fun MultiModelTab(remote: Remote<MultiModelForecast>, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+fun MultiModelTab(
+    remote: Remote<MultiModelForecast>,
+    hidden: Set<WeatherModel>,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val data = remote.data
     when {
-        data != null -> MultiModelContent(data, modifier)
+        data != null -> MultiModelContent(data, hidden, modifier)
         remote.error != null -> Column(modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(remote.error, textAlign = TextAlign.Center)
             Spacer(Modifier.height(12.dp))
@@ -75,10 +79,9 @@ private class ModelChartSpec(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MultiModelContent(mm: MultiModelForecast, modifier: Modifier) {
+private fun MultiModelContent(mm: MultiModelForecast, hidden: Set<WeatherModel>, modifier: Modifier) {
     val colors = LocalChartColors.current
     val available = remember(mm) { WeatherModel.entries.filter { mm.series[it]?.hasData == true } }
-    var hidden by remember { mutableStateOf(emptySet<WeatherModel>()) }
     val visible = available.filter { it !in hidden }
     val now = remember(mm) { nowIndex(mm.time, mm.utcOffsetSeconds) }
     var selected by remember(mm) { mutableIntStateOf(now) }
@@ -92,37 +95,45 @@ private fun MultiModelContent(mm: MultiModelForecast, modifier: Modifier) {
     }
 
     Column(modifier.fillMaxWidth()) {
-        Text(
-            "Chaque couleur est un modèle météo. Quand les courbes se suivent, la prévision est fiable ; " +
-                "quand elles s'écartent, elle est incertaine. Les pointillés noirs donnent la moyenne. " +
-                "Touchez un modèle pour le masquer.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
-        Spacer(Modifier.height(8.dp))
+        if (visible.isEmpty()) {
+            Text(
+                "Aucun modèle affiché : choisis-les dans les Réglages.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(16.dp),
+            )
+            return@Column
+        }
+        // Légende : une couleur par modèle, plus la moyenne en pointillés.
         FlowRow(
             Modifier.padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            WeatherModel.entries.forEach { model ->
-                val isAvailable = model in available
-                FilterChip(
-                    selected = isAvailable && model !in hidden,
-                    enabled = isAvailable,
-                    onClick = { hidden = if (model in hidden) hidden - model else hidden + model },
-                    label = { Text(model.label) },
-                    leadingIcon = { ColorDot(colors.series[model.ordinal]) },
-                )
+            visible.forEach { model ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ColorDot(colors.series[model.ordinal])
+                    Spacer(Modifier.width(4.dp))
+                    Text(model.label, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Canvas(Modifier.size(width = 16.dp, height = 10.dp)) {
+                    drawLine(
+                        colors.ink, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 2f * density,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f * density, 3f * density)),
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                Text("Moyenne", style = MaterialTheme.typography.bodySmall)
             }
         }
-        val missing = WeatherModel.entries.filter { it !in available }
+        val missing = available.let { all -> WeatherModel.entries.filter { it !in all && it !in hidden } }
         if (missing.isNotEmpty()) {
             Text(
                 "Ne couvre pas ce lieu : " + missing.joinToString { it.label },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
         }
 

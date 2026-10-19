@@ -32,6 +32,7 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
   avec leur moyenne et un tableau par jour.
 - **Radar de pluie Météo-France** (bouton radar en haut) : carte plein écran, légende Bruine → Grêle,
   frise des heures, animation, et prévision du déplacement des pluies sur 1 heure. Voir ci-dessous pour la clé.
+- **Réglages** (menu ⋮) : modèles affichés dans MultiModèle, clé Météo-France.
 - Thème clair et sombre, cache local (pas de nouvel appel pendant 30 min, affichage hors ligne).
 
 ## Radar Météo-France : la clé
@@ -39,9 +40,11 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
 Le radar vient de l'API publique « DonneesPubliquesRadar » de Météo-France : gratuite, mais avec une clé personnelle.
 
 1. Créer un compte sur [portail-api.meteofrance.fr](https://portail-api.meteofrance.fr).
-2. Ouvrir l'API « Radar » (DonneesPubliquesRadar) et cliquer « Souscrire gratuitement ».
-3. Dans « Mes API », générer une clé de type « API Key » avec la durée maximale (3 ans).
-4. Dans l'app, ouvrir le radar et coller la clé (elle reste sur le téléphone ; bouton clé pour la changer).
+2. S'abonner gratuitement à « DonneesPubliquesRadar » (le radar) et à « PrevisionImmediatePrecipitations »
+   (sa prévision à 3 h).
+3. **Après** les abonnements, générer une clé de type « API Key » avec la durée maximale (3 ans) :
+   une clé ne donne accès qu'aux API souscrites au moment où elle est créée.
+4. Coller la clé dans l'app : écran radar (bouton clé) ou Réglages. Elle reste sur le téléphone.
 
 À savoir :
 
@@ -49,11 +52,13 @@ Le radar vient de l'API publique « DonneesPubliquesRadar » de Météo-France :
   L'app garde les images reçues pendant 2 heures : l'animation se remplit au fil des consultations,
   et l'écran radar vérifie s'il y a une nouvelle image toutes les 2 minutes tant qu'il est ouvert.
 - Chaque nouvelle image pèse environ 2 Mo, soit environ 24 Mo par heure d'écran radar ouvert.
-- **Prévision à 1 heure** : après « maintenant », la frise continue de 5 en 5 minutes jusqu'à +60 min.
-  L'app mesure le déplacement des zones de pluie entre deux images récentes (méthode TREC : suivi des
-  échos radar par corrélation) et le prolonge. Il faut donc deux images à 5–30 minutes d'écart : à la
-  première ouverture, la prévision apparaît avec l'image suivante. Les averses qui naissent ou se dissipent
-  ne sont pas prévues : au-delà de 30 à 60 minutes, la fiabilité baisse vite.
+- **Prévision** : après « maintenant », la frise continue dans le futur.
+  - Avec l'abonnement gratuit à l'API « PrevisionImmediatePrecipitations » (PIAF) dans la même clé :
+    la prévision immédiate officielle de Météo-France (extrapolation radar fusionnée avec le modèle
+    AROME-PI), jusqu'à +3 h par pas de 15 min, sur une zone d'environ 450 × 450 km autour du lieu.
+  - Sinon, en secours : l'app mesure le déplacement des pluies entre deux images récentes (méthode TREC)
+    et le prolonge sur 1 heure. Il faut deux images à 5–30 min d'écart ; les averses qui naissent ou se
+    dissipent ne sont pas prévues.
 - Fond de carte : [OpenFreeMap](https://openfreemap.org) (données OpenStreetMap), gratuit et sans clé.
 
 ## Coût
@@ -77,7 +82,8 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
   favoris (`PlacesStore`), position (`DeviceLocation`).
 - `data/radar/` : API radar Météo-France et stockage des images (`MeteoFranceRadar`), lecture des fichiers
   HDF5 (`OdimDecoder`, avec jhdf), projection stéréographique polaire (`PolarStereographic`) et conversion
-  en image Web Mercator colorée (`MercatorLookup`, `RainClass`).
+  en image Web Mercator colorée (`MercatorLookup`, `RainClass`) ; prévision PIAF via WCS (`MeteoFrancePiaf`,
+  lecteur `GeoTiff`) et extrapolation de secours (`Nowcast`).
 - `ui/` : écrans (`PlacesScreen`, `ForecastScreen`, `radar/RadarScreen`) et onglets (`HourlyTab`, `DaysTab`,
   `MeteogramTab`, `MultiModelTab`), pictogrammes dessinés (`WeatherIcon`), outils de graphique (`ChartKit`),
   carte MapLibre (`radar/RadarMap`).
