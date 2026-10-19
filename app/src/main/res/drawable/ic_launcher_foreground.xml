@@ -1,20 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Soleil derrière un nuage, centré dans la zone sûre (66 dp) de l'icône adaptative. -->
+<!--
+    Logo Isobare (design/logos/01-isobare.svg) : un M tracé comme un front météo, triangles bleus
+    (front froid) et demi-cercles rouges (front chaud) en alternance. Grille de l'icône adaptative.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#FFC21A"
-        android:pathData="M30,44a15,15 0 1,0 30,0a15,15 0 1,0 -30,0z" />
+        android:fillColor="#3FA9F5"
+        android:pathData="M28,71L28,61L20,66ZM32.13,39.81L39.47,46.59L41.23,37.32ZM58.13,56.19L65.47,49.41L56.37,46.92ZM80,42L80,52L88,47Z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M45,57h25a10,10 0 0,1 0,20h-25a10,10 0 0,1 0,-20z" />
+        android:fillColor="#FF5A4E"
+        android:pathData="M28,52A5,5 0,0 1,28,42ZM42.53,49.41A5,5 0,0 1,49.87,56.19ZM68.53,46.59A5,5 0,0 1,75.87,39.81ZM80,61A5,5 0,0 1,80,71Z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M40,61a11,11 0 1,0 22,0a11,11 0 1,0 -22,0z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M52,57a13,13 0 1,0 26,0a13,13 0 1,0 -26,0z" />
+        android:fillColor="#00000000"
+        android:strokeColor="#F4F7FA"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M28,76V36L54,60L80,36V76" />
 </vector>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Isobare D, Relevé : un M tracé comme une courbe de température sur papier millimétré, avec des barres de pluie">
+  <rect width="108" height="108" fill="#0C304E"/>
+  <path d="M27 0V108M36 0V108M45 0V108M54 0V108M63 0V108M72 0V108M81 0V108M0 27H108M0 36H108M0 45H108M0 54H108M0 63H108M0 72H108M0 81H108" stroke="#1E4A70" stroke-width="0.8"/>
+  <g fill="#3FA9F5"><rect x="44" y="78" width="4" height="6"/><rect x="51" y="74" width="4" height="10"/><rect x="58" y="80" width="4" height="4"/></g>
+  <polyline points="28,72 37,38 54,60 71,38 80,72" fill="none" stroke="#FF5A4E" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#F4F7FA" stroke="#FF5A4E" stroke-width="2"><circle cx="37" cy="38" r="3.6"/><circle cx="54" cy="60" r="3.6"/><circle cx="71" cy="38" r="3.6"/></g>
+</svg>

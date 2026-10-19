@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Météo, direction Girouette : une girouette sur une plaque émaillée">
+  <rect width="108" height="108" fill="#1F4A73"/>
+  <circle cx="54" cy="54" r="33" fill="none" stroke="#F4EFE3" stroke-width="1.6"/>
+  <path d="M54 48V39M54 60V69M48 54H39M60 54H69" stroke="#F4EFE3" stroke-width="1.6" stroke-linecap="round"/>
+  <g fill="none" stroke="#F4EFE3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path transform="translate(54 30)" d="M-2.8 4V-4L2.8 4V-4"/>
+    <path transform="translate(78 54)" d="M2.6-4H-2.6V4H2.6M-2.6 0H1.8"/>
+    <path transform="translate(54 78)" d="M2.6-2.6C2.2-4-2.6-4.6-2.6-1.9C-2.6 0.6 2.8-0.2 2.8 2.1C2.8 4.6-2.2 4.4-2.8 2.6"/>
+    <ellipse cx="30" cy="54" rx="3" ry="4"/>
+  </g>
+  <g transform="translate(54 54) rotate(-45)" fill="#D8A846">
+    <path d="M-19 0H15" stroke="#D8A846" stroke-width="3"/>
+    <path d="M12-6.5L26 0L12 6.5L15 0Z"/>
+    <path d="M-12 0L-18-7H-25L-19 0L-25 7H-18Z"/>
+  </g>
+  <circle cx="54" cy="54" r="2.6" fill="#F4EFE3"/>
+</svg>

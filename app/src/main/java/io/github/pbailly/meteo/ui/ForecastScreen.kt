@@ -1,7 +1,6 @@
 package io.github.pbailly.meteo.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,8 +38,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -52,7 +49,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,9 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.Place
-import io.github.pbailly.meteo.ui.theme.HeaderBlue
-import io.github.pbailly.meteo.ui.theme.HeaderBlueDark
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
+import io.github.pbailly.meteo.ui.theme.SecondaryOnNavy
 
 private val TABS = listOf("Heures", "14 jours", "Météogramme", "MultiModèle")
 private const val MULTI_MODEL_TAB = 3
@@ -81,7 +76,6 @@ fun ForecastScreen(
     onRetryMultiModel: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    val header = if (isSystemInDarkTheme()) HeaderBlueDark else HeaderBlue
 
     LaunchedEffect(tab, place.id) {
         if (tab == MULTI_MODEL_TAB) onMultiModelNeeded()
@@ -89,13 +83,19 @@ fun ForecastScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
+            NavyTopBar(
                 title = {
                     Column {
-                        Text(place.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(place.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         val sub = listOfNotNull(place.subtitle.ifBlank { null }, Fmt.meters(state.forecast.data?.elevation ?: place.elevation))
                         if (sub.isNotEmpty()) {
-                            Text(sub.joinToString(" · "), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                sub.joinToString(" · "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SecondaryOnNavy,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 },
@@ -127,12 +127,6 @@ fun ForecastScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = header,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
-                    actionIconContentColor = Color.White,
-                ),
             )
         },
     ) { padding ->
@@ -215,7 +209,7 @@ private fun CurrentHeader(forecast: Forecast) {
         Spacer(Modifier.height(12.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Column {
-                Text("Vent", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                MetricLabel("Vent")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Canvas(Modifier.size(14.dp)) {
                         drawWindArrow(center, current.windDirection, size.minDimension, colors.secondaryInk, 1.5f * density)

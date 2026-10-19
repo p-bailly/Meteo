@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Météo, direction Isobare : un M tracé comme un front météo">
+  <!-- Grille 108 × 108 de l'icône adaptative Android ; le motif tient dans la zone sûre (cercle de 66). -->
+  <!-- Triangles bleus (front froid) et demi-cercles rouges (front chaud) en alternance le long du M. -->
+  <rect width="108" height="108" fill="#0C304E"/>
+  <g fill="#3FA9F5">
+    <path transform="translate(28 66) rotate(-90)" d="M-5 0L5 0L0-8Z"/>
+    <path transform="translate(35.8 43.2) rotate(42.71)" d="M-5 0L5 0L0-8Z"/>
+    <path transform="translate(61.8 52.8) rotate(-42.71)" d="M-5 0L5 0L0-8Z"/>
+    <path transform="translate(80 47) rotate(90)" d="M-5 0L5 0L0-8Z"/>
+  </g>
+  <g fill="#FF5A4E">
+    <path transform="translate(28 47) rotate(-90)" d="M-5 0A5 5 0 0 1 5 0Z"/>
+    <path transform="translate(46.2 52.8) rotate(42.71)" d="M-5 0A5 5 0 0 1 5 0Z"/>
+    <path transform="translate(72.2 43.2) rotate(-42.71)" d="M-5 0A5 5 0 0 1 5 0Z"/>
+    <path transform="translate(80 66) rotate(90)" d="M-5 0A5 5 0 0 1 5 0Z"/>
+  </g>
+  <path d="M28 76V36L54 60L80 36V76" fill="none" stroke="#F4F7FA" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>
