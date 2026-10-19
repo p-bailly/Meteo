@@ -10,6 +10,8 @@ import io.github.pbailly.meteo.data.OpenMeteoException
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.PlacesStore
 import io.github.pbailly.meteo.data.SettingsStore
+import io.github.pbailly.meteo.data.TerrainProfile
+import io.github.pbailly.meteo.data.TerrainRepository
 import io.github.pbailly.meteo.data.WeatherModel
 import io.github.pbailly.meteo.data.WeatherRepository
 import kotlinx.coroutines.Job
@@ -50,12 +52,17 @@ data class MeteoUiState(
     val locationError: String? = null,
     /** Modèles masqués dans l'onglet MultiModèle (choisis dans les Réglages). */
     val hiddenModels: Set<WeatherModel> = emptySet(),
+    /** Coupe du relief autour du lieu (vallée → sommets). */
+    val terrain: Remote<TerrainProfile> = Remote(),
+    /** Prévision courte de chaque favori, par identifiant de lieu. */
+    val summaries: Remote<Map<String, Forecast>> = Remote(),
 ) {
     val isFavorite: Boolean get() = place != null && favorites.any { it.id == place.id }
 }
 
 class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = WeatherRepository(File(app.cacheDir, "openmeteo"))
+    private val terrainRepository = TerrainRepository(File(app.filesDir, "terrain"), repository.httpGet)
     private val store = PlacesStore(app)
     private val settings = SettingsStore(app)
     private val deviceLocation = DeviceLocation(app)
@@ -68,28 +75,37 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private var forecastJob: Job? = null
     private var multiModelJob: Job? = null
     private var searchJob: Job? = null
+    private var terrainJob: Job? = null
+    private var summariesJob: Job? = null
 
     init {
         _state.value.place?.let {
             loadForecast(it, force = false)
             loadMultiModel(it, force = false)
+            loadTerrain(it)
         }
+        loadSummaries(force = false)
     }
 
     fun selectPlace(place: Place) {
         store.saveLastPlace(place)
         multiModelJob?.cancel()
-        _state.update { it.copy(place = place, forecast = Remote(), multiModel = Remote(), search = SearchState()) }
+        _state.update { it.copy(place = place, forecast = Remote(), multiModel = Remote(), terrain = Remote(), search = SearchState()) }
         loadForecast(place, force = false)
         // Les modèles servent aussi à la page principale : prévisibilité et fourchettes de pluie.
         loadMultiModel(place, force = false)
+        loadTerrain(place)
     }
 
     fun refresh() {
         val place = _state.value.place ?: return
         loadForecast(place, force = true)
         loadMultiModel(place, force = true)
+        if (_state.value.terrain.data == null) loadTerrain(place)
     }
+
+    /** Liste des lieux : on rafraîchit la météo des favoris (le cache évite les appels inutiles). */
+    fun refreshSummaries(force: Boolean = false) = loadSummaries(force)
 
     /** Appelé à l'ouverture de l'onglet MultiModèle : on ne télécharge ces données qu'à la demande. */
     fun ensureMultiModel() {
@@ -107,6 +123,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         val updated = if (current.any { it.id == place.id }) current.filterNot { it.id == place.id } else current + place
         store.saveFavorites(updated)
         _state.update { it.copy(favorites = updated) }
+        loadSummaries(force = false)
     }
 
     fun setModelVisible(model: WeatherModel, visible: Boolean) {
@@ -174,6 +191,44 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
                 result.fold(
                     onSuccess = { state.copy(forecast = Remote(it.value, it.fetchedAt, stale = it.stale)) },
                     onFailure = { state.copy(forecast = state.forecast.copy(loading = false, error = (it as Exception).userMessage())) },
+                )
+            }
+        }
+    }
+
+    /** Le relief ne change pas : la coupe est gardée sur le téléphone après le premier téléchargement. */
+    private fun loadTerrain(place: Place) {
+        terrainJob?.cancel()
+        _state.update { it.copy(terrain = it.terrain.copy(loading = true, error = null)) }
+        terrainJob = viewModelScope.launch {
+            val result = runLoading { terrainRepository.profile(place) }
+            _state.update { state ->
+                if (state.place?.id != place.id) return@update state
+                result.fold(
+                    onSuccess = { state.copy(terrain = Remote(it, System.currentTimeMillis())) },
+                    onFailure = { state.copy(terrain = Remote(error = (it as Exception).userMessage())) },
+                )
+            }
+        }
+    }
+
+    private fun loadSummaries(force: Boolean) {
+        val places = _state.value.favorites
+        summariesJob?.cancel()
+        if (places.isEmpty()) {
+            _state.update { it.copy(summaries = Remote()) }
+            return
+        }
+        _state.update { it.copy(summaries = it.summaries.copy(loading = true, error = null)) }
+        summariesJob = viewModelScope.launch {
+            val result = runLoading { repository.summaries(places, force) }
+            _state.update { state ->
+                result.fold(
+                    onSuccess = { loaded ->
+                        val byId = places.map { it.id }.zip(loaded.value).toMap()
+                        state.copy(summaries = Remote(byId, loaded.fetchedAt, stale = loaded.stale))
+                    },
+                    onFailure = { state.copy(summaries = state.summaries.copy(loading = false, error = (it as Exception).userMessage())) },
                 )
             }
         }

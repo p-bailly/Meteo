@@ -22,7 +22,9 @@ import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.geometry.LatLngQuad
+import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
+import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.PropertyFactory
@@ -35,6 +37,7 @@ import org.maplibre.android.style.sources.TileSet
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.Point
+import kotlin.math.floor
 
 /** Fond de carte gratuit et sans clé (OpenFreeMap, données OpenStreetMap), avec relief ombré. */
 private const val STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
@@ -46,6 +49,33 @@ private const val CAM_SOURCE = "webcams"
 private const val CAM_LAYER = "webcams-layer"
 private const val PLACE_SOURCE = "place"
 private const val PLACE_LAYER = "place-layer"
+private const val STATION_SOURCE = "stations"
+private const val STATION_LAYER = "stations-layer"
+private const val STATION_TEXT = "stations-text"
+
+/** Relevé d'une station sur la carte : pastille colorée selon la température, affichée à partir de [minZoom]. */
+data class StationMarker(
+    val id: String,
+    val latitude: Double,
+    val longitude: Double,
+    val label: String,
+    val color: Int,
+    val minZoom: Int,
+)
+
+/** Stations visibles au zoom [zoom] (entier inférieur), en GeoJSON. */
+private fun stationFeatures(stations: List<StationMarker>, zoom: Double): FeatureCollection {
+    val z = floor(zoom).toInt()
+    return FeatureCollection.fromFeatures(
+        stations.filter { it.minZoom <= z }.map { s ->
+            Feature.fromGeometry(Point.fromLngLat(s.longitude, s.latitude)).apply {
+                addStringProperty("id", s.id)
+                addStringProperty("label", s.label)
+                addStringProperty("color", String.format("#%06X", s.color and 0xFFFFFF))
+            }
+        },
+    )
+}
 
 /** Ce que la carte affiche par-dessus le fond. */
 sealed interface MapOverlay {
@@ -71,30 +101,50 @@ fun WeatherMap(
     center: LatLng,
     modifier: Modifier = Modifier,
     onWebcamClick: (Long) -> Unit = {},
+    stations: List<StationMarker> = emptyList(),
+    onStationClick: (String) -> Unit = {},
 ) {
     val mapView = rememberMapViewWithLifecycle()
     var style by remember { mutableStateOf<Style?>(null) }
+    var map by remember { mutableStateOf<MapLibreMap?>(null) }
     val clicks by rememberUpdatedState(onWebcamClick)
+    val stationClicks by rememberUpdatedState(onStationClick)
+    val currentStations by rememberUpdatedState(stations)
     var imageBounds by remember { mutableStateOf<GeoBounds?>(null) }
     var tileUrl by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(mapView) {
-        mapView.getMapAsync { map ->
-            map.uiSettings.apply {
+        mapView.getMapAsync { loadedMap ->
+            map = loadedMap
+            loadedMap.uiSettings.apply {
                 isRotateGesturesEnabled = false
                 isTiltGesturesEnabled = false
                 logoGravity = Gravity.TOP or Gravity.START
                 attributionGravity = Gravity.TOP or Gravity.START
                 setAttributionMargins(110, 12, 0, 0)
             }
-            map.cameraPosition = CameraPosition.Builder().target(center).zoom(6.6).build()
-            map.addOnMapClickListener { point ->
-                val screen = map.projection.toScreenLocation(point)
-                val feature = map.queryRenderedFeatures(screen, CAM_LAYER).firstOrNull()
+            loadedMap.cameraPosition = CameraPosition.Builder().target(center).zoom(6.6).build()
+            // Au changement de zoom entier, les stations qui ont de la place apparaissent (ou disparaissent).
+            var shownZoom = -1
+            loadedMap.addOnCameraIdleListener {
+                val z = floor(loadedMap.cameraPosition.zoom).toInt()
+                if (z != shownZoom) {
+                    shownZoom = z
+                    loadedMap.style?.getSourceAs<GeoJsonSource>(STATION_SOURCE)?.setGeoJson(stationFeatures(currentStations, loadedMap.cameraPosition.zoom))
+                }
+            }
+            loadedMap.addOnMapClickListener { point ->
+                val screen = loadedMap.projection.toScreenLocation(point)
+                val station = loadedMap.queryRenderedFeatures(screen, STATION_LAYER).firstOrNull()?.getStringProperty("id")
+                if (station != null) {
+                    stationClicks(station)
+                    return@addOnMapClickListener true
+                }
+                val feature = loadedMap.queryRenderedFeatures(screen, CAM_LAYER).firstOrNull()
                 feature?.getNumberProperty("id")?.let { clicks(it.toLong()) }
                 feature != null
             }
-            map.setStyle(Style.Builder().fromUri(STYLE_URL)) { loaded ->
+            loadedMap.setStyle(Style.Builder().fromUri(STYLE_URL)) { loaded ->
                 loaded.addSource(GeoJsonSource(PLACE_SOURCE, Point.fromLngLat(center.longitude, center.latitude)))
                 loaded.addLayer(
                     CircleLayer(PLACE_LAYER, PLACE_SOURCE).withProperties(
@@ -195,6 +245,42 @@ fun WeatherMap(
                     )
                 }
             }
+        }
+    }
+
+    // Relevés des stations, au-dessus de tout le reste.
+    LaunchedEffect(style, stations) {
+        val loaded = style ?: return@LaunchedEffect
+        if (stations.isEmpty()) {
+            loaded.removeLayer(STATION_TEXT)
+            loaded.removeLayer(STATION_LAYER)
+            loaded.removeSource(STATION_SOURCE)
+            return@LaunchedEffect
+        }
+        val features = stationFeatures(stations, map?.cameraPosition?.zoom ?: 6.0)
+        val source = loaded.getSourceAs<GeoJsonSource>(STATION_SOURCE)
+        if (source != null) {
+            source.setGeoJson(features)
+        } else {
+            loaded.addSource(GeoJsonSource(STATION_SOURCE, features))
+            loaded.addLayer(
+                CircleLayer(STATION_LAYER, STATION_SOURCE).withProperties(
+                    PropertyFactory.circleRadius(11f),
+                    PropertyFactory.circleColor(Expression.toColor(Expression.get("color"))),
+                    PropertyFactory.circleStrokeColor("#FFFFFF"),
+                    PropertyFactory.circleStrokeWidth(1.2f),
+                ),
+            )
+            loaded.addLayer(
+                SymbolLayer(STATION_TEXT, STATION_SOURCE).withProperties(
+                    PropertyFactory.textField(Expression.get("label")),
+                    PropertyFactory.textFont(arrayOf("Noto Sans Bold")),
+                    PropertyFactory.textSize(11f),
+                    PropertyFactory.textColor("#0F2133"),
+                    PropertyFactory.textAllowOverlap(true),
+                    PropertyFactory.textIgnorePlacement(true),
+                ),
+            )
         }
     }
 

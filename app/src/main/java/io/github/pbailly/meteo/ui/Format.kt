@@ -15,6 +15,8 @@ object Fmt {
     private val dayLong = DateTimeFormatter.ofPattern("EEEE d MMMM", FR)
     private val dayName = DateTimeFormatter.ofPattern("EEE", FR)
     private val clock = DateTimeFormatter.ofPattern("HH:mm", FR)
+    private val dayMonth = DateTimeFormatter.ofPattern("d MMM", FR)
+    private val dateLine = DateTimeFormatter.ofPattern("EEE d MMM", FR)
 
     private val COMPASS = listOf(
         "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
@@ -52,6 +54,31 @@ object Fmt {
     }
 
     fun hour(t: LocalDateTime): String = "${t.hour}h"
+
+    /** Milliers séparés par une espace insécable : « 2 800 ». */
+    fun thousands(v: Double, step: Int = 1): String {
+        if (v.isNaN()) return DASH
+        val rounded = (v / step).roundToInt() * step
+        val digits = kotlin.math.abs(rounded).toString().reversed().chunked(3).joinToString("\u00A0").reversed()
+        return (if (rounded < 0) "-" else "") + digits
+    }
+
+    /** Altitude : « 2 800 m » (arrondie à [step] mètres). */
+    fun altitude(v: Double, step: Int = 1): String = if (v.isNaN()) DASH else thousands(v, step) + "\u00A0m"
+
+    /** Une décimale à la française, sans « ,0 » : « 2,1 », « 0 », « 12 ». */
+    fun decimal(v: Double): String = when {
+        v.isNaN() -> DASH
+        v < 0.05 -> "0"
+        v >= 10 -> v.roundToInt().toString()
+        else -> String.format(FR, "%.1f", v).removeSuffix(",0")
+    }
+
+    /** « 19 oct. » */
+    fun dayMonth(date: LocalDate): String = date.format(dayMonth)
+
+    /** « lun. 19 oct. » */
+    fun dateLine(date: LocalDate): String = date.format(dateLine)
 
     fun clock(t: LocalDateTime?): String = t?.format(clock) ?: DASH
 

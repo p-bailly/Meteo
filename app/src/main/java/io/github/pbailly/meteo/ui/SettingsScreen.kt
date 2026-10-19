@@ -89,7 +89,8 @@ fun SettingsScreen(
                 current = meteoFranceKey,
                 onSave = onSaveKey,
                 explanation = "Clé d'API gratuite du portail Météo-France. Pour le radar, s'abonner à « DonneesPubliquesRadar » ; " +
-                    "pour sa prévision à 3 h, aussi à « PrevisionImmediatePrecipitations ». Générer la clé après les " +
+                    "pour sa prévision à 3 h, aussi à « PrevisionImmediatePrecipitations » ; pour les relevés des stations sur " +
+                    "la carte de température, à « DonneesPubliquesPaquetObservation ». Générer la clé après les " +
                     "abonnements : une clé ne donne accès qu'aux API souscrites au moment où elle est créée.",
                 portalUrl = "https://portail-api.meteofrance.fr",
                 portalLabel = "Ouvrir le portail Météo-France",
@@ -107,8 +108,10 @@ fun SettingsScreen(
             HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
             SectionTitle("Sources")
             Text(
-                "Prévisions : Open-Meteo.com (CC BY 4.0). Radar et prévision immédiate : Météo-France " +
-                    "(Licence Ouverte). Fond de carte : OpenFreeMap, © OpenStreetMap. Polices : Archivo et Martian Mono (SIL OFL 1.1).",
+                "Prévisions : Open-Meteo.com (CC BY 4.0). Radar, prévision immédiate et relevés : Météo-France " +
+                    "(Licence Ouverte). Relevés : MétéoSuisse, NOAA (METAR des aéroports). Relief : Copernicus DEM (via " +
+                    "Open-Meteo), sommets © contributeurs OpenStreetMap. Fond de carte : OpenFreeMap, © OpenStreetMap. " +
+                    "Polices : Archivo et Martian Mono (SIL OFL 1.1).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),

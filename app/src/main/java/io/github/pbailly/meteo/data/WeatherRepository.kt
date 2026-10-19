@@ -17,7 +17,7 @@ data class Loaded<T>(val value: T, val fetchedAt: Long, val stale: Boolean)
  */
 class WeatherRepository(
     private val cacheDir: File,
-    private val httpGet: (String) -> String = ::defaultHttpGet,
+    val httpGet: (String) -> String = ::defaultHttpGet,
 ) {
     suspend fun forecast(place: Place, force: Boolean): Loaded<Forecast> =
         cached("forecast_${place.id}", OpenMeteoApi.forecastUrl(place), FORECAST_MAX_AGE_MS, force) {
@@ -28,6 +28,16 @@ class WeatherRepository(
         val models = WeatherModel.entries
         return cached("multimodel_${place.id}", OpenMeteoApi.multiModelUrl(place, models), MULTI_MODEL_MAX_AGE_MS, force) {
             OpenMeteoApi.parseMultiModel(it, models)
+        }
+    }
+
+    /** Prévision courte de tous les lieux de la liste, en un seul appel ; dans l'ordre de [places]. */
+    suspend fun summaries(places: List<Place>, force: Boolean): Loaded<List<Forecast>> {
+        val key = "summary_" + Integer.toHexString(places.joinToString("|") { it.id }.hashCode())
+        return cached(key, OpenMeteoApi.summaryUrl(places), FORECAST_MAX_AGE_MS, force) { body ->
+            OpenMeteoApi.parseForecasts(body).also {
+                if (it.size != places.size) throw OpenMeteoException("Réponse incomplète pour la liste des lieux")
+            }
         }
     }
 
@@ -75,6 +85,7 @@ private fun defaultHttpGet(url: String): String {
         connection.connectTimeout = 15_000
         connection.readTimeout = 20_000
         connection.setRequestProperty("Accept", "application/json")
+        connection.setRequestProperty("User-Agent", "Meteo-perso/1.0 (Android; github.com/p-bailly/Meteo)")
         val code = connection.responseCode
         val stream = if (code in 200..299) connection.inputStream else connection.errorStream
         val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()

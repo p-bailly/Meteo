@@ -69,6 +69,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.maps.DwdTemperature
+import io.github.pbailly.meteo.data.maps.StationObservation
 import io.github.pbailly.meteo.data.maps.TileLayer
 import io.github.pbailly.meteo.data.maps.WindyWebcams
 import io.github.pbailly.meteo.data.radar.RainClass
@@ -87,6 +88,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** Fond de la frise des heures, un ton sous le bleu glacier des cartes. */
 private val TIMELINE_BLUE = Color(0xFF15527F)
@@ -100,6 +102,8 @@ private const val REFRESH_MS = 2 * 60 * 1000L
 fun RadarRoute(
     place: Place,
     onBack: () -> Unit,
+    /** Faux dans la barre du bas : l'écran est un onglet, sans flèche de retour. */
+    showBack: Boolean = true,
     viewModel: RadarViewModel = viewModel(),
     layers: LayersViewModel = viewModel(),
 ) {
@@ -130,7 +134,7 @@ fun RadarRoute(
         place = place,
         state = state,
         layerState = layerState,
-        onBack = onBack,
+        onBack = onBack.takeIf { showBack },
         onRefresh = {
             if (layerState.layer == MapLayer.RAIN) viewModel.refresh(force = true) else layers.show(layerState.layer)
         },
@@ -147,6 +151,8 @@ fun RadarRoute(
         onSaveWindyKey = layers::saveWindyKey,
         onWebcamClick = layers::openWebcam,
         onCloseWebcam = layers::closeWebcam,
+        onStationClick = layers::openStation,
+        onCloseStation = layers::closeStation,
     )
 }
 private val SELECTED_BLUE = SelectedOnCard
@@ -159,7 +165,7 @@ fun RadarScreen(
     place: Place,
     state: RadarUiState,
     layerState: LayerUiState,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onRefresh: () -> Unit,
     onLayer: (MapLayer) -> Unit,
     onSelect: (Int) -> Unit,
@@ -168,6 +174,8 @@ fun RadarScreen(
     onSaveWindyKey: (String) -> Unit,
     onWebcamClick: (Long) -> Unit,
     onCloseWebcam: () -> Unit,
+    onStationClick: (String) -> Unit = {},
+    onCloseStation: () -> Unit = {},
 ) {
     var editingKey by rememberSaveable { mutableStateOf(false) }
     val layer = layerState.layer
@@ -178,7 +186,9 @@ fun RadarScreen(
             AppTopBar(
                 title = { Text("Cartes", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
+                    }
                 },
                 actions = {
                     if (rain) {
@@ -197,6 +207,8 @@ fun RadarScreen(
                     center = LatLng(place.latitude, place.longitude),
                     modifier = Modifier.fillMaxSize(),
                     onWebcamClick = onWebcamClick,
+                    stations = if (layer == MapLayer.TEMPERATURE) layerState.stations else emptyList(),
+                    onStationClick = onStationClick,
                 )
                 when (layer) {
                     MapLayer.RAIN -> Legend(Modifier.align(Alignment.BottomStart))
@@ -204,7 +216,8 @@ fun RadarScreen(
                     MapLayer.LIGHTNING -> LightningLegend(Modifier.align(Alignment.BottomStart))
                     else -> Unit
                 }
-                Attribution(layer, Modifier.align(Alignment.BottomEnd))
+                // Décalée à droite des légendes pour ne pas les recouvrir.
+                Attribution(layer, Modifier.align(Alignment.BottomEnd).padding(start = 110.dp))
                 if (state.loading && rain || layerState.loading && !rain) {
                     CircularProgressIndicator(
                         Modifier.align(Alignment.TopCenter).padding(top = 16.dp).size(28.dp),
@@ -230,6 +243,22 @@ fun RadarScreen(
                         layerState,
                         onClose = onCloseWebcam,
                         modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    )
+                    layerState.openStation != null && layer == MapLayer.TEMPERATURE -> StationCard(
+                        layerState.openStation,
+                        onClose = onCloseStation,
+                        modifier = Modifier.align(Alignment.TopCenter).padding(16.dp),
+                    )
+                    layer == MapLayer.TEMPERATURE && layerState.observationNote != null && error == null -> Text(
+                        layerState.observationNote,
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(HeaderBlue.copy(alpha = 0.8f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
                     )
                     error != null -> Card(Modifier.align(Alignment.TopCenter).padding(16.dp)) {
                         Text(error, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
@@ -377,7 +406,7 @@ private fun LightningLegend(modifier: Modifier = Modifier) {
 private fun Attribution(layer: MapLayer, modifier: Modifier = Modifier) {
     val text = when (layer) {
         MapLayer.RAIN -> "Radar : Météo-France"
-        MapLayer.TEMPERATURE -> DwdTemperature.ATTRIBUTION
+        MapLayer.TEMPERATURE -> DwdTemperature.ATTRIBUTION + " · relevés Météo-France, MétéoSuisse, NOAA"
         MapLayer.SATELLITE -> TileLayer.SATELLITE.attribution
         MapLayer.LIGHTNING -> TileLayer.LIGHTNING.attribution
         MapLayer.WEBCAMS -> WindyWebcams.ATTRIBUTION
@@ -487,6 +516,42 @@ private fun Timeline(
     }
 }
 
+/** Relevé de la station touchée : nom, altitude, température et heure. */
+@Composable
+private fun StationCard(station: StationObservation, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    Card(modifier.clickable(onClick = onClose)) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(temperatureColor(station.temperature)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    String.format(Locale.FRANCE, "%.1f°", station.temperature),
+                    color = OnTemperature,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(station.name ?: station.id, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                Text(
+                    listOfNotNull(
+                        station.altitude?.let { "${it.roundToInt()} m" },
+                        "relevé de ${clock.format(station.time.atZone(ZoneId.systemDefault()))}",
+                        station.source.label,
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = AppMono,
+                )
+            }
+        }
+    }
+}
+
 /** Saisie de la clé gratuite Windy pour les webcams. */
 @Composable
 private fun WindyKeyCard(onSave: (String) -> Unit, modifier: Modifier = Modifier) {
@@ -561,8 +626,8 @@ private fun KeyCard(initial: String, onSave: (String) -> Unit, onCancel: (() -> 
             Text(
                 "Le radar vient de l'API publique de Météo-France, gratuite mais avec une clé personnelle :\n" +
                     "1. Créer un compte sur portail-api.meteofrance.fr\n" +
-                    "2. S'abonner gratuitement à « DonneesPubliquesRadar » et à « PrevisionImmediatePrecipitations » " +
-                    "(prévision à 3 h)\n" +
+                    "2. S'abonner gratuitement à « DonneesPubliquesRadar », à « PrevisionImmediatePrecipitations » " +
+                    "(prévision à 3 h) et à « DonneesPubliquesPaquetObservation » (relevés des stations)\n" +
                     "3. Ensuite seulement, dans « Mes API », générer une clé de type « API Key » (durée maximale, 3 ans)\n" +
                     "4. La coller ci-dessous. Elle reste sur ce téléphone.\n\n" +
                     "Météo-France ne fournit que la dernière image (toutes les 5 min) : l'animation se remplit " +

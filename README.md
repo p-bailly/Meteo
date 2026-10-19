@@ -17,41 +17,63 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
 
 ## Ce que fait l'app
 
-- **Recherche de lieux** (villes, villages, altitude), **favoris** et **météo à ma position**
-  (GPS du téléphone, sans les services Google).
-- **Page d'une ville** (sur le modèle de Meteoblue) : température en grand, ciel et indice UV, heure de mise
-  à jour, boutons Radar et Météogrammes ; bandeau des heures restantes de la journée (heure, pictogramme,
-  probabilité de pluie, température) ; puis les 14 jours : pictogrammes jour et nuit, probabilité de pluie,
-  maxi/mini dans des cases colorées, prévisibilité (cibles), vent, fourchette de pluie, ensoleillement.
-- **Détail d'un jour** (toucher un jour, puis glisser pour passer aux suivants) : lever et coucher du soleil
-  et de la Lune, pression, humidité, puis la prévision heure par heure (ou par 3 h) : température, ressenti,
-  vent moyen et rafales, pluie, probabilité et prévisibilité.
-- **Météogrammes** : météogramme horaire sur 7 jours, graphique 14 jours avec la prévisibilité, et
-  comparaison de 8 modèles (Météo-France AROME/ARPEGE, DWD ICON, ECMWF IFS, ECMWF AIFS, NOAA GFS,
-  UK Met Office, MeteoSwiss, GEM) avec leur moyenne.
-- **Prévisibilité** : calculée sur l'accord entre ces 8 modèles (écart des températures, accord sur la
-  pluie), de 0 à 100 %.
-- **Cartes** (bouton radar de la page d'une ville), avec frise des heures et animation :
+Cinq onglets dans la barre du bas :
+
+- **Aujourd'hui** : le lieu et son altitude, la température en grand, le ciel, le ressenti et les extrêmes du jour ;
+  le bloc **Altitude · maintenant** : coupe du relief du lieu vers le plus haut sommet des environs, température
+  sur place, à 1 000, 1 500, 2 000, 3 000 m et au sommet, gradient (°C / 100 m), iso 0 °C (tirets) et limite
+  pluie-neige (pointillés), ressenti et vent à 2 000 m, risque de verglas ; puis vent, rafales, humidité, pression
+  (et sa tendance), indice UV, coucher et lever du soleil ; et les **prochaines heures** (pictogramme, courbe de
+  température, probabilité et barres de pluie, résumé « pluie 17-20 h · 3,0 mm »).
+- **Prévisions** (7 ou 14 jours) : alertes **retour de la neige** (jours, limite pluie-neige, cumuls à 2 000 m,
+  iso 0) et **verglas possible** (créneau, routes concernées) ; tableau des jours : mini-maxi, pluie, iso 0 °C,
+  neige à 2 000 m, et **fenêtres de beau temps** (au moins 6 h sèches, peu nuageuses, vent < 20 km/h). Toucher un
+  jour ouvre son **détail heure par heure** (avec la prévisibilité, comme sur Meteoblue) ; lien vers les
+  **météogrammes** (7 jours, 14 jours avec la prévisibilité, comparaison de 8 modèles).
+- **Altitude** (« Neige & altitude », par jour ou par tranche de 3 heures) : coupe du relief vallée → sommets avec
+  l'iso 0, la limite pluie-neige, les sommets nommés, la neige attendue à 2 000 et 3 000 m et les pentes enneigées ;
+  iso 0 et limite pluie-neige jour par jour, neige à 2 000 m ; température, ressenti, vent et neige au sommet,
+  à 2 000 m et sur le lieu.
+- **Radar** : les cartes, avec frise des heures et animation :
   - **Pluie** : radar Météo-France et sa prévision (voir ci-dessous pour la clé) ;
   - **Température** à 2 m : modèle ICON-EU du DWD (sans clé), heure par heure sur 24 h puis toutes les 3 h
-    jusqu'à 72 h, colorée comme les cases de température de l'app ;
+    jusqu'à 72 h, colorée comme les cases de température de l'app ; à l'heure actuelle, les **vrais relevés**
+    des stations en pastilles (toucher une pastille : station, altitude, heure du relevé) : stations Météo-France
+    avec la clé (environ 1 800), stations de MétéoSuisse et aéroports (METAR) sans clé ;
   - **Satellite** : Meteosat de 3e génération (EUMETSAT, sans clé), une image toutes les 10 min sur 2 h,
     vraies couleurs le jour, nuages et lumières des villes la nuit ;
   - **Foudre** : imageur d'éclairs de Meteosat (EUMETSAT, sans clé), éclairs par 5 min sur la dernière heure ;
   - **Webcams** autour du lieu : Windy, avec une clé gratuite (api.windy.com) à saisir dans les Réglages ;
     toucher un point affiche l'image et le lien vers la page Windy.
-- **Réglages** (menu ⋮) : modèles affichés dans MultiModèle, clés Météo-France et Windy.
-- **Altitude** sur l'écran principal : altitude de l'iso 0 °C (et sa fourchette sur 24 h), températures aux niveaux
-  850 hPa (vers 1 500 m) et 700 hPa (vers 3 000 m), données Open-Meteo.
-- Thème clair et sombre, identité « Glacier » (voir `design/`), cache local (pas de nouvel appel pendant 30 min, affichage hors ligne).
+- **Lieux** : recherche (ville, col, station, sommet), **météo à ma position** (GPS du téléphone, sans les services
+  Google), favoris **rangés par altitude** avec leur température, leurs extrêmes et une note (ressenti glacial,
+  verglas, neige à venir) ; l'iso 0 °C du jour et la plus basse limite pluie-neige de la semaine s'intercalent entre
+  les lieux, à leur altitude. « Modifier » retire des favoris ; l'engrenage ouvre les **Réglages** (modèles de la
+  comparaison, clés Météo-France et Windy).
+
+Comment l'altitude est calculée :
+
+- **Température et vent en altitude** : entre la température à 2 m du lieu et celles des niveaux de pression du
+  modèle (925, 850, 700, 600 et 500 hPa, dont Open-Meteo donne l'altitude réelle), par interpolation ; au-delà,
+  −0,65 °C par 100 m. Ressenti en altitude : formule du refroidissement éolien d'Environnement Canada.
+- **Limite pluie-neige** : 300 m sous l'iso 0 °C. **Neige à une altitude** : la pluie prévue sur le lieu, quand
+  elle tombe au-dessus de la limite pluie-neige (1 mm d'eau ≈ 1 cm de neige fraîche).
+- **Verglas** : pluie verglaçante, ou routes mouillées par la pluie des 12 dernières heures quand la température
+  retombe sous 0,5 °C, sur le lieu ou jusqu'à 1 200 m au-dessus.
+- **Coupe du relief** : sommets nommés d'OpenStreetMap (API Overpass, sans clé) et altitudes du terrain
+  (modèle Copernicus à 90 m, via l'API d'altitude d'Open-Meteo), téléchargées une seule fois par lieu.
+
+Thème clair et sombre, identité « Glacier » (voir `design/`), cache local (pas de nouvel appel pendant 30 min,
+affichage hors ligne).
 
 ## Radar Météo-France : la clé
 
 Le radar vient de l'API publique « DonneesPubliquesRadar » de Météo-France : gratuite, mais avec une clé personnelle.
 
 1. Créer un compte sur [portail-api.meteofrance.fr](https://portail-api.meteofrance.fr).
-2. S'abonner gratuitement à « DonneesPubliquesRadar » (le radar) et à « PrevisionImmediatePrecipitations »
-   (sa prévision à 3 h).
+2. S'abonner gratuitement à « DonneesPubliquesRadar » (le radar), à « PrevisionImmediatePrecipitations »
+   (sa prévision à 3 h) et à « DonneesPubliquesPaquetObservation » (les relevés des stations sur la carte de
+   température).
 3. **Après** les abonnements, générer une clé de type « API Key » avec la durée maximale (3 ans) :
    une clé ne donne accès qu'aux API souscrites au moment où elle est créée.
 4. Coller la clé dans l'app : écran radar (bouton clé) ou Réglages. Elle reste sur le téléphone.
@@ -74,8 +96,10 @@ Le radar vient de l'API publique « DonneesPubliquesRadar » de Météo-France :
 ## Coût
 
 Aucun. Le radar Météo-France et le fond de carte OpenFreeMap sont gratuits. L'API gratuite d'Open-Meteo
-accepte jusqu'à 10 000 appels par jour pour un usage non commercial ; l'app en fait 1 à 2 par lieu consulté, et réutilise son cache pendant 30 minutes. Si l'app devenait
-commerciale (vente, publicité), il faudrait un abonnement Open-Meteo.
+accepte jusqu'à 10 000 appels par jour pour un usage non commercial ; l'app en fait quelques-uns par lieu consulté
+(une requête lourde compte pour plusieurs appels), un seul pour la météo de tous les favoris, et réutilise son cache
+pendant 30 minutes. La coupe du relief n'est téléchargée qu'une fois par lieu. Si l'app devenait commerciale
+(vente, publicité), il faudrait un abonnement Open-Meteo.
 
 ## Développement
 
@@ -89,19 +113,27 @@ Kotlin, Jetpack Compose, Gradle (wrapper inclus). Il faut un JDK 17+ et le SDK A
 Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 
 - `data/` : appels Open-Meteo et lecture des réponses (`OpenMeteoApi`), cache (`WeatherRepository`),
-  favoris (`PlacesStore`), position (`DeviceLocation`).
+  favoris (`PlacesStore`), position (`DeviceLocation`) ; météo en altitude, limite pluie-neige, neige, verglas et
+  fenêtres de beau temps (`Altitude`), alertes et notes des lieux (`Outlook`), coupe du relief (`Terrain`, avec
+  Overpass pour les sommets).
+- `data/maps/` : couches des cartes (`MapLayers`) et relevés des stations (`Observations` : Météo-France,
+  MétéoSuisse, METAR, répartition des pastilles selon le zoom).
 - `data/radar/` : API radar Météo-France et stockage des images (`MeteoFranceRadar`), lecture des fichiers
   HDF5 (`OdimDecoder`, avec jhdf), projection stéréographique polaire (`PolarStereographic`) et conversion
   en image Web Mercator colorée (`MercatorLookup`, `RainClass`) ; prévision PIAF via WCS (`MeteoFrancePiaf`,
   lecteur `GeoTiff`) et extrapolation de secours (`Nowcast`).
-- `ui/` : écrans (`PlacesScreen`, `ForecastScreen`, `SettingsScreen`, `radar/RadarScreen`) et onglets (`HourlyTab`, `DaysTab`,
-  `MeteogramTab`, `MultiModelTab`), pictogrammes dessinés au trait (`WeatherIcon`), barre du haut et bande de fronts
-  (`NavyTopBar`), outils de graphique (`ChartKit`), carte MapLibre (`radar/RadarMap`).
+- `ui/` : navigation et barre du bas (`MeteoApp`, `Glacier`), onglets (`TodayScreen`, `DaysScreen`,
+  `AltitudeScreen`, `radar/RadarScreen`, `PlacesScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
+  (`MeteogramsScreen`, `DaysTab`, `MeteogramTab`, `MultiModelTab`), réglages (`SettingsScreen`), pictogrammes
+  dessinés au trait (`WeatherIcon`), barre du haut (`AppTopBar`), outils de graphique (`ChartKit`), carte MapLibre
+  (`radar/RadarMap`).
 - `ui/theme/` : couleurs (`Theme`) et polices Archivo et Martian Mono (`Type`, fichiers dans `res/font/`).
 
 La clé de signature `app/meteo-perso.jks` est volontairement dans le dépôt pour que chaque APK compilé
 puisse mettre à jour le précédent. C'est adapté à un usage personnel, pas à une publication sur le Play Store.
 
-Données : Open-Meteo.com (licence CC BY 4.0) ; radar : Météo-France (Licence Ouverte Etalab) ;
+Données : Open-Meteo.com (licence CC BY 4.0) ; radar et relevés : Météo-France (Licence Ouverte Etalab) ;
+relevés : MétéoSuisse (données ouvertes), NOAA Aviation Weather Center (METAR, domaine public) ;
+relief : Copernicus DEM (via Open-Meteo), sommets © contributeurs OpenStreetMap (ODbL) ;
 fond de carte : OpenFreeMap, © OpenStreetMap ; polices : Archivo et Martian Mono (SIL Open Font License 1.1,
 `licences/Archivo-OFL.txt` et `licences/MartianMono-OFL.txt`).

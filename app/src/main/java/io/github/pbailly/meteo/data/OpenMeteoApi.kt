@@ -22,6 +22,16 @@ import java.util.Locale
 object OpenMeteoApi {
     private const val FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
     private const val GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
+    private const val ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
+
+    /** Niveaux de pression demandés : de 925 hPa (vers 750 m) à 500 hPa (vers 5 500 m, au-dessus du mont Blanc). */
+    val PRESSURE_LEVELS = listOf(925, 850, 700, 600, 500)
+
+    /** Jours demandés pour les favoris : de quoi annoncer la neige ou le verglas de la semaine. */
+    const val SUMMARY_DAYS = 8
+
+    /** L'API d'altitude accepte au plus 100 points par appel. */
+    const val ELEVATION_MAX_POINTS = 100
 
     const val FORECAST_DAYS = 14
     /** 14 jours : la prévisibilité de chaque jour se calcule sur l'accord entre modèles. */
@@ -32,10 +42,11 @@ object OpenMeteoApi {
         "precipitation", "snowfall", "precipitation_probability", "weather_code",
         "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high",
         "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "pressure_msl", "is_day", "uv_index",
-        // Bloc altitude : iso 0 °C et niveaux 850 hPa (≈ 1 500 m) et 700 hPa (≈ 3 000 m).
-        "freezing_level_height", "temperature_850hPa", "geopotential_height_850hPa",
-        "temperature_700hPa", "geopotential_height_700hPa",
-    )
+        // Altitude : iso 0 °C, puis température, altitude réelle et vent de chaque niveau de pression.
+        "freezing_level_height",
+    ) + PRESSURE_LEVELS.flatMap { p ->
+        listOf("temperature_${p}hPa", "geopotential_height_${p}hPa", "wind_speed_${p}hPa", "wind_direction_${p}hPa")
+    }
     private val DAILY = listOf(
         "weather_code", "temperature_2m_max", "temperature_2m_min",
         "precipitation_sum", "precipitation_probability_max",
@@ -47,6 +58,15 @@ object OpenMeteoApi {
         "precipitation", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "pressure_msl",
     )
     private val MULTI_MODEL_HOURLY = listOf("temperature_2m", "precipitation", "wind_speed_10m")
+
+    /** Liste des lieux : de quoi écrire la température, le ressenti, la neige et le verglas à venir. */
+    private val SUMMARY_CURRENT = listOf(
+        "temperature_2m", "apparent_temperature", "weather_code", "is_day", "wind_speed_10m", "wind_direction_10m",
+    )
+    private val SUMMARY_HOURLY = listOf(
+        "temperature_2m", "relative_humidity_2m", "precipitation", "weather_code", "freezing_level_height",
+    )
+    private val SUMMARY_DAILY = listOf("weather_code", "temperature_2m_max", "temperature_2m_min")
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -72,6 +92,32 @@ object OpenMeteoApi {
         "forecast_days" to MULTI_MODEL_DAYS.toString(),
         "wind_speed_unit" to "kmh",
     )
+
+    /** Un seul appel pour tous les lieux de la liste : Open-Meteo accepte des coordonnées séparées par des virgules. */
+    fun summaryUrl(places: List<Place>): String = buildUrl(
+        FORECAST_URL,
+        "latitude" to places.joinToString(",") { coord(it.latitude) },
+        "longitude" to places.joinToString(",") { coord(it.longitude) },
+        "current" to SUMMARY_CURRENT.joinToString(","),
+        "hourly" to SUMMARY_HOURLY.joinToString(","),
+        "daily" to SUMMARY_DAILY.joinToString(","),
+        "timezone" to "auto",
+        "forecast_days" to SUMMARY_DAYS.toString(),
+        "wind_speed_unit" to "kmh",
+    )
+
+    /** Altitudes du modèle numérique de terrain Copernicus (90 m) pour une liste de points (≤ 100). */
+    fun elevationUrl(points: List<Pair<Double, Double>>): String = buildUrl(
+        ELEVATION_URL,
+        "latitude" to points.joinToString(",") { coord(it.first) },
+        "longitude" to points.joinToString(",") { coord(it.second) },
+    )
+
+    fun parseElevation(body: String): DoubleArray {
+        val root = parseRoot(body)
+        val values = root["elevation"] as? JsonArray ?: throw OpenMeteoException("Réponse incomplète : « elevation » manquant")
+        return DoubleArray(values.size) { values[it].jsonPrimitive.doubleOrNull ?: Double.NaN }
+    }
 
     fun searchUrl(query: String): String = buildUrl(
         GEOCODING_URL,
@@ -99,8 +145,16 @@ object OpenMeteoApi {
         }
     }
 
-    fun parseForecast(body: String): Forecast {
-        val root = parseRoot(body)
+    fun parseForecast(body: String): Forecast = forecastOf(parseRoot(body))
+
+    /** Réponse à plusieurs lieux : un tableau, dans l'ordre des coordonnées (un objet seul s'il n'y en a qu'un). */
+    fun parseForecasts(body: String): List<Forecast> {
+        val root = json.parseToJsonElement(body)
+        if (root is JsonArray) return root.map { forecastOf(checked(it.jsonObject)) }
+        return listOf(forecastOf(checked(root.jsonObject)))
+    }
+
+    private fun forecastOf(root: JsonObject): Forecast {
         val h = root.obj("hourly")
         val hourTimes = h.strings("time").map { LocalDateTime.parse(it) }
         val n = hourTimes.size
@@ -123,10 +177,15 @@ object OpenMeteoApi {
             isDay = h.ints("is_day", n).let { codes -> BooleanArray(n) { codes[it] != 0 } },
             uvIndex = h.doubles("uv_index", n),
             freezingLevel = h.doubles("freezing_level_height", n),
-            temperature850 = h.doubles("temperature_850hPa", n),
-            height850 = h.doubles("geopotential_height_850hPa", n),
-            temperature700 = h.doubles("temperature_700hPa", n),
-            height700 = h.doubles("geopotential_height_700hPa", n),
+            levels = PRESSURE_LEVELS.filter { h.containsKey("temperature_${it}hPa") }.map { p ->
+                PressureLevel(
+                    hPa = p,
+                    temperature = h.doubles("temperature_${p}hPa", n),
+                    height = h.doubles("geopotential_height_${p}hPa", n),
+                    windSpeed = h.doubles("wind_speed_${p}hPa", n),
+                    windDirection = h.doubles("wind_direction_${p}hPa", n),
+                )
+            },
         )
 
         val d = root.obj("daily")
@@ -199,8 +258,9 @@ object OpenMeteoApi {
         )
     }
 
-    private fun parseRoot(body: String): JsonObject {
-        val root = json.parseToJsonElement(body).jsonObject
+    private fun parseRoot(body: String): JsonObject = checked(json.parseToJsonElement(body).jsonObject)
+
+    private fun checked(root: JsonObject): JsonObject {
         if (root["error"]?.jsonPrimitive?.booleanOrNull == true) {
             throw OpenMeteoException(root.string("reason") ?: "Erreur Open-Meteo")
         }

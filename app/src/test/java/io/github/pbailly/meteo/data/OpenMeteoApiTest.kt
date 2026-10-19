@@ -20,7 +20,32 @@ class OpenMeteoApiTest {
         assertTrue(url.contains("wind_speed_unit=kmh"))
         assertTrue(url.contains("forecast_days=14"))
         assertTrue(url.contains("hourly=temperature_2m%2Capparent_temperature"))
-        assertTrue(url.contains("freezing_level_height%2Ctemperature_850hPa"))
+        assertTrue(url.contains("freezing_level_height%2Ctemperature_925hPa%2Cgeopotential_height_925hPa%2Cwind_speed_925hPa"))
+        assertTrue(url.contains("wind_direction_500hPa"))
+    }
+
+    @Test
+    fun `summary url asks for every place in one call`() {
+        val annecy = Place("Annecy", 45.8992, 6.1294, elevation = 448.0)
+        val url = OpenMeteoApi.summaryUrl(listOf(lyon, annecy))
+        assertTrue(url.contains("latitude=45.7578%2C45.8992&longitude=4.8320%2C6.1294&"))
+        assertTrue(url.contains("forecast_days=8"))
+    }
+
+    @Test
+    fun `parses a multi place response in order, and a single object too`() {
+        val two = OpenMeteoApi.parseForecasts("[$FORECAST,${FORECAST.replace("\"elevation\":173.0", "\"elevation\":448.0")}]")
+        assertEquals(listOf(173.0, 448.0), two.map { it.elevation })
+        assertEquals(1, OpenMeteoApi.parseForecasts(FORECAST).size)
+    }
+
+    @Test
+    fun `elevation url and response`() {
+        val url = OpenMeteoApi.elevationUrl(listOf(45.9 to 6.87, 45.88 to 6.89))
+        assertEquals("https://api.open-meteo.com/v1/elevation?latitude=45.9000%2C45.8800&longitude=6.8700%2C6.8900", url)
+        val e = OpenMeteoApi.parseElevation("""{"elevation":[1035.0,3842.0,null]}""")
+        assertEquals(3842.0, e[1], 0.0)
+        assertTrue(e[2].isNaN())
     }
 
     @Test
@@ -74,9 +99,11 @@ class OpenMeteoApiTest {
         assertTrue(h.isDay[1])
         assertEquals(2450.0, h.freezingLevel[0], 0.0)
         assertTrue(h.freezingLevel[2].isNaN())
-        assertEquals(4.2, h.temperature850[0], 0.0)
-        assertEquals(1523.0, h.height850[0], 0.0)
-        assertTrue(h.temperature700[0].isNaN())
+        // Seul le niveau 850 hPa est dans la réponse : les autres ne sont pas créés.
+        assertEquals(listOf(850), h.levels.map { it.hPa })
+        assertEquals(4.2, h.levels[0].temperature[0], 0.0)
+        assertEquals(1523.0, h.levels[0].height[0], 0.0)
+        assertTrue(h.levels[0].windSpeed[0].isNaN())
 
         val d = forecast.daily
         assertEquals(LocalDate.of(2026, 10, 19), d.date[0])

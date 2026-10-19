@@ -1,0 +1,123 @@
+[
+ {
+  "icaoId": "LFKC",
+  "receiptTime": "2026-10-19T21:02:18.023Z",
+  "obsTime": 1792443600,
+  "reportTime": "2026-10-19T21:00:00.000Z",
+  "temp": 19,
+  "dewp": 11,
+  "wdir": 200,
+  "wspd": 4,
+  "visib": "6+",
+  "altim": 1017,
+  "qcField": 2,
+  "metarType": "METAR",
+  "rawOb": "METAR LFKC 192100Z AUTO 20004KT CAVOK 19/11 Q1017",
+  "lat": 42.531,
+  "lon": 8.793,
+  "elev": 38,
+  "name": "Calvi/St Catherine Arpt, CO, FR",
+  "cover": "CAVOK",
+  "clouds": [],
+  "fltCat": "VFR"
+ },
+ {
+  "icaoId": "LFMK",
+  "receiptTime": "2026-10-19T21:06:11.921Z",
+  "obsTime": 1792443600,
+  "reportTime": "2026-10-19T21:00:00.000Z",
+  "temp": 10,
+  "dewp": 10,
+  "wdir": 260,
+  "wspd": 6,
+  "visib": "6+",
+  "altim": 1014,
+  "qcField": 2,
+  "wxString": "-RA",
+  "metarType": "METAR",
+  "rawOb": "METAR LFMK 192100Z AUTO 26006KT 9999 -RA BKN015/// OVC029/// ///TCU 10/10 Q1014",
+  "lat": 43.214,
+  "lon": 2.31,
+  "elev": 124,
+  "name": "Carcassonne/Salvaza Arpt, OC, FR",
+  "cover": "OVC",
+  "clouds": [
+   {
+    "cover": "BKN",
+    "base": 1500
+   },
+   {
+    "cover": "OVC",
+    "base": 2900
+   }
+  ],
+  "fltCat": "MVFR"
+ },
+ {
+  "icaoId": "LEGE",
+  "receiptTime": "2026-10-19T21:04:21.252Z",
+  "obsTime": 1792443600,
+  "reportTime": "2026-10-19T21:00:00.000Z",
+  "temp": 15,
+  "dewp": 14,
+  "wdir": 10,
+  "wspd": 7,
+  "visib": "6+",
+  "altim": 1011,
+  "qcField": 16,
+  "metarType": "METAR",
+  "rawOb": "METAR LEGE 192100Z 01007KT 280V040 9999 BKN012 BKN024 15/14 Q1011 NOSIG",
+  "lat": 41.911,
+  "lon": 2.763,
+  "elev": 140,
+  "name": "Gerona/Costa Brava Arpt, CT, ES",
+  "cover": "BKN",
+  "clouds": [
+   {
+    "cover": "BKN",
+    "base": 1200
+   },
+   {
+    "cover": "BKN",
+    "base": 2400
+   }
+  ],
+  "fltCat": "MVFR"
+ },
+ {
+  "icaoId": "LFCR",
+  "receiptTime": "2026-10-19T21:06:11.854Z",
+  "obsTime": 1792443600,
+  "reportTime": "2026-10-19T21:00:00.000Z",
+  "temp": 10,
+  "dewp": 10,
+  "wdir": 200,
+  "wspd": 7,
+  "visib": 5.59,
+  "altim": 1012,
+  "qcField": 2,
+  "wxString": "-DZ",
+  "metarType": "METAR",
+  "rawOb": "METAR LFCR 192100Z AUTO 20007KT 9000 -DZ BKN003/// BKN008/// BKN020/// ///CB 10/10 Q1012 TEMPO BKN014TCU BECMG 4000 BR",
+  "lat": 44.41,
+  "lon": 2.483,
+  "elev": 576,
+  "name": "Rodez/Marcillac Arpt, OC, FR",
+  "cover": "BKN",
+  "clouds": [
+   {
+    "cover": "BKN",
+    "base": 300
+   },
+   {
+    "cover": "BKN",
+    "base": 800
+   },
+   {
+    "cover": "BKN",
+    "base": 2000
+   }
+  ],
+  "fltCat": "LIFR"
+ }
+]

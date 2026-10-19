@@ -66,15 +66,20 @@ class HourlySeries(
     val uvIndex: DoubleArray,
     /** Altitude de l'isotherme 0 °C, en mètres (NaN si le modèle ne la fournit pas). */
     val freezingLevel: DoubleArray,
-    /** Température et altitude géopotentielle (m) du niveau 850 hPa, vers 1 500 m. */
-    val temperature850: DoubleArray,
-    val height850: DoubleArray,
-    /** Température et altitude géopotentielle (m) du niveau 700 hPa, vers 3 000 m. */
-    val temperature700: DoubleArray,
-    val height700: DoubleArray,
+    /** Niveaux de pression, du plus bas (925 hPa, vers 750 m) au plus haut (500 hPa, vers 5 500 m). */
+    val levels: List<PressureLevel> = emptyList(),
 ) {
     val size: Int get() = time.size
 }
+
+/** Un niveau de pression du modèle : son altitude réelle (géopotentiel, en m), sa température et son vent. */
+class PressureLevel(
+    val hPa: Int,
+    val temperature: DoubleArray,
+    val height: DoubleArray,
+    val windSpeed: DoubleArray,
+    val windDirection: DoubleArray,
+)
 
 class DailySeries(
     val date: List<LocalDate>,

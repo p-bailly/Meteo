@@ -9,6 +9,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.pbailly.meteo.data.maps.DwdTemperature
 import io.github.pbailly.meteo.data.maps.MapKeyException
+import io.github.pbailly.meteo.data.maps.MeteoFranceObservations
+import io.github.pbailly.meteo.data.maps.MeteoSwissObservations
+import io.github.pbailly.meteo.data.maps.MetarObservations
+import io.github.pbailly.meteo.data.maps.StationInfo
+import io.github.pbailly.meteo.data.maps.StationObservation
+import io.github.pbailly.meteo.data.maps.mergeObservations
+import io.github.pbailly.meteo.data.maps.stationMinZooms
 import io.github.pbailly.meteo.data.maps.TileLayer
 import io.github.pbailly.meteo.data.maps.Webcam
 import io.github.pbailly.meteo.data.maps.WindyWebcams
@@ -19,6 +26,8 @@ import io.github.pbailly.meteo.data.radar.GeoTiff
 import io.github.pbailly.meteo.ui.theme.temperatureColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,11 +36,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import kotlin.coroutines.cancellation.CancellationException
+
+private val HOUR = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
 
 /** Couches de la carte, dans l'ordre du sélecteur. */
 enum class MapLayer(val label: String) {
@@ -54,6 +66,11 @@ data class LayerUiState(
     val webcams: List<Webcam> = emptyList(),
     val openWebcam: Webcam? = null,
     val webcamImage: Bitmap? = null,
+    /** Relevés des stations, affichés sur la carte de température à l'heure actuelle. */
+    val stations: List<StationMarker> = emptyList(),
+    val openStation: StationObservation? = null,
+    /** « Relevés de 21 h · 1 830 stations », ou comment en avoir plus. */
+    val observationNote: String? = null,
 )
 
 /**
@@ -62,12 +79,20 @@ data class LayerUiState(
  */
 class LayersViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("settings", Application.MODE_PRIVATE)
+    private val radarPrefs = app.getSharedPreferences("radar", Application.MODE_PRIVATE)
+    private val stationsFile = File(app.filesDir, "observations/stations-meteofrance.csv")
     private val _state = MutableStateFlow(LayerUiState(windyKey = prefs.getString(KEY_WINDY, null)?.ifBlank { null }))
     val state: StateFlow<LayerUiState> = _state.asStateFlow()
 
     private var center: Pair<Double, Double> = 46.5 to 2.5
     private val temperatures = LruCache<Instant, Bitmap>(8)
     private var webcamsFetchedAt: Instant? = null
+    private var observations: List<StationObservation> = emptyList()
+    private var markers: List<StationMarker> = emptyList()
+    private var observationsAt: Instant? = null
+    private var observationNote: String? = null
+    private var stationInfo: Map<String, StationInfo>? = null
+    private var observationJob: Job? = null
     private var loadJob: Job? = null
     private var showJob: Job? = null
     private var playJob: Job? = null
@@ -89,7 +114,9 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
         stopPlaying()
         loadJob?.cancel()
         showJob?.cancel()
-        _state.update { it.copy(layer = layer, times = emptyList(), selected = 0, overlay = MapOverlay.None, error = null, openWebcam = null) }
+        _state.update {
+            it.copy(layer = layer, times = emptyList(), selected = 0, overlay = MapOverlay.None, error = null, openWebcam = null, stations = emptyList(), openStation = null)
+        }
         if (layer == MapLayer.RAIN) return
         _state.update { it.copy(loading = true) }
         loadJob = viewModelScope.launch {
@@ -102,6 +129,7 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
                             // Toutes les heures sur 24 h, puis toutes les 3 heures.
                             .filter { Duration.between(now, it).toHours() < 24 || it.atZone(java.time.ZoneOffset.UTC).hour % 3 == 0 }
                         publishTimes(times, selectLatest = false)
+                        loadObservations()
                     }
                     MapLayer.SATELLITE, MapLayer.LIGHTNING -> {
                         val tiles = if (layer == MapLayer.SATELLITE) TileLayer.SATELLITE else TileLayer.LIGHTNING
@@ -126,6 +154,126 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
         if (times.isEmpty()) return
         _state.update { it.copy(selected = index.coerceIn(0, times.lastIndex)) }
         showSelected()
+        publishStations()
+    }
+
+    fun openStation(id: String) {
+        _state.update { s -> s.copy(openStation = observations.firstOrNull { it.id == id }) }
+    }
+
+    fun closeStation() {
+        _state.update { it.copy(openStation = null) }
+    }
+
+    /** Relevés des stations : Météo-France avec la clé (si elle est abonnée aux observations), MétéoSuisse et aéroports. */
+    private fun loadObservations() {
+        val fetched = observationsAt
+        if (fetched != null && Duration.between(fetched, Instant.now()) < Duration.ofMinutes(10)) {
+            publishStations()
+            return
+        }
+        observationJob?.cancel()
+        observationJob = viewModelScope.launch {
+            val key = radarPrefs.getString(KEY_METEO_FRANCE, null)?.takeIf { it.isNotBlank() }
+            val (list, note) = fetchObservations(key)
+            observations = list
+            markers = withContext(Dispatchers.Default) {
+                val zooms = stationMinZooms(list)
+                list.mapIndexed { i, o ->
+                    StationMarker(o.id, o.latitude, o.longitude, Math.round(o.temperature).toString(), temperatureColor(o.temperature).toArgb(), zooms[i])
+                }
+            }
+            observationsAt = Instant.now()
+            val latest = list.maxOfOrNull { it.time }
+            observationNote = listOfNotNull(
+                latest?.let { "Points : relevés de ${HOUR.format(it.atZone(java.time.ZoneId.systemDefault()))} · ${list.size} stations" },
+                note,
+            ).joinToString("\n").ifEmpty { null }
+            publishStations()
+        }
+    }
+
+    private suspend fun fetchObservations(key: String?): Pair<List<StationObservation>, String?> = coroutineScope {
+        val swiss = async {
+            runCatching { MeteoSwissObservations.parse(httpBytes(MeteoSwissObservations.URL).decodeToString()) }.getOrDefault(emptyList())
+        }
+        val airports = async {
+            runCatching { MetarObservations.parse(httpBytes(MetarObservations.url()).decodeToString()) }.getOrDefault(emptyList())
+        }
+        var hint: String? = null
+        val france = if (key == null) {
+            hint = "Plus de stations avec la clé Météo-France (Réglages)"
+            emptyList()
+        } else {
+            try {
+                meteoFranceObservations(key)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: MapKeyException) {
+                hint = "Clé Météo-France sans « DonneesPubliquesPaquetObservation » : aéroports seulement en France"
+                emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+        // Avec Météo-France, les aéroports français font doublon : on ne garde que ceux des pays voisins.
+        val metar = airports.await().let { list -> if (france.isNotEmpty()) list.filterNot { it.id.startsWith("LF") } else list }
+        mergeObservations(france, swiss.await(), metar) to hint
+    }
+
+    private suspend fun meteoFranceObservations(key: String): List<StationObservation> {
+        val headers = mapOf("apikey" to key, "Accept" to "*/*")
+        val names = stationNames(headers)
+        val hour = MeteoFranceObservations.latestHour(Instant.now())
+        val body = try {
+            httpBytes(MeteoFranceObservations.hourlyUrl(hour), headers)
+        } catch (e: MapKeyException) {
+            throw e
+        } catch (_: IOException) {
+            // Paquet de l'heure pas encore publié : celui de l'heure d'avant.
+            httpBytes(MeteoFranceObservations.hourlyUrl(hour.minus(Duration.ofHours(1))), headers)
+        }
+        return withContext(Dispatchers.Default) { MeteoFranceObservations.parse(body.decodeToString(), names) }
+    }
+
+    /** Noms et altitudes des stations Météo-France, relus chaque semaine. */
+    private suspend fun stationNames(headers: Map<String, String>): Map<String, StationInfo> {
+        stationInfo?.let { return it }
+        val fresh = stationsFile.exists() && System.currentTimeMillis() - stationsFile.lastModified() < 7 * 24 * 3600 * 1000L
+        val text = if (fresh) {
+            withContext(Dispatchers.IO) { stationsFile.readText() }
+        } else {
+            try {
+                httpBytes(MeteoFranceObservations.STATIONS_URL, headers).decodeToString().also { csv ->
+                    withContext(Dispatchers.IO) {
+                        stationsFile.parentFile?.mkdirs()
+                        stationsFile.writeText(csv)
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: MapKeyException) {
+                throw e
+            } catch (_: Exception) {
+                if (stationsFile.exists()) withContext(Dispatchers.IO) { stationsFile.readText() } else ""
+            }
+        }
+        return MeteoFranceObservations.parseStations(text).also { if (it.isNotEmpty()) stationInfo = it }
+    }
+
+    /** Les points ne s'affichent qu'à l'heure actuelle : après, la carte est une prévision. */
+    private fun publishStations() {
+        val s = _state.value
+        val time = s.times.getOrNull(s.selected)
+        val now = Instant.now().truncatedTo(ChronoUnit.HOURS)
+        val current = s.layer == MapLayer.TEMPERATURE && time != null && !time.isAfter(now)
+        _state.update {
+            it.copy(
+                stations = if (current) markers else emptyList(),
+                observationNote = if (current) observationNote else null,
+                openStation = if (current) it.openStation else null,
+            )
+        }
     }
 
     fun togglePlay() {
@@ -244,6 +392,8 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val KEY_WINDY = "windy_api_key"
+        /** La clé Météo-France du radar (même préférence que RadarViewModel). */
+        const val KEY_METEO_FRANCE = "meteofrance_api_key"
         const val TEMPERATURE_WIDTH = 900
     }
 }
