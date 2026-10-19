@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -38,22 +37,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import io.github.pbailly.meteo.data.Place
-import io.github.pbailly.meteo.ui.theme.HeaderBlue
-import io.github.pbailly.meteo.ui.theme.HeaderBlueDark
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlacesScreen(
     state: MeteoUiState,
@@ -68,23 +62,17 @@ fun PlacesScreen(
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         if (grants.values.any { it }) onLocate() else onLocationDenied()
     }
-    val header = if (isSystemInDarkTheme()) HeaderBlueDark else HeaderBlue
     if (onBack != null) BackHandler(onBack = onBack)
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Lieux") },
+            NavyTopBar(
+                title = { Text("Lieux", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     if (onBack != null) {
                         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = header,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
-                ),
             )
         },
     ) { padding ->

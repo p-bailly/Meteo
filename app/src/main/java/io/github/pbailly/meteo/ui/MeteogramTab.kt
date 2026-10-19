@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.ui.theme.ChartColors
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
+import io.github.pbailly.meteo.ui.theme.PlexMono
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -428,7 +429,19 @@ private fun HourReadout(forecast: Forecast, index: Int) {
 @Composable
 fun Metric(label: String, value: String) {
     Column {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        MetricLabel(label)
         Text(value, style = MaterialTheme.typography.bodyMedium)
     }
+}
+
+/** Libellé de mesure : capitales en IBM Plex Mono, comme les axes des graphiques. */
+@Composable
+fun MetricLabel(label: String) {
+    Text(
+        label.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontFamily = PlexMono,
+        letterSpacing = 0.6.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

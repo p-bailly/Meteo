@@ -1,7 +1,8 @@
 # Logos et directions artistiques
 
-Cinq propositions pour remplacer l'icône actuelle (soleil derrière un nuage sur bleu `#256ABF`).
-Rien n'est encore appliqué à l'app : il faut d'abord en choisir une.
+Cinq propositions pour remplacer l'ancienne icône (soleil derrière un nuage sur bleu `#256ABF`).
+La direction **Isobare** est appliquée à l'app : icône, couleurs, polices IBM Plex, pictogrammes au trait et
+bande de fronts sous les barres du haut. Les quatre autres restent des pistes.
 
 Les logos de `logos/` sont dessinés sur la grille de l'icône adaptative Android (108 × 108, motif
 contenu dans la zone sûre de 66). `logos/monochrome/` contient le calque monochrome utilisé par les
@@ -31,7 +32,7 @@ icônes à thème d'Android 13+ (seul l'alpha compte).
   des graphiques). Le M° est très lisible à petite taille, mais il ne dit pas « météo » au premier coup
   d'œil.
 
-## Appliquer une direction
+## Changer de direction
 
 1. Convertir le SVG choisi en vector drawable pour `app/src/main/res/drawable/ic_launcher_foreground.xml`
    (sans le rectangle de fond), et le calque de `monochrome/` pour `<monochrome>`.

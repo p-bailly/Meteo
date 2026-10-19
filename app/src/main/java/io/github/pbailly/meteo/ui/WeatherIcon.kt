@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
@@ -15,6 +16,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -25,7 +27,7 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** Pictogramme météo dessiné à partir d'un code WMO (soleil, lune, nuages, pluie, neige, orage). */
+/** Pictogramme météo au trait, dessiné à partir d'un code WMO (soleil, lune, nuages, pluie, neige, orage). */
 @Composable
 fun WeatherIcon(
     code: Int,
@@ -75,18 +77,20 @@ private fun iconSpec(code: Int): IconSpec = when (code) {
     else -> IconSpec(Sky.OVERCAST)
 }
 
+/** Couleurs des pictogrammes au trait de l'identité Isobare. */
 private class IconPalette(dark: Boolean) {
-    val sun = Color(0xFFF5B700)
-    val sunEdge = Color(0xFFC98500)
-    val moon = if (dark) Color(0xFFD5DBE5) else Color(0xFF9AA6B8)
-    val cloud = if (dark) Color(0xFFE6EAF0) else Color.White
-    val cloudEdge = if (dark) Color(0xFFB7C0CC) else Color(0xFF8A94A3)
-    val heavyCloud = if (dark) Color(0xFF9AA3AF) else Color(0xFFC9CFD8)
-    val heavyCloudEdge = if (dark) Color(0xFF9AA3AF) else Color(0xFF6E7887)
-    val rain = if (dark) Color(0xFF6DA7EC) else Color(0xFF2A78D6)
-    val snow = if (dark) Color(0xFFB7D3F6) else Color(0xFF5598E7)
-    val fog = if (dark) Color(0xFFB7C0CC) else Color(0xFF8A94A3)
+    val sun = if (dark) Color(0xFFFFC21A) else Color(0xFFE39B00)
+    val moon = if (dark) Color(0xFFD5DBE5) else Color(0xFF6E86A0)
+    val cloud = if (dark) Color(0xFFF4F7FA) else Color(0xFF0C304E)
+    /** Voile des nuages chargés (couvert, fortes pluies, orage). */
+    val heavyFill = if (dark) Color(0x40A9C3DA) else Color(0x260C304E)
+    val rain = if (dark) Color(0xFF8CCBF8) else Color(0xFF2A78D6)
+    val snow = if (dark) Color(0xFFB7D3F6) else Color(0xFF2A78D6)
+    val fog = if (dark) Color(0xFFA9B8C6) else Color(0xFF6B7785)
 }
+
+/** Épaisseur du trait sur la grille de 24 × 24. */
+private const val LINE = 1.6f
 
 /**
  * Dessine le pictogramme dans un carré de côté [iconSize] placé en [topLeft].
@@ -104,21 +108,24 @@ fun DrawScope.drawWeatherIcon(code: Int, isDay: Boolean, dark: Boolean, topLeft:
             when (spec.sky) {
                 Sky.CLEAR -> sunOrMoon(isDay, 12f, 12f, 5.5f, p)
                 Sky.MOSTLY_CLEAR -> {
-                    sunOrMoon(isDay, 10f, 10f, 5f, p)
-                    cloud(11f, 13f, 12f, 7.5f, p, heavy = false)
+                    val front = cloudShape(11f, 13f, 12f, 7.5f)
+                    behind(front) { sunOrMoon(isDay, 10f, 10f, 5f, p) }
+                    drawCloud(front, p, heavy = false)
                 }
                 Sky.PARTLY -> {
-                    sunOrMoon(isDay, 9f, 8.5f, 4.5f, p)
-                    cloud(5f, 9.5f, 17.5f, 10.5f, p, heavy = false)
+                    val front = cloudShape(5f, 9.5f, 17.5f, 10.5f)
+                    behind(front) { sunOrMoon(isDay, 9f, 8.5f, 4.5f, p) }
+                    drawCloud(front, p, heavy = false)
                 }
                 Sky.OVERCAST -> {
-                    cloud(8f, 3f, 14f, 8.5f, p, heavy = true)
-                    cloud(2f, 7.5f, 18f, 11f, p, heavy = false)
+                    val front = cloudShape(2f, 7.5f, 18f, 11f)
+                    behind(front) { drawCloud(cloudShape(8f, 3f, 14f, 8.5f), p, heavy = true) }
+                    drawCloud(front, p, heavy = false)
                 }
                 Sky.FOG -> {
-                    cloud(5f, 2f, 14f, 8.5f, p, heavy = false)
+                    drawCloud(cloudShape(5f, 2f, 14f, 8.5f), p, heavy = false)
                     for (y in listOf(13.5f, 17f, 20.5f)) {
-                        drawLine(p.fog, Offset(3.5f, y), Offset(20.5f, y), strokeWidth = 1.8f, cap = StrokeCap.Round)
+                        drawLine(p.fog, Offset(3.5f, y), Offset(20.5f, y), strokeWidth = LINE, cap = StrokeCap.Round)
                     }
                 }
             }
@@ -127,10 +134,11 @@ fun DrawScope.drawWeatherIcon(code: Int, isDay: Boolean, dark: Boolean, topLeft:
 
         val heavy = spec.precip in setOf(Precip.HEAVY, Precip.THUNDER, Precip.HAIL, Precip.SNOW_HEAVY)
         if (spec.showers) {
-            sunOrMoon(isDay, 8f, 6.5f, 4f, p)
-            cloud(5f, 5f, 17f, 9.5f, p, heavy)
+            val shape = cloudShape(5f, 5f, 17f, 9.5f)
+            behind(shape) { sunOrMoon(isDay, 8f, 6.5f, 4f, p) }
+            drawCloud(shape, p, heavy)
         } else {
-            cloud(2.5f, 2.5f, 19f, 11f, p, heavy)
+            drawCloud(cloudShape(2.5f, 2.5f, 19f, 11f), p, heavy)
         }
 
         when (spec.precip) {
@@ -162,6 +170,9 @@ fun DrawScope.drawWeatherIcon(code: Int, isDay: Boolean, dark: Boolean, topLeft:
     }
 }
 
+/** Dessine [block] sauf là où le nuage [cover] passe devant : les nuages au trait n'ont pas de fond opaque. */
+private inline fun DrawScope.behind(cover: Path, block: DrawScope.() -> Unit) = clipPath(cover, ClipOp.Difference, block)
+
 private fun DrawScope.sunOrMoon(isDay: Boolean, cx: Float, cy: Float, r: Float, p: IconPalette) {
     if (isDay) {
         for (i in 0 until 8) {
@@ -170,22 +181,22 @@ private fun DrawScope.sunOrMoon(isDay: Boolean, cx: Float, cy: Float, r: Float, 
             val dy = sin(a)
             drawLine(
                 p.sun,
-                Offset(cx + dx * (r + 1.3f), cy + dy * (r + 1.3f)),
-                Offset(cx + dx * (r + 3f), cy + dy * (r + 3f)),
-                strokeWidth = 1.5f,
+                Offset(cx + dx * (r + 1.6f), cy + dy * (r + 1.6f)),
+                Offset(cx + dx * (r + 3.2f), cy + dy * (r + 3.2f)),
+                strokeWidth = LINE,
                 cap = StrokeCap.Round,
             )
         }
-        drawCircle(p.sun, radius = r, center = Offset(cx, cy))
-        drawCircle(p.sunEdge, radius = r, center = Offset(cx, cy), style = Stroke(width = 0.6f))
+        drawCircle(p.sun, radius = r, center = Offset(cx, cy), style = Stroke(width = LINE))
     } else {
         val full = Path().apply { addOval(Rect(Offset(cx, cy), r + 0.5f)) }
         val bite = Path().apply { addOval(Rect(Offset(cx + r * 0.6f, cy - r * 0.45f), r * 0.85f)) }
-        drawPath(Path.combine(PathOperation.Difference, full, bite), p.moon)
+        drawPath(Path.combine(PathOperation.Difference, full, bite), p.moon, style = Stroke(width = LINE, join = StrokeJoin.Round))
     }
 }
 
-private fun DrawScope.cloud(l: Float, t: Float, w: Float, h: Float, p: IconPalette, heavy: Boolean) {
+/** Silhouette de nuage : une base arrondie et trois bosses, dans le rectangle donné. */
+private fun cloudShape(l: Float, t: Float, w: Float, h: Float): Path {
     val base = Path().apply {
         addRoundRect(RoundRect(l, t + h * 0.45f, l + w, t + h, CornerRadius(h * 0.275f)))
     }
@@ -194,19 +205,18 @@ private fun DrawScope.cloud(l: Float, t: Float, w: Float, h: Float, p: IconPalet
         Offset(l + w * 0.58f, t + h * 0.42f) to h * 0.42f,
         Offset(l + w * 0.80f, t + h * 0.62f) to h * 0.30f,
     )
-    val shape = bumps.fold(base) { acc, (center, radius) ->
+    return bumps.fold(base) { acc, (center, radius) ->
         Path.combine(PathOperation.Union, acc, Path().apply { addOval(Rect(center, radius)) })
     }
-    drawPath(shape, if (heavy) p.heavyCloud else p.cloud)
-    drawPath(
-        shape,
-        if (heavy) p.heavyCloudEdge else p.cloudEdge,
-        style = Stroke(width = 1.1f, join = StrokeJoin.Round),
-    )
+}
+
+private fun DrawScope.drawCloud(shape: Path, p: IconPalette, heavy: Boolean) {
+    if (heavy) drawPath(shape, p.heavyFill)
+    drawPath(shape, p.cloud, style = Stroke(width = LINE, join = StrokeJoin.Round))
 }
 
 private fun DrawScope.drop(x: Float, y: Float, length: Float, p: IconPalette) {
-    drawLine(p.rain, Offset(x + length * 0.3f, y), Offset(x - length * 0.3f, y + length), strokeWidth = 1.8f, cap = StrokeCap.Round)
+    drawLine(p.rain, Offset(x + length * 0.3f, y), Offset(x - length * 0.3f, y + length), strokeWidth = LINE, cap = StrokeCap.Round)
 }
 
 private fun DrawScope.flake(x: Float, y: Float, r: Float, p: IconPalette) {
@@ -230,5 +240,4 @@ private fun DrawScope.lightning(p: IconPalette) {
         close()
     }
     drawPath(bolt, p.sun)
-    drawPath(bolt, p.sunEdge, style = Stroke(width = 0.6f, join = StrokeJoin.Round))
 }

@@ -33,7 +33,9 @@ import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.ui.theme.HeaderBlue
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
+import io.github.pbailly.meteo.ui.theme.PlexMono
 import io.github.pbailly.meteo.ui.theme.RainChanceOnNavy
+import io.github.pbailly.meteo.ui.theme.SecondaryOnNavy
 import kotlin.math.roundToInt
 
 private const val STRIP_HOURS = 24
@@ -57,9 +59,10 @@ fun HourlyStrip(forecast: Forecast, modifier: Modifier = Modifier) {
         items(hours) { i ->
             Column(Modifier.width(58.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    if (i == start) "Maint." else "%02d".format(h.time[i].hour),
-                    color = Color.White,
+                    if (i == start) "Maint." else "%02dh".format(h.time[i].hour),
+                    color = if (i == start) Color.White else SecondaryOnNavy,
                     style = MaterialTheme.typography.titleSmall,
+                    fontFamily = PlexMono,
                 )
                 Spacer(Modifier.height(4.dp))
                 WeatherIcon(h.weatherCode[i], h.isDay[i], size = 40.dp, dark = true)
@@ -67,7 +70,8 @@ fun HourlyStrip(forecast: Forecast, modifier: Modifier = Modifier) {
                 Text(
                     Fmt.percent(h.precipitationProbability[i]).replace(" ", ""),
                     color = RainChanceOnNavy,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = PlexMono,
                 )
                 Text(
                     Fmt.temp(h.temperature[i]),

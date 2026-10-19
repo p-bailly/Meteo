@@ -13,6 +13,7 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.unit.sp
+import io.github.pbailly.meteo.ui.theme.PlexMono
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.log10
@@ -70,7 +71,7 @@ fun DrawScope.drawSeries(
     )
 }
 
-/** Texte de graphique : [anchor] désigne le point d'ancrage (0 = gauche/haut, 0,5 = centre, 1 = droite/bas). */
+/** Texte de graphique, en IBM Plex Mono : [anchor] désigne le point d'ancrage (0 = gauche/haut, 0,5 = centre, 1 = droite/bas). */
 fun DrawScope.drawLabel(
     measurer: TextMeasurer,
     text: String,
@@ -86,6 +87,7 @@ fun DrawScope.drawLabel(
         TextStyle(
             color = color,
             fontSize = sizeSp.sp,
+            fontFamily = PlexMono,
             fontWeight = if (bold) androidx.compose.ui.text.font.FontWeight.SemiBold else null,
         ),
     )

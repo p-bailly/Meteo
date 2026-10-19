@@ -42,8 +42,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -66,7 +64,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.radar.RainClass
+import io.github.pbailly.meteo.ui.NavyTopBar
 import io.github.pbailly.meteo.ui.theme.HeaderBlue
+import io.github.pbailly.meteo.ui.theme.PlexMono
 import io.github.pbailly.meteo.ui.theme.RainChanceOnNavy
 import org.maplibre.android.geometry.LatLng
 import kotlinx.coroutines.delay
@@ -75,7 +75,8 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private val TIMELINE_BLUE = Color(0xFF103F78)
+/** Fond de la frise des heures, un ton au-dessus du marine de la barre. */
+private val TIMELINE_BLUE = Color(0xFF123F63)
 private const val REFRESH_MS = 2 * 60 * 1000L
 
 /** Écran radar relié à son ViewModel : vérifie une nouvelle image toutes les 2 minutes tant qu'il est visible. */
@@ -104,7 +105,7 @@ fun RadarRoute(place: Place, onBack: () -> Unit, viewModel: RadarViewModel = vie
         onSaveKey = viewModel::saveKey,
     )
 }
-private val SELECTED_BLUE = Color(0xFF2D7BEA)
+private val SELECTED_BLUE = Color(0xFF1F6FAE)
 private val clock = DateTimeFormatter.ofPattern("HH:mm")
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,8 +123,8 @@ fun RadarScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Radar") },
+            NavyTopBar(
+                title = { Text("Radar", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
                 },
@@ -131,12 +132,6 @@ fun RadarScreen(
                     IconButton(onClick = { editingKey = true }) { Icon(Icons.Filled.Key, contentDescription = "Clé Météo-France") }
                     IconButton(onClick = onRefresh) { Icon(Icons.Filled.Refresh, contentDescription = "Actualiser") }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = HeaderBlue,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
-                    actionIconContentColor = Color.White,
-                ),
             )
         },
     ) { padding ->
@@ -184,7 +179,7 @@ private fun Legend(modifier: Modifier = Modifier) {
             "Précipitations",
             color = Color.White,
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.fillMaxWidth().background(Color(0xCC3A3F45)).padding(horizontal = 6.dp, vertical = 3.dp),
+            modifier = Modifier.fillMaxWidth().background(HeaderBlue.copy(alpha = 0.85f)).padding(horizontal = 6.dp, vertical = 3.dp),
         )
         RainClass.entries.forEach { c ->
             Text(
@@ -259,6 +254,7 @@ private fun Timeline(state: RadarUiState, onSelect: (Int) -> Unit, onTogglePlay:
                             color = if (slot.isForecast && !selected) RainChanceOnNavy else Color.White,
                             fontWeight = if (selected) FontWeight.SemiBold else null,
                             fontStyle = if (slot.isForecast) FontStyle.Italic else null,
+                            fontFamily = PlexMono,
                             style = MaterialTheme.typography.titleSmall,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
