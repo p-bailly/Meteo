@@ -1,0 +1,48 @@
+name: APK
+
+# À chaque push : tests, compilation de l'APK signé, puis publication dans la release « apk-latest ».
+# Lien direct pour le téléphone : https://github.com/<propriétaire>/<dépôt>/releases/latest/download/meteo.apk
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-release
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Tests et compilation
+        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
+
+      - name: Renommer l'APK
+        run: cp app/build/outputs/apk/release/app-release.apk meteo.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: meteo-apk
+          path: meteo.apk
+
+      - name: Publier l'APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete apk-latest --cleanup-tag --yes || true
+          gh release create apk-latest meteo.apk \
+            --title "Météo – dernière version" \
+            --notes "APK compilé automatiquement depuis la branche ${GITHUB_REF_NAME} (commit ${GITHUB_SHA::7}). Ouvre ce lien depuis le téléphone pour l'installer." \
+            --target "$GITHUB_SHA" \
+            --latest

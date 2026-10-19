@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Soleil derrière un nuage, centré dans la zone sûre (66 dp) de l'icône adaptative. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFC21A"
+        android:pathData="M30,44a15,15 0 1,0 30,0a15,15 0 1,0 -30,0z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M45,57h25a10,10 0 0,1 0,20h-25a10,10 0 0,1 0,-20z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M40,61a11,11 0 1,0 22,0a11,11 0 1,0 -22,0z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M52,57a13,13 0 1,0 26,0a13,13 0 1,0 -26,0z" />
+</vector>
