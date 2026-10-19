@@ -84,6 +84,7 @@ private const val REFRESH_MS = 2 * 60 * 1000L
 fun RadarRoute(place: Place, onBack: () -> Unit, viewModel: RadarViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(place.id) { viewModel.setCenter(place.latitude, place.longitude) }
     LaunchedEffect(lifecycle, state.hasKey) {
         if (!state.hasKey) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -99,10 +100,13 @@ fun RadarRoute(place: Place, onBack: () -> Unit, viewModel: RadarViewModel = vie
         place = place,
         state = state,
         onBack = onBack,
-        onRefresh = viewModel::refresh,
+        onRefresh = { viewModel.refresh(force = true) },
         onSelect = viewModel::select,
         onTogglePlay = viewModel::togglePlay,
-        onSaveKey = viewModel::saveKey,
+        onSaveKey = {
+            viewModel.saveKey(it)
+            viewModel.refresh(force = true)
+        },
     )
 }
 private val SELECTED_BLUE = Color(0xFF1F6FAE)
@@ -208,7 +212,8 @@ private fun Timeline(state: RadarUiState, onSelect: (Int) -> Unit, onTogglePlay:
         Text(
             when {
                 slot == null -> "Radar Météo-France"
-                slot.isForecast -> "Prévision pour $time (+${slot.leadMinutes} min), d'après le déplacement des pluies"
+                // Pas de texte pour les prévisions : la frise suffit (on garde la ligne pour que la carte ne bouge pas).
+                slot.isForecast -> ""
                 else -> {
                     val ago = Duration.between(slot.time, Instant.now()).toMinutes()
                     "Observation Météo-France de $time" + if (ago in 0..600) " · il y a $ago min" else ""
@@ -295,12 +300,12 @@ private fun KeyCard(initial: String, onSave: (String) -> Unit, onCancel: (() -> 
             Text(
                 "Le radar vient de l'API publique de Météo-France, gratuite mais avec une clé personnelle :\n" +
                     "1. Créer un compte sur portail-api.meteofrance.fr\n" +
-                    "2. Ouvrir l'API « Radar » (DonneesPubliquesRadar) et cliquer « Souscrire gratuitement »\n" +
-                    "3. Dans « Mes API », générer une clé de type « API Key » avec la durée maximale (3 ans)\n" +
+                    "2. S'abonner gratuitement à « DonneesPubliquesRadar » et à « PrevisionImmediatePrecipitations » " +
+                    "(prévision à 3 h)\n" +
+                    "3. Ensuite seulement, dans « Mes API », générer une clé de type « API Key » (durée maximale, 3 ans)\n" +
                     "4. La coller ci-dessous. Elle reste sur ce téléphone.\n\n" +
                     "Météo-France ne fournit que la dernière image (toutes les 5 min) : l'animation se remplit " +
-                    "au fil des consultations et garde les 2 dernières heures. La prévision à 1 h prolonge " +
-                    "le déplacement des pluies mesuré entre deux images.",
+                    "au fil des consultations et garde les 2 dernières heures.",
                 style = MaterialTheme.typography.bodySmall,
             )
             TextButton(onClick = {

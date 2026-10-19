@@ -9,6 +9,8 @@ import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.OpenMeteoException
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.PlacesStore
+import io.github.pbailly.meteo.data.SettingsStore
+import io.github.pbailly.meteo.data.WeatherModel
 import io.github.pbailly.meteo.data.WeatherRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -46,6 +48,8 @@ data class MeteoUiState(
     val search: SearchState = SearchState(),
     val locating: Boolean = false,
     val locationError: String? = null,
+    /** Modèles masqués dans l'onglet MultiModèle (choisis dans les Réglages). */
+    val hiddenModels: Set<WeatherModel> = emptySet(),
 ) {
     val isFavorite: Boolean get() = place != null && favorites.any { it.id == place.id }
 }
@@ -53,9 +57,12 @@ data class MeteoUiState(
 class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = WeatherRepository(File(app.cacheDir, "openmeteo"))
     private val store = PlacesStore(app)
+    private val settings = SettingsStore(app)
     private val deviceLocation = DeviceLocation(app)
 
-    private val _state = MutableStateFlow(MeteoUiState(place = store.lastPlace(), favorites = store.favorites()))
+    private val _state = MutableStateFlow(
+        MeteoUiState(place = store.lastPlace(), favorites = store.favorites(), hiddenModels = settings.hiddenModels()),
+    )
     val state: StateFlow<MeteoUiState> = _state.asStateFlow()
 
     private var forecastJob: Job? = null
@@ -96,6 +103,12 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         val updated = if (current.any { it.id == place.id }) current.filterNot { it.id == place.id } else current + place
         store.saveFavorites(updated)
         _state.update { it.copy(favorites = updated) }
+    }
+
+    fun setModelVisible(model: WeatherModel, visible: Boolean) {
+        val hidden = if (visible) _state.value.hiddenModels - model else _state.value.hiddenModels + model
+        settings.saveHiddenModels(hidden)
+        _state.update { it.copy(hiddenModels = hidden) }
     }
 
     fun onSearchQueryChange(query: String) {
