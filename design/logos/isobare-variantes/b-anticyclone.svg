@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Isobare B, Anticyclone : deux isobares autour d'un A, un front froid et un front chaud">
+  <!-- Sur les cartes françaises, A marque l'anticyclone (hautes pressions, beau temps). -->
+  <rect width="108" height="108" fill="#F4F6F8"/>
+  <g fill="none" stroke="#0C304E" stroke-width="2.6" stroke-linejoin="round">
+    <path d="M24 57C23 41 37 31 55 31C72 31 85 40 84 55C83 70 71 81 54 81C37 81 25 72 24 57Z"/>
+    <path d="M35 57C34.5 46 42 40 52.5 40C63 40 69.5 46.5 69 56C68.5 65.5 61.5 72 52 72C42.5 72 35.5 66 35 57Z"/>
+  </g>
+  <path d="M45.5 65L52 46L58.5 65M47.8 58.5H56.2" fill="none" stroke="#F04A3E" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M50 31L60 31L55 23.5Z" fill="#3FA9F5"/>
+  <path d="M49 81A5 5 0 0 0 59 81Z" fill="#FF5A4E"/>
+</svg>

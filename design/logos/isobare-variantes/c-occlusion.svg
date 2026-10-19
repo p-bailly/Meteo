@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Isobare C, Occlusion : un M moitié front froid bleu, moitié front chaud rouge, sur fond nuit">
+  <rect width="108" height="108" fill="#07111A"/>
+  <path fill="#3FA9F5" d="M28 71L28 61L20 66ZM28 52L28 42L20 47ZM32.13 39.81L39.47 46.59L41.23 37.32ZM42.53 49.41L49.87 56.19L51.63 46.92Z"/>
+  <path fill="#FF5A4E" d="M58.13 56.19A5 5 0 0 1 65.47 49.41ZM68.53 46.59A5 5 0 0 1 75.87 39.81ZM80 42A5 5 0 0 1 80 52ZM80 61A5 5 0 0 1 80 71Z"/>
+  <g fill="none" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M28 76V36L54 60" stroke="#3FA9F5"/>
+    <path d="M54 60L80 36V76" stroke="#FF5A4E"/>
+  </g>
+</svg>
