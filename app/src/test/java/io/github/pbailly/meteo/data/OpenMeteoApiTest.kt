@@ -20,6 +20,7 @@ class OpenMeteoApiTest {
         assertTrue(url.contains("wind_speed_unit=kmh"))
         assertTrue(url.contains("forecast_days=14"))
         assertTrue(url.contains("hourly=temperature_2m%2Capparent_temperature"))
+        assertTrue(url.contains("freezing_level_height%2Ctemperature_850hPa"))
     }
 
     @Test
@@ -71,6 +72,11 @@ class OpenMeteoApiTest {
         assertEquals(-1, h.weatherCode[2])
         assertFalse(h.isDay[0])
         assertTrue(h.isDay[1])
+        assertEquals(2450.0, h.freezingLevel[0], 0.0)
+        assertTrue(h.freezingLevel[2].isNaN())
+        assertEquals(4.2, h.temperature850[0], 0.0)
+        assertEquals(1523.0, h.height850[0], 0.0)
+        assertTrue(h.temperature700[0].isNaN())
 
         val d = forecast.daily
         assertEquals(LocalDate.of(2026, 10, 19), d.date[0])
@@ -122,7 +128,9 @@ class OpenMeteoApiTest {
                "temperature_2m":[12.4,12.0,11.8],
                "precipitation_probability":[10,20,null],
                "weather_code":[0,2,null],
-               "is_day":[0,1,0]},
+               "is_day":[0,1,0],
+               "freezing_level_height":[2450.0,2380.0,null],
+               "temperature_850hPa":[4.2,3.8,3.5],"geopotential_height_850hPa":[1523.0,1520.0,1518.0]},
              "daily":{"time":["2026-10-19"],"temperature_2m_max":[18.2],"temperature_2m_min":[9.1],
                "sunrise":["2026-10-19T08:12"],"sunset":[null]}}
         """.trimIndent()

@@ -64,7 +64,7 @@ fun SettingsScreen(
     BackHandler(onBack = onBack)
     Scaffold(
         topBar = {
-            NavyTopBar(
+            AppTopBar(
                 title = { Text("Réglages", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
@@ -108,7 +108,7 @@ fun SettingsScreen(
             SectionTitle("Sources")
             Text(
                 "Prévisions : Open-Meteo.com (CC BY 4.0). Radar et prévision immédiate : Météo-France " +
-                    "(Licence Ouverte). Fond de carte : OpenFreeMap, © OpenStreetMap. Polices : IBM Plex (SIL OFL 1.1).",
+                    "(Licence Ouverte). Fond de carte : OpenFreeMap, © OpenStreetMap. Polices : Archivo et Martian Mono (SIL OFL 1.1).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),

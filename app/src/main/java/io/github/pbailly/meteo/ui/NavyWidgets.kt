@@ -25,17 +25,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.Predictability
+import io.github.pbailly.meteo.ui.theme.HeaderBlue
 import io.github.pbailly.meteo.ui.theme.OnTemperature
+import io.github.pbailly.meteo.ui.theme.SecondaryOnNavy
 import io.github.pbailly.meteo.ui.theme.predictabilityColor
 import io.github.pbailly.meteo.ui.theme.temperatureColor
 
-/** Carte bleu marine des écrans façon Meteoblue. */
-val NavyCard = Color(0xFF0C304E)
+/** Carte bleu glacier des écrans façon Meteoblue (texte blanc). */
+val NavyCard = HeaderBlue
 
-/** Filets entre les lignes des cartes marine. */
-val NavyDivider = Color(0xFF1D4A70)
+/** Filets entre les lignes des cartes glacier. */
+val NavyDivider = Color(0xFF3A79A9)
 
-/** Case de température colorée selon la valeur (vert, jaune, orange…), texte marine. */
+/** Case de température colorée selon la valeur (vert, jaune, orange…), texte nuit. */
 @Composable
 fun TemperatureBox(celsius: Double, modifier: Modifier = Modifier, fontSize: TextUnit = 22.sp) {
     Box(
@@ -78,7 +80,7 @@ fun PredictabilitySquare(percent: Int?, modifier: Modifier = Modifier, size: Dp 
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(size * 0.7f)) {
-            drawTarget(center, this.size.minDimension / 2, if (percent != null) OnTemperature else Color(0xFFA9C3DA), 1.5f * density)
+            drawTarget(center, this.size.minDimension / 2, if (percent != null) OnTemperature else SecondaryOnNavy, 1.5f * density)
         }
     }
 }

@@ -41,7 +41,9 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
   - **Webcams** autour du lieu : Windy, avec une clé gratuite (api.windy.com) à saisir dans les Réglages ;
     toucher un point affiche l'image et le lien vers la page Windy.
 - **Réglages** (menu ⋮) : modèles affichés dans MultiModèle, clés Météo-France et Windy.
-- Thème clair et sombre, identité « Isobare » (voir `design/`), cache local (pas de nouvel appel pendant 30 min, affichage hors ligne).
+- **Altitude** sur l'écran principal : altitude de l'iso 0 °C (et sa fourchette sur 24 h), températures aux niveaux
+  850 hPa (vers 1 500 m) et 700 hPa (vers 3 000 m), données Open-Meteo.
+- Thème clair et sombre, identité « Glacier » (voir `design/`), cache local (pas de nouvel appel pendant 30 min, affichage hors ligne).
 
 ## Radar Météo-France : la clé
 
@@ -95,11 +97,11 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 - `ui/` : écrans (`PlacesScreen`, `ForecastScreen`, `SettingsScreen`, `radar/RadarScreen`) et onglets (`HourlyTab`, `DaysTab`,
   `MeteogramTab`, `MultiModelTab`), pictogrammes dessinés au trait (`WeatherIcon`), barre du haut et bande de fronts
   (`NavyTopBar`), outils de graphique (`ChartKit`), carte MapLibre (`radar/RadarMap`).
-- `ui/theme/` : couleurs (`Theme`) et polices IBM Plex Sans et Mono (`Type`, fichiers dans `res/font/`).
+- `ui/theme/` : couleurs (`Theme`) et polices Archivo et Martian Mono (`Type`, fichiers dans `res/font/`).
 
 La clé de signature `app/meteo-perso.jks` est volontairement dans le dépôt pour que chaque APK compilé
 puisse mettre à jour le précédent. C'est adapté à un usage personnel, pas à une publication sur le Play Store.
 
 Données : Open-Meteo.com (licence CC BY 4.0) ; radar : Météo-France (Licence Ouverte Etalab) ;
-fond de carte : OpenFreeMap, © OpenStreetMap ; polices : IBM Plex (SIL Open Font License 1.1,
-`licences/IBM-Plex-OFL.txt`).
+fond de carte : OpenFreeMap, © OpenStreetMap ; polices : Archivo et Martian Mono (SIL Open Font License 1.1,
+`licences/Archivo-OFL.txt` et `licences/MartianMono-OFL.txt`).

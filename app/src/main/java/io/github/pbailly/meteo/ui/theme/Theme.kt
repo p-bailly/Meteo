@@ -9,59 +9,63 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
-// Direction artistique « Isobare » (design/README.md) : marine, encre, papier, et les deux couleurs
-// des fronts météo, froid (bleu) et chaud (rouge).
+// Direction artistique « Glacier » (design/README.md) : neige, glace, glacier, ardoise, nuit, et un rouge
+// de secours réservé aux alertes (verglas, froid ressenti extrême).
 
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF0C304E),
+    primary = Color(0xFF1C6497),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFD3E6F7),
-    onPrimaryContainer = Color(0xFF0C304E),
-    secondary = Color(0xFF1F6FAE),
+    primaryContainer = Color(0xFFD6EAF7),
+    onPrimaryContainer = Color(0xFF0F2133),
+    secondary = Color(0xFF4B5F73),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFDCEBF8),
-    onSecondaryContainer = Color(0xFF0C304E),
-    background = Color(0xFFF4F6F8),
-    onBackground = Color(0xFF0B1B2B),
-    surface = Color(0xFFF7F9FA),
-    onSurface = Color(0xFF0B1B2B),
-    surfaceVariant = Color(0xFFE7ECF0),
-    onSurfaceVariant = Color(0xFF46525E),
-    surfaceTint = Color(0xFF0C304E),
+    secondaryContainer = Color(0xFFE3EDF5),
+    onSecondaryContainer = Color(0xFF0F2133),
+    tertiary = Color(0xFFC8202A),
+    onTertiary = Color.White,
+    background = Color(0xFFF7FAFC),
+    onBackground = Color(0xFF0F2133),
+    surface = Color(0xFFF7FAFC),
+    onSurface = Color(0xFF0F2133),
+    surfaceVariant = Color(0xFFE3EDF5),
+    onSurfaceVariant = Color(0xFF4B5F73),
+    surfaceTint = Color(0xFF1C6497),
     surfaceContainerLowest = Color(0xFFFFFFFF),
-    surfaceContainerLow = Color(0xFFF7F9FA),
-    surfaceContainer = Color(0xFFEDF1F4),
-    surfaceContainerHigh = Color(0xFFE7ECF0),
-    surfaceContainerHighest = Color(0xFFE1E7EC),
-    outline = Color(0xFF7D8894),
-    outlineVariant = Color(0xFFD3DBE2),
-    error = Color(0xFFC8372D),
+    surfaceContainerLow = Color(0xFFF2F7FB),
+    surfaceContainer = Color(0xFFEAF2F8),
+    surfaceContainerHigh = Color(0xFFE3EDF5),
+    surfaceContainerHighest = Color(0xFFDCE8F2),
+    outline = Color(0xFF7A8FA3),
+    outlineVariant = Color(0xFFD3E1EC),
+    error = Color(0xFFC8202A),
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF7CC4F8),
-    onPrimary = Color(0xFF06263F),
-    primaryContainer = Color(0xFF12456E),
-    onPrimaryContainer = Color(0xFFD3E6F7),
-    secondary = Color(0xFF8FC2EA),
-    onSecondary = Color(0xFF0C304E),
-    secondaryContainer = Color(0xFF163E60),
-    onSecondaryContainer = Color(0xFFD3E6F7),
-    background = Color(0xFF07111A),
-    onBackground = Color(0xFFE6EDF3),
-    surface = Color(0xFF0D1A26),
-    onSurface = Color(0xFFE6EDF3),
-    surfaceVariant = Color(0xFF1C3044),
-    onSurfaceVariant = Color(0xFFA9B8C6),
-    surfaceTint = Color(0xFF7CC4F8),
-    surfaceContainerLowest = Color(0xFF07111A),
-    surfaceContainerLow = Color(0xFF0A1520),
-    surfaceContainer = Color(0xFF0F1E2B),
-    surfaceContainerHigh = Color(0xFF152636),
-    surfaceContainerHighest = Color(0xFF1C3044),
-    outline = Color(0xFF6F8091),
-    outlineVariant = Color(0xFF22384C),
-    error = Color(0xFFFF6B5F),
+    primary = Color(0xFF9BCBE9),
+    onPrimary = Color(0xFF0F2133),
+    primaryContainer = Color(0xFF1C4F78),
+    onPrimaryContainer = Color(0xFFD6EAF7),
+    secondary = Color(0xFFB6C7D6),
+    onSecondary = Color(0xFF0F2133),
+    secondaryContainer = Color(0xFF22384F),
+    onSecondaryContainer = Color(0xFFD6EAF7),
+    tertiary = Color(0xFFFF8A80),
+    onTertiary = Color(0xFF3A0508),
+    background = Color(0xFF0B1826),
+    onBackground = Color(0xFFEAF2F8),
+    surface = Color(0xFF0F2133),
+    onSurface = Color(0xFFEAF2F8),
+    surfaceVariant = Color(0xFF1D3550),
+    onSurfaceVariant = Color(0xFFA9BDCF),
+    surfaceTint = Color(0xFF9BCBE9),
+    surfaceContainerLowest = Color(0xFF0B1826),
+    surfaceContainerLow = Color(0xFF0E1D2E),
+    surfaceContainer = Color(0xFF122539),
+    surfaceContainerHigh = Color(0xFF172D44),
+    surfaceContainerHighest = Color(0xFF1D3550),
+    outline = Color(0xFF6F859A),
+    outlineVariant = Color(0xFF22384F),
+    error = Color(0xFFFF8A80),
 )
 
 /** Couleurs des graphiques, déclinées pour le thème clair et le thème sombre. */
@@ -88,20 +92,20 @@ data class ChartColors(
 )
 
 private val LightChart = ChartColors(
-    ink = Color(0xFF0B1B2B),
-    secondaryInk = Color(0xFF46525E),
-    muted = Color(0xFF6B7785),
-    grid = Color(0xFFDCE3EA),
-    axis = Color(0xFFC9D3DD),
+    ink = Color(0xFF0F2133),
+    secondaryInk = Color(0xFF4B5F73),
+    muted = Color(0xFF66798C),
+    grid = Color(0xFFDCE6EF),
+    axis = Color(0xFFC3D3E0),
     plot = Color.Transparent,
-    night = Color(0x140C304E),
-    highlight = Color(0x140B1B2B),
-    temperature = Color(0xFFF04A3E),
-    precipitation = Color(0xFF2A78D6),
-    snow = Color(0xFF6250D6),
+    night = Color(0x141C6497),
+    highlight = Color(0x140F2133),
+    temperature = Color(0xFFD2453B),
+    precipitation = Color(0xFF1C6497),
+    snow = Color(0xFF5FAEDF),
     wind = Color(0xFF1BAF7A),
-    pressure = Color(0xFF46525E),
-    cloud = Color(0xFF46525E),
+    pressure = Color(0xFF4B5F73),
+    cloud = Color(0xFF4B5F73),
     series = listOf(
         Color(0xFF2A78D6), Color(0xFFEB6834), Color(0xFF1BAF7A), Color(0xFFEDA100),
         Color(0xFFE87BA4), Color(0xFF008300), Color(0xFF6250D6), Color(0xFFE34948),
@@ -110,20 +114,20 @@ private val LightChart = ChartColors(
 )
 
 private val DarkChart = ChartColors(
-    ink = Color(0xFFE6EDF3),
-    secondaryInk = Color(0xFFA9B8C6),
-    muted = Color(0xFF7D8C9A),
-    grid = Color(0xFF1C2E3F),
-    axis = Color(0xFF2A3F52),
-    plot = Color(0xFF0D1A26),
-    night = Color(0xFF07111A),
-    highlight = Color(0x1AE6EDF3),
-    temperature = Color(0xFFFF6B5F),
-    precipitation = Color(0xFF4AA8F0),
-    snow = Color(0xFF9085E9),
+    ink = Color(0xFFEAF2F8),
+    secondaryInk = Color(0xFFA9BDCF),
+    muted = Color(0xFF7D93A8),
+    grid = Color(0xFF1D3550),
+    axis = Color(0xFF2A4560),
+    plot = Color(0xFF0F2133),
+    night = Color(0xFF0B1826),
+    highlight = Color(0x1AEAF2F8),
+    temperature = Color(0xFFFF7A70),
+    precipitation = Color(0xFF6FB6E3),
+    snow = Color(0xFFB9DDF5),
     wind = Color(0xFF199E70),
-    pressure = Color(0xFFA9B8C6),
-    cloud = Color(0xFFA9B8C6),
+    pressure = Color(0xFFA9BDCF),
+    cloud = Color(0xFFA9BDCF),
     series = listOf(
         Color(0xFF3987E5), Color(0xFFD95926), Color(0xFF199E70), Color(0xFFC98500),
         Color(0xFFD55181), Color(0xFF008300), Color(0xFF9085E9), Color(0xFFE66767),
@@ -131,21 +135,20 @@ private val DarkChart = ChartColors(
     darkTheme = true,
 )
 
-/** Bleu marine de l'identité : barres du haut, frise radar et cartes « heure par heure ». */
-val HeaderBlue = Color(0xFF0C304E)
-val HeaderBlueDark = Color(0xFF0A2640)
+/** Bleu glacier de l'identité : cartes « heure par heure », frise radar, sélecteurs posés sur fond coloré. */
+val HeaderBlue = Color(0xFF1C6497)
+val HeaderBlueDark = Color(0xFF154D78)
 
-/** Symboles des fronts météo (bande sous les barres du haut, logo). */
-val FrontCold = Color(0xFF3FA9F5)
-val FrontWarm = Color(0xFFFF5A4E)
+/** Nuit : élément sélectionné posé sur une carte glacier. */
+val SelectedOnCard = Color(0xFF0F2133)
 
-/** Texte secondaire et probabilité de pluie sur fond marine. */
-val SecondaryOnNavy = Color(0xFFA9C3DA)
-val RainChanceOnNavy = Color(0xFF8CCBF8)
+/** Texte secondaire et probabilité de pluie sur fond glacier (contraste ≥ 4,5:1). */
+val SecondaryOnNavy = Color(0xFFD6E8F5)
+val RainChanceOnNavy = Color(0xFFCDEBFF)
 
 val LocalChartColors = staticCompositionLocalOf { LightChart }
 
-/** Marine des barres du haut, un peu plus sombre en thème sombre. */
+/** Bleu glacier des cartes, un peu plus sombre en thème sombre. */
 @Composable
 fun headerBlue(): Color = if (LocalChartColors.current.darkTheme) HeaderBlueDark else HeaderBlue
 
