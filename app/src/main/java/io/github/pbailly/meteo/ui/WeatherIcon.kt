@@ -27,8 +27,14 @@ import kotlin.math.sin
 
 /** Pictogramme météo dessiné à partir d'un code WMO (soleil, lune, nuages, pluie, neige, orage). */
 @Composable
-fun WeatherIcon(code: Int, isDay: Boolean, modifier: Modifier = Modifier, size: Dp = 32.dp) {
-    val dark = LocalChartColors.current.darkTheme
+fun WeatherIcon(
+    code: Int,
+    isDay: Boolean,
+    modifier: Modifier = Modifier,
+    size: Dp = 32.dp,
+    /** Vrai quand l'icône est posée sur un fond foncé (thème sombre ou carte bleu marine). */
+    dark: Boolean = LocalChartColors.current.darkTheme,
+) {
     Canvas(
         modifier
             .size(size)

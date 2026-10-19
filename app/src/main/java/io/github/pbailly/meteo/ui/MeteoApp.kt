@@ -7,15 +7,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.pbailly.meteo.ui.radar.RadarRoute
 
 /** Deux écrans : la liste des lieux et les prévisions du lieu choisi. */
 @Composable
 fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showPlaces by rememberSaveable { mutableStateOf(false) }
+    var showRadar by rememberSaveable { mutableStateOf(false) }
     val place = state.place
 
-    if (place == null || showPlaces) {
+    if (place != null && showRadar && !showPlaces) {
+        RadarRoute(place, onBack = { showRadar = false })
+    } else if (place == null || showPlaces) {
         PlacesScreen(
             state = state,
             onBack = if (place != null) ({ showPlaces = false }) else null,
@@ -33,6 +37,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
             state = state,
             place = place,
             onOpenPlaces = { showPlaces = true },
+            onOpenRadar = { showRadar = true },
             onToggleFavorite = { viewModel.toggleFavorite(place) },
             onRefresh = viewModel::refresh,
             onMultiModelNeeded = viewModel::ensureMultiModel,

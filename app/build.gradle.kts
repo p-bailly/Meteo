@@ -14,6 +14,10 @@ android {
         // Sur GitHub Actions, chaque build a un numéro plus grand : le téléphone accepte la mise à jour.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "0.1.$versionCode"
+        // Bibliothèques natives de la carte : seulement les processeurs des téléphones, pour un APK plus léger.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     signingConfigs {
@@ -43,6 +47,13 @@ android {
     buildFeatures {
         compose = true
     }
+
+    packaging {
+        resources {
+            // Bibliothèques natives de lz4-java (dépendance de jhdf) pour ordinateurs : inutiles sur Android.
+            excludes += "net/jpountz/util/**"
+        }
+    }
 }
 
 dependencies {
@@ -57,6 +68,8 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.maplibre.android)
+    implementation(libs.jhdf)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
 }

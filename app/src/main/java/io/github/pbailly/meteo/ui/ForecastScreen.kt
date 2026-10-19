@@ -15,10 +15,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
@@ -28,7 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -56,7 +58,8 @@ import io.github.pbailly.meteo.ui.theme.HeaderBlue
 import io.github.pbailly.meteo.ui.theme.HeaderBlueDark
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
 
-private val TABS = listOf("14 jours", "Météogramme", "MultiModèle")
+private val TABS = listOf("Heures", "14 jours", "Météogramme", "MultiModèle")
+private const val MULTI_MODEL_TAB = 3
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +67,7 @@ fun ForecastScreen(
     state: MeteoUiState,
     place: Place,
     onOpenPlaces: () -> Unit,
+    onOpenRadar: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRefresh: () -> Unit,
     onMultiModelNeeded: () -> Unit,
@@ -73,7 +77,7 @@ fun ForecastScreen(
     val header = if (isSystemInDarkTheme()) HeaderBlueDark else HeaderBlue
 
     LaunchedEffect(tab, place.id) {
-        if (tab == 2) onMultiModelNeeded()
+        if (tab == MULTI_MODEL_TAB) onMultiModelNeeded()
     }
 
     Scaffold(
@@ -92,6 +96,7 @@ fun ForecastScreen(
                     IconButton(onClick = onOpenPlaces) { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Lieux") }
                 },
                 actions = {
+                    IconButton(onClick = onOpenRadar) { Icon(Icons.Filled.Radar, contentDescription = "Radar de pluie") }
                     IconButton(onClick = onToggleFavorite) {
                         Icon(
                             if (state.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
@@ -119,21 +124,27 @@ fun ForecastScreen(
             when {
                 data == null && forecast.error != null -> ErrorState(forecast.error, onRefresh)
                 data == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    StatusBanner(forecast)
-                    CurrentHeader(data)
-                    PrimaryTabRow(selectedTabIndex = tab) {
-                        TABS.forEachIndexed { index, title ->
-                            Tab(selected = tab == index, onClick = { tab = index }, text = { Text(title, maxLines = 1) })
+                else -> LazyColumn(Modifier.fillMaxSize()) {
+                    item(key = "status") { StatusBanner(forecast) }
+                    item(key = "current") { CurrentHeader(data) }
+                    item(key = "strip") { HourlyStrip(data, Modifier.padding(bottom = 12.dp)) }
+                    stickyHeader(key = "tabs") {
+                        Surface(color = MaterialTheme.colorScheme.background) {
+                            PrimaryScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
+                                TABS.forEachIndexed { index, title ->
+                                    Tab(selected = tab == index, onClick = { tab = index }, text = { Text(title, maxLines = 1) })
+                                }
+                            }
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
+                    item(key = "tab-space") { Spacer(Modifier.height(12.dp)) }
                     when (tab) {
-                        0 -> DaysTab(data)
-                        1 -> MeteogramTab(data)
-                        else -> MultiModelTab(state.multiModel, onRetry = onRetryMultiModel)
+                        0 -> hourlyItems(data)
+                        1 -> item(key = "days") { DaysTab(data) }
+                        2 -> item(key = "meteogram") { MeteogramTab(data) }
+                        else -> item(key = "multimodel") { MultiModelTab(state.multiModel, onRetry = onRetryMultiModel) }
                     }
-                    Attribution()
+                    item(key = "attribution") { Attribution() }
                 }
             }
         }

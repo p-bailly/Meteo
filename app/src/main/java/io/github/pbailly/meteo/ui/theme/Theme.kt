@@ -128,9 +128,12 @@ private val DarkChart = ChartColors(
     darkTheme = true,
 )
 
-/** Bandeau du haut, bleu foncé dans les deux thèmes. */
-val HeaderBlue = Color(0xFF184F95)
-val HeaderBlueDark = Color(0xFF0D2A50)
+/** Bleu marine de Meteoblue : bandeau du haut et cartes « heure par heure ». */
+val HeaderBlue = Color(0xFF0C304E)
+val HeaderBlueDark = Color(0xFF0A2238)
+
+/** Texte de probabilité de pluie sur fond marine. */
+val RainChanceOnNavy = Color(0xFFA3CEF5)
 
 val LocalChartColors = staticCompositionLocalOf { LightChart }
 
