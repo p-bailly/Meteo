@@ -31,7 +31,7 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
   ECMWF AIFS, NOAA GFS, UK Met Office, MeteoSwiss, GEM) pour la température, la pluie cumulée et le vent,
   avec leur moyenne et un tableau par jour.
 - **Radar de pluie Météo-France** (bouton radar en haut) : carte plein écran, légende Bruine → Grêle,
-  frise des heures et animation. Voir ci-dessous pour la clé.
+  frise des heures, animation, et prévision du déplacement des pluies sur 1 heure. Voir ci-dessous pour la clé.
 - Thème clair et sombre, cache local (pas de nouvel appel pendant 30 min, affichage hors ligne).
 
 ## Radar Météo-France : la clé
@@ -49,8 +49,11 @@ Le radar vient de l'API publique « DonneesPubliquesRadar » de Météo-France :
   L'app garde les images reçues pendant 2 heures : l'animation se remplit au fil des consultations,
   et l'écran radar vérifie s'il y a une nouvelle image toutes les 2 minutes tant qu'il est ouvert.
 - Chaque nouvelle image pèse environ 2 Mo, soit environ 24 Mo par heure d'écran radar ouvert.
-- Pas encore d'images de prévision (les heures futures de Meteoblue) : elles viendraient d'une autre API
-  Météo-France (prévision immédiate AROME-PI), pas encore intégrée.
+- **Prévision à 1 heure** : après « maintenant », la frise continue de 5 en 5 minutes jusqu'à +60 min.
+  L'app mesure le déplacement des zones de pluie entre deux images récentes (méthode TREC : suivi des
+  échos radar par corrélation) et le prolonge. Il faut donc deux images à 5–30 minutes d'écart : à la
+  première ouverture, la prévision apparaît avec l'image suivante. Les averses qui naissent ou se dissipent
+  ne sont pas prévues : au-delà de 30 à 60 minutes, la fiabilité baisse vite.
 - Fond de carte : [OpenFreeMap](https://openfreemap.org) (données OpenStreetMap), gratuit et sans clé.
 
 ## Coût

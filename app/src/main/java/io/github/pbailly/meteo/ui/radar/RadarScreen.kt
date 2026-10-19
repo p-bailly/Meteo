@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -67,6 +67,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.radar.RainClass
 import io.github.pbailly.meteo.ui.theme.HeaderBlue
+import io.github.pbailly.meteo.ui.theme.RainChanceOnNavy
 import org.maplibre.android.geometry.LatLng
 import kotlinx.coroutines.delay
 import java.time.Duration
@@ -201,42 +202,71 @@ private fun Legend(modifier: Modifier = Modifier) {
 private fun Timeline(state: RadarUiState, onSelect: (Int) -> Unit, onTogglePlay: () -> Unit) {
     val listState = rememberLazyListState()
     LaunchedEffect(state.selected, state.frames.size) {
-        if (state.frames.isNotEmpty()) listState.animateScrollToItem((state.selected - 2).coerceAtLeast(0))
+        // +1 pour le séparateur « Prévision » placé avant la première prévision.
+        val firstForecast = state.frames.indexOfFirst { it.isForecast }
+        val item = state.selected + if (firstForecast in 0..state.selected) 1 else 0
+        if (state.frames.isNotEmpty()) listState.animateScrollToItem((item - 2).coerceAtLeast(0))
     }
     Column(Modifier.fillMaxWidth().background(HeaderBlue).navigationBarsPadding()) {
-        val frame = state.frames.getOrNull(state.selected)
+        val slot = state.frames.getOrNull(state.selected)
+        val time = slot?.time?.let { clock.format(it.atZone(ZoneId.systemDefault())) }
         Text(
-            if (frame != null) {
-                val ago = Duration.between(frame, Instant.now()).toMinutes()
-                "Observation Météo-France de ${clock.format(frame.atZone(ZoneId.systemDefault()))}" +
-                    if (ago in 0..600) " · il y a $ago min" else ""
-            } else {
-                "Radar Météo-France"
+            when {
+                slot == null -> "Radar Météo-France"
+                slot.isForecast -> "Prévision pour $time (+${slot.leadMinutes} min), d'après le déplacement des pluies"
+                else -> {
+                    val ago = Duration.between(slot.time, Instant.now()).toMinutes()
+                    "Observation Météo-France de $time" + if (ago in 0..600) " · il y a $ago min" else ""
+                }
             },
             color = Color.White.copy(alpha = 0.8f),
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp),
         )
+        if (state.forecastNote != null && slot?.isForecast != true) {
+            Text(
+                state.forecastNote,
+                color = RainChanceOnNavy,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 12.dp),
+            )
+        }
+        Spacer(Modifier.height(4.dp))
         Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
             LazyRow(
                 Modifier.weight(1f).background(TIMELINE_BLUE),
                 state = listState,
                 contentPadding = PaddingValues(horizontal = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                itemsIndexed(state.frames) { index, time ->
-                    val selected = index == state.selected
-                    Text(
-                        clock.format(time.atZone(ZoneId.systemDefault())),
-                        color = Color.White,
-                        fontWeight = if (selected) FontWeight.SemiBold else null,
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (selected) SELECTED_BLUE else Color.Transparent)
-                            .clickable { onSelect(index) }
-                            .padding(horizontal = 10.dp, vertical = 10.dp),
-                    )
+                val firstForecast = state.frames.indexOfFirst { it.isForecast }
+                state.frames.forEachIndexed { index, slot ->
+                    if (index == firstForecast) {
+                        item(key = "separateur") {
+                            Text(
+                                "Prévision ›",
+                                color = RainChanceOnNavy,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp),
+                            )
+                        }
+                    }
+                    item(key = "${slot.time.epochSecond}-${slot.leadMinutes}") {
+                        val selected = index == state.selected
+                        Text(
+                            clock.format(slot.time.atZone(ZoneId.systemDefault())),
+                            color = if (slot.isForecast && !selected) RainChanceOnNavy else Color.White,
+                            fontWeight = if (selected) FontWeight.SemiBold else null,
+                            fontStyle = if (slot.isForecast) FontStyle.Italic else null,
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (selected) SELECTED_BLUE else Color.Transparent)
+                                .clickable { onSelect(index) }
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                        )
+                    }
                 }
             }
             IconButton(onClick = { onSelect(state.selected - 1) }, enabled = state.selected > 0) {
@@ -273,7 +303,8 @@ private fun KeyCard(initial: String, onSave: (String) -> Unit, onCancel: (() -> 
                     "3. Dans « Mes API », générer une clé de type « API Key » avec la durée maximale (3 ans)\n" +
                     "4. La coller ci-dessous. Elle reste sur ce téléphone.\n\n" +
                     "Météo-France ne fournit que la dernière image (toutes les 5 min) : l'animation se remplit " +
-                    "au fil des consultations et garde les 2 dernières heures.",
+                    "au fil des consultations et garde les 2 dernières heures. La prévision à 1 h prolonge " +
+                    "le déplacement des pluies mesuré entre deux images.",
                 style = MaterialTheme.typography.bodySmall,
             )
             TextButton(onClick = {

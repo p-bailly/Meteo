@@ -24,6 +24,8 @@ data class RadarFrame(val time: Instant, val file: File)
 
 class RadarAuthException : IOException("Clé Météo-France refusée")
 
+class RadarPixels(val width: Int, val height: Int, val argb: IntArray)
+
 /**
  * Radar de précipitations de Météo-France (API publique « DonneesPubliquesRadar », clé gratuite).
  *
@@ -60,6 +62,14 @@ class MeteoFranceRadar(
 
     suspend fun image(frame: RadarFrame): Bitmap = withContext(Dispatchers.IO) {
         BitmapFactory.decodeFile(frame.file.path) ?: throw IOException("Image radar illisible")
+    }
+
+    /** Pixels ARGB d'une image enregistrée, pour calculer la prévision. */
+    suspend fun pixels(frame: RadarFrame): RadarPixels = withContext(Dispatchers.IO) {
+        val bitmap = BitmapFactory.decodeFile(frame.file.path) ?: throw IOException("Image radar illisible")
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        RadarPixels(bitmap.width, bitmap.height, pixels).also { bitmap.recycle() }
     }
 
     private fun latestValidityTime(apiKey: String): Instant? = runCatching {
