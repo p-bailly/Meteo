@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Météo, direction Radar : balayage radar et écho de pluie en pixels">
+  <!-- Les pixels reprennent l'échelle de la légende radar de l'app (Bruine → Très fort). -->
+  <rect width="108" height="108" fill="#06090D"/>
+  <circle cx="54" cy="54" r="31" fill="none" stroke="#1E3640" stroke-width="1.2"/>
+  <circle cx="54" cy="54" r="18" fill="none" stroke="#1E3640" stroke-width="1.2"/>
+  <path d="M54 54L54 24A30 30 0 0 1 64.3 25.8Z" fill="#00C8D8" opacity="0.1"/>
+  <path d="M54 54L64.3 25.8A30 30 0 0 1 73.3 31Z" fill="#00C8D8" opacity="0.2"/>
+  <path d="M54 54L73.3 31A30 30 0 0 1 80 39Z" fill="#00C8D8" opacity="0.35"/>
+  <g transform="translate(27 55) scale(5)" shape-rendering="crispEdges">
+    <path fill="#7AE1E8" d="M2 0h3v1H2zM1 1h1v1H1zM5 1h1v1H5zM0 2h1v1H0zM6 2h1v1H6zM1 3h1v1H1zM5 3h1v1H5zM2 4h1v1H2zM4 4h1v1H4zM3 5h1v1H3z"/>
+    <path fill="#00C8D8" d="M2 1h1v1H2zM4 1h1v1H4zM1 2h1v1H1zM5 2h1v1H5zM2 3h1v1H2zM3 4h1v1H3z"/>
+    <path fill="#2D7BEA" d="M3 1h1v1H3zM4 2h1v1H4zM4 3h1v1H4zM3 3h1v1H3z"/>
+    <path fill="#BE46EB" d="M2 2h1v1H2z"/>
+    <path fill="#DE5E47" d="M3 2h1v1H3z"/>
+  </g>
+  <path d="M54 54L80 39" stroke="#7AE1E8" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="54" cy="54" r="2" fill="#7AE1E8"/>
+</svg>

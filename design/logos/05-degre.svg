@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Météo, direction Degré : un M suivi du signe degré">
+  <rect width="108" height="108" fill="#121212"/>
+  <path d="M30 73V41H39.5L47 55L54.5 41H64V73H55.5V56L49.5 67H44.5L38.5 56V73Z" fill="#F7F6F2"/>
+  <circle cx="72" cy="43" r="5.5" fill="none" stroke="#E8473F" stroke-width="4"/>
+</svg>
