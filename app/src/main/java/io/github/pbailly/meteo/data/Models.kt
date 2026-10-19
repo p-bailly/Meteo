@@ -63,6 +63,7 @@ class HourlySeries(
     val windGusts: DoubleArray,
     val pressure: DoubleArray,
     val isDay: BooleanArray,
+    val uvIndex: DoubleArray,
 ) {
     val size: Int get() = time.size
 }

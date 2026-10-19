@@ -2,6 +2,7 @@ package io.github.pbailly.meteo.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -10,14 +11,20 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.pbailly.meteo.ui.radar.RadarRoute
 import io.github.pbailly.meteo.ui.radar.RadarViewModel
 
-/** Deux écrans : la liste des lieux et les prévisions du lieu choisi. */
+/**
+ * Navigation : lieux, page de la ville, détail d'un jour, météogrammes, radar et réglages.
+ * Le retour arrière ramène toujours à la page de la ville.
+ */
 @Composable
 fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showPlaces by rememberSaveable { mutableStateOf(false) }
     var showRadar by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
+    var showMeteograms by rememberSaveable { mutableStateOf(false) }
+    var openDay by rememberSaveable { mutableIntStateOf(-1) }
     val place = state.place
+    val forecast = state.forecast.data
 
     if (showSettings) {
         val radar: RadarViewModel = viewModel()
@@ -31,6 +38,15 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
         )
     } else if (place != null && showRadar && !showPlaces) {
         RadarRoute(place, onBack = { showRadar = false })
+    } else if (place != null && forecast != null && openDay >= 0 && !showPlaces) {
+        DayDetailScreen(forecast, state.multiModel.data, place, initialDay = openDay, onBack = { openDay = -1 })
+    } else if (place != null && showMeteograms && !showPlaces) {
+        MeteogramsScreen(
+            state = state,
+            onBack = { showMeteograms = false },
+            onMultiModelNeeded = viewModel::ensureMultiModel,
+            onRetryMultiModel = viewModel::retryMultiModel,
+        )
     } else if (place == null || showPlaces) {
         PlacesScreen(
             state = state,
@@ -50,11 +66,11 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
             place = place,
             onOpenPlaces = { showPlaces = true },
             onOpenRadar = { showRadar = true },
+            onOpenMeteograms = { showMeteograms = true },
+            onOpenDay = { openDay = it },
             onOpenSettings = { showSettings = true },
             onToggleFavorite = { viewModel.toggleFavorite(place) },
             onRefresh = viewModel::refresh,
-            onMultiModelNeeded = viewModel::ensureMultiModel,
-            onRetryMultiModel = viewModel::retryMultiModel,
         )
     }
 }

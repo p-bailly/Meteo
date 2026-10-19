@@ -56,7 +56,7 @@ fun MultiModelTab(
 ) {
     val data = remote.data
     when {
-        data != null -> MultiModelContent(data, hidden, modifier)
+        data != null -> MultiModelContent(remember(data) { data.firstDays(DISPLAY_DAYS) }, hidden, modifier)
         remote.error != null -> Column(modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(remote.error, textAlign = TextAlign.Center)
             Spacer(Modifier.height(12.dp))
@@ -328,4 +328,16 @@ fun cumulative(values: DoubleArray): DoubleArray {
 fun meanOf(arrays: List<DoubleArray>, size: Int): DoubleArray = DoubleArray(size) { i ->
     val values = arrays.mapNotNull { arr -> arr.getOrNull(i)?.takeIf { !it.isNaN() } }
     if (values.size >= 2) values.average() else Double.NaN
+}
+
+/** Les graphiques montrent 7 jours ; les 14 jours chargés servent à la prévisibilité. */
+private const val DISPLAY_DAYS = 7
+
+private fun MultiModelForecast.firstDays(days: Int): MultiModelForecast {
+    val n = minOf(time.size, days * 24)
+    return MultiModelForecast(
+        time.take(n),
+        utcOffsetSeconds,
+        series.mapValues { (_, s) -> ModelSeries(s.temperature.copyOf(n), s.precipitation.copyOf(n), s.windSpeed.copyOf(n)) },
+    )
 }

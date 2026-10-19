@@ -70,7 +70,10 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private var searchJob: Job? = null
 
     init {
-        _state.value.place?.let { loadForecast(it, force = false) }
+        _state.value.place?.let {
+            loadForecast(it, force = false)
+            loadMultiModel(it, force = false)
+        }
     }
 
     fun selectPlace(place: Place) {
@@ -78,13 +81,14 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         multiModelJob?.cancel()
         _state.update { it.copy(place = place, forecast = Remote(), multiModel = Remote(), search = SearchState()) }
         loadForecast(place, force = false)
+        // Les modèles servent aussi à la page principale : prévisibilité et fourchettes de pluie.
+        loadMultiModel(place, force = false)
     }
 
     fun refresh() {
         val place = _state.value.place ?: return
         loadForecast(place, force = true)
-        val multiModel = _state.value.multiModel
-        if (multiModel.data != null || multiModel.loading) loadMultiModel(place, force = true)
+        loadMultiModel(place, force = true)
     }
 
     /** Appelé à l'ouverture de l'onglet MultiModèle : on ne télécharge ces données qu'à la demande. */

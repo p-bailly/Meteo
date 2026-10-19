@@ -19,17 +19,18 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
 
 - **Recherche de lieux** (villes, villages, altitude), **favoris** et **météo à ma position**
   (GPS du téléphone, sans les services Google).
-- **Conditions actuelles** : température, ressenti, vent, rafales, humidité, pression, lever et coucher du soleil.
-- **Prochaines heures** : bandeau bleu marine façon Meteoblue (heure, pictogramme, probabilité de pluie, température).
-- **Heures** : une ligne par heure sur 7 jours, avec la probabilité de pluie en barre, le cumul et le vent.
-- **14 jours** : graphique des maxi/mini et des pluies, puis une ligne par jour ; toucher un jour
-  affiche le détail toutes les 3 heures.
-- **Météogramme** sur 7 jours, heure par heure : pictogrammes, température et ressenti, pluie et neige
-  avec probabilité, nuages bas/moyens/hauts, vent et rafales avec direction, pression, nuits grisées.
-  Toucher le graphique affiche les valeurs de l'heure.
-- **MultiModèle** : comparaison de 8 modèles (Météo-France AROME/ARPEGE, DWD ICON, ECMWF IFS,
-  ECMWF AIFS, NOAA GFS, UK Met Office, MeteoSwiss, GEM) pour la température, la pluie cumulée et le vent,
-  avec leur moyenne et un tableau par jour.
+- **Page d'une ville** (sur le modèle de Meteoblue) : température en grand, ciel et indice UV, heure de mise
+  à jour, boutons Radar et Météogrammes ; bandeau des heures restantes de la journée (heure, pictogramme,
+  probabilité de pluie, température) ; puis les 14 jours : pictogrammes jour et nuit, probabilité de pluie,
+  maxi/mini dans des cases colorées, prévisibilité (cibles), vent, fourchette de pluie, ensoleillement.
+- **Détail d'un jour** (toucher un jour, puis glisser pour passer aux suivants) : lever et coucher du soleil
+  et de la Lune, pression, humidité, puis la prévision heure par heure (ou par 3 h) : température, ressenti,
+  vent moyen et rafales, pluie, probabilité et prévisibilité.
+- **Météogrammes** : météogramme horaire sur 7 jours, graphique 14 jours avec la prévisibilité, et
+  comparaison de 8 modèles (Météo-France AROME/ARPEGE, DWD ICON, ECMWF IFS, ECMWF AIFS, NOAA GFS,
+  UK Met Office, MeteoSwiss, GEM) avec leur moyenne.
+- **Prévisibilité** : calculée sur l'accord entre ces 8 modèles (écart des températures, accord sur la
+  pluie), de 0 à 100 %.
 - **Radar de pluie Météo-France** (bouton radar en haut) : carte plein écran, légende Bruine → Grêle,
   frise des heures, animation, et prévision du déplacement des pluies sur 1 heure. Voir ci-dessous pour la clé.
 - **Réglages** (menu ⋮) : modèles affichés dans MultiModèle, clé Météo-France.

@@ -24,13 +24,14 @@ object OpenMeteoApi {
     private const val GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 
     const val FORECAST_DAYS = 14
-    const val MULTI_MODEL_DAYS = 7
+    /** 14 jours : la prévisibilité de chaque jour se calcule sur l'accord entre modèles. */
+    const val MULTI_MODEL_DAYS = 14
 
     private val HOURLY = listOf(
         "temperature_2m", "apparent_temperature", "relative_humidity_2m",
         "precipitation", "snowfall", "precipitation_probability", "weather_code",
         "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high",
-        "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "pressure_msl", "is_day",
+        "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "pressure_msl", "is_day", "uv_index",
     )
     private val DAILY = listOf(
         "weather_code", "temperature_2m_max", "temperature_2m_min",
@@ -117,6 +118,7 @@ object OpenMeteoApi {
             windGusts = h.doubles("wind_gusts_10m", n),
             pressure = h.doubles("pressure_msl", n),
             isDay = h.ints("is_day", n).let { codes -> BooleanArray(n) { codes[it] != 0 } },
+            uvIndex = h.doubles("uv_index", n),
         )
 
         val d = root.obj("daily")
