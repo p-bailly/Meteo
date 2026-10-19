@@ -51,6 +51,16 @@ Cinq onglets dans la barre du bas :
   les lieux, à leur altitude. « Modifier » retire des favoris ; l'engrenage ouvre les **Réglages** (modèles de la
   comparaison, clés Météo-France et Windy).
 
+Comment la prévision est résumée :
+
+- **Pictogramme d'un jour (ou de 3 heures)** : le temps qui domine, et non le pire moment comme le code journalier
+  d'Open-Meteo (une heure d'orage la nuit en faisait un jour d'orage). Pluie, neige, orage ou verglas seulement s'ils
+  durent (au moins 2 heures et 1 mm sur une journée), intensité selon le cumul, sinon le ciel moyen de la journée.
+- **Pas de grêle** : les codes « orage avec grêle » d'Open-Meteo ne sont fiables qu'en Europe centrale ; ils sont
+  affichés comme des orages.
+- **En plaine** (aucun relief au-dessus de 1 500 m autour du lieu), la neige est comptée sur le lieu et non à 2 000 m,
+  et le verglas n'est cherché que jusqu'au plus haut point des environs.
+
 Comment l'altitude est calculée :
 
 - **Température et vent en altitude** : entre la température à 2 m du lieu et celles des niveaux de pression du

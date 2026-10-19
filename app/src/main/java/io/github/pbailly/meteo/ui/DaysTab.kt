@@ -26,6 +26,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import io.github.pbailly.meteo.data.Forecast
+import io.github.pbailly.meteo.data.Outlook
 import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.Predictability
 import io.github.pbailly.meteo.ui.theme.predictabilityColor
@@ -79,6 +80,7 @@ private fun FourteenDayChart(forecast: Forecast, predictability: List<Int?>, sel
         niceTicks((lows.minOrNull() ?: 0.0) - 1, (highs.maxOrNull() ?: 10.0) + 1, 4)
     }
     val rainMax = remember(forecast) { max(5.0, d.precipitationSum.filter { !it.isNaN() }.maxOrNull() ?: 0.0) }
+    val codes = remember(forecast) { d.date.map { Outlook.dayCode(forecast, it) } }
 
     Canvas(
         Modifier
@@ -123,7 +125,7 @@ private fun FourteenDayChart(forecast: Forecast, predictability: List<Int?>, sel
             drawLabel(measurer, date.dayOfMonth.toString(), Offset(cx(i), labelsTop + 13f * dp), colors.secondaryInk, 9f, 0.5f, 0f)
 
             val iconSize = minOf(colWidth - 2f * dp, 22f * dp)
-            drawWeatherIcon(d.weatherCode[i], true, colors.darkTheme, Offset(cx(i) - iconSize / 2, iconsTop), iconSize)
+            drawWeatherIcon(codes[i], true, colors.darkTheme, Offset(cx(i) - iconSize / 2, iconsTop), iconSize)
 
             // Prévisibilité : petite barre colorée et pourcentage, comme sur Meteoblue.
             predictability.getOrNull(i)?.let { p ->

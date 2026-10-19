@@ -217,10 +217,10 @@ private fun SlotChips(f: Forecast, slots: List<Slot>, selected: Int, reference: 
                     .padding(vertical = 7.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                MonoText(slot.top, color = if (active) Color.White else colors.onSurfaceVariant, size = 10.sp)
+                MonoText(slot.top, color = if (active) colors.background else colors.onSurfaceVariant, size = 10.sp)
                 Text(
                     slot.main,
-                    color = if (active) Color.White else colors.onBackground,
+                    color = if (active) colors.background else colors.onBackground,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 17.sp,
                     maxLines = 1,
@@ -230,7 +230,7 @@ private fun SlotChips(f: Forecast, slots: List<Slot>, selected: Int, reference: 
                         Icon(
                             Icons.Outlined.AcUnit,
                             contentDescription = "neige",
-                            tint = if (active) Color.White else colors.primary,
+                            tint = if (active) colors.background else colors.primary,
                             modifier = Modifier.size(12.dp),
                         )
                     }

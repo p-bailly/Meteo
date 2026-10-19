@@ -235,7 +235,7 @@ private fun AltitudeNowCard(f: Forecast, terrain: TerrainProfile?) {
             }
             AltitudeCell("ISO 0 °C", Fmt.altitude(iso, 100), isoNote, colors.primary, Modifier.weight(1f))
             VerticalDivider(color = colors.outlineVariant)
-            AltitudeCell("PLUIE-NEIGE", Fmt.altitude(snowLine, 100), "verglas : ${iceToday(f, i)}", colors.onBackground, Modifier.weight(1f))
+            AltitudeCell("PLUIE-NEIGE", Fmt.altitude(snowLine, 100), "verglas : ${iceToday(f, i, terrain)}", colors.onBackground, Modifier.weight(1f))
             VerticalDivider(color = colors.outlineVariant)
             val high = if (ground < 1700) 2000.0 else 3000.0
             val wind = Altitude.wind(f, i, high)
@@ -252,8 +252,8 @@ private fun AltitudeNowCard(f: Forecast, terrain: TerrainProfile?) {
 }
 
 /** Verglas des 24 prochaines heures : « nul », « possible » sur place, ou « > 900 m ». */
-private fun iceToday(f: Forecast, now: Int): String {
-    val risks = Altitude.iceRisks(f, now, now + 24)
+private fun iceToday(f: Forecast, now: Int, terrain: TerrainProfile?): String {
+    val risks = Altitude.iceRisks(f, now, now + 24, iceCeiling(f, terrain))
     return when {
         risks.isEmpty() -> "nul"
         risks.any { it.atPlace } -> "possible"

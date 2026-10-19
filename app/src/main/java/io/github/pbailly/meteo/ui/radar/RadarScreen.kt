@@ -294,7 +294,7 @@ private fun LayerTabs(selected: MapLayer, onLayer: (MapLayer) -> Unit) {
             val active = layer == selected
             Text(
                 layer.label,
-                color = if (active) Color.White else colors.onSurfaceVariant,
+                color = if (active) colors.background else colors.onSurfaceVariant,
                 fontWeight = if (active) FontWeight.SemiBold else null,
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier
@@ -474,7 +474,7 @@ private fun Timeline(
                         Text(
                             label(slot.time),
                             color = when {
-                                active -> Color.White
+                                active -> colors.background
                                 slot.isForecast -> colors.primary
                                 else -> colors.onBackground
                             },

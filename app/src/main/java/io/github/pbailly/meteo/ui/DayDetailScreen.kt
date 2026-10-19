@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.Moon
+import io.github.pbailly.meteo.data.Outlook
 import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.Predictability
@@ -137,10 +138,10 @@ private fun DayChips(forecast: Forecast, multiModel: MultiModelForecast?, select
                     .padding(vertical = 7.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                MonoText(Fmt.dayName(date).removeSuffix("."), color = if (active) Color.White else colors.onSurfaceVariant, size = 10.sp)
+                MonoText(Fmt.dayName(date).removeSuffix("."), color = if (active) colors.background else colors.onSurfaceVariant, size = 10.sp)
                 Text(
                     date.dayOfMonth.toString(),
-                    color = if (active) Color.White else colors.onBackground,
+                    color = if (active) colors.background else colors.onBackground,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 17.sp,
                 )
@@ -167,13 +168,14 @@ private fun DayPage(
     val d = forecast.daily
     val date = d.date[day]
     val lines = remember(forecast, multiModel, day, step) { hourLines(forecast, multiModel, day, step) }
+    val code = remember(forecast, day) { Outlook.dayCode(forecast, date) }
     val colors = MaterialTheme.colorScheme
     LazyColumn(Modifier.fillMaxSize()) {
         item(key = "summary") {
             Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                WeatherIcon(d.weatherCode[day], true, size = 52.dp)
+                WeatherIcon(code, true, size = 52.dp)
                 Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text(weatherDescription(d.weatherCode[day]), fontWeight = FontWeight.SemiBold, fontSize = 18.sp, maxLines = 1)
+                    Text(weatherDescription(code), fontWeight = FontWeight.SemiBold, fontSize = 18.sp, maxLines = 1)
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                         MonoText("mini ${Fmt.temp(d.temperatureMin[day])} · maxi ", size = 11.5.sp)
                         MonoText(Fmt.temp(d.temperatureMax[day]), color = colors.onBackground, size = 11.5.sp, bold = true)
@@ -369,7 +371,7 @@ private fun hourLines(forecast: Forecast, multiModel: MultiModelForecast?, day: 
             label = "%02d h".format(h.time[i].hour),
             temperature = h.temperature[i],
             apparent = h.apparentTemperature[i],
-            weatherCode = block.maxOf { h.weatherCode[it] },
+            weatherCode = if (block.size == 1) h.weatherCode[i] else Outlook.representativeCode(forecast, block),
             isDay = h.isDay[i],
             windDirection = h.windDirection[i],
             windSpeed = block.maxOf { h.windSpeed[it].takeIf { v -> !v.isNaN() } ?: 0.0 },

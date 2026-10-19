@@ -220,7 +220,7 @@ fun SegmentedToggle(
             val active = index == selected
             Text(
                 label,
-                color = if (active) Color.White else colors.onSurfaceVariant,
+                color = if (active) colors.background else colors.onSurfaceVariant,
                 fontSize = 13.5.sp,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,

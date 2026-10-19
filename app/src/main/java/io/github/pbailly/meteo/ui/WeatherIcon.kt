@@ -48,7 +48,7 @@ fun WeatherIcon(
 
 private enum class Sky { CLEAR, MOSTLY_CLEAR, PARTLY, OVERCAST, FOG }
 
-private enum class Precip { NONE, DRIZZLE, LIGHT, MODERATE, HEAVY, FREEZING, SNOW_LIGHT, SNOW, SNOW_HEAVY, THUNDER, HAIL }
+private enum class Precip { NONE, DRIZZLE, LIGHT, MODERATE, HEAVY, FREEZING, SNOW_LIGHT, SNOW, SNOW_HEAVY, THUNDER }
 
 private data class IconSpec(val sky: Sky, val precip: Precip = Precip.NONE, val showers: Boolean = false)
 
@@ -72,8 +72,8 @@ private fun iconSpec(code: Int): IconSpec = when (code) {
     82 -> IconSpec(Sky.PARTLY, Precip.HEAVY, showers = true)
     85 -> IconSpec(Sky.PARTLY, Precip.SNOW_LIGHT, showers = true)
     86 -> IconSpec(Sky.PARTLY, Precip.SNOW, showers = true)
-    95 -> IconSpec(Sky.OVERCAST, Precip.THUNDER)
-    96, 99 -> IconSpec(Sky.OVERCAST, Precip.HAIL)
+    // 96 et 99 (« orage avec grêle ») : Open-Meteo ne les juge fiables qu'en Europe centrale, on dessine un orage.
+    95, 96, 99 -> IconSpec(Sky.OVERCAST, Precip.THUNDER)
     else -> IconSpec(Sky.OVERCAST)
 }
 
@@ -132,7 +132,7 @@ fun DrawScope.drawWeatherIcon(code: Int, isDay: Boolean, dark: Boolean, topLeft:
             return@withTransform
         }
 
-        val heavy = spec.precip in setOf(Precip.HEAVY, Precip.THUNDER, Precip.HAIL, Precip.SNOW_HEAVY)
+        val heavy = spec.precip in setOf(Precip.HEAVY, Precip.THUNDER, Precip.SNOW_HEAVY)
         if (spec.showers) {
             val shape = cloudShape(5f, 5f, 17f, 9.5f)
             behind(shape) { sunOrMoon(isDay, 8f, 6.5f, 4f, p) }
@@ -158,12 +158,6 @@ fun DrawScope.drawWeatherIcon(code: Int, isDay: Boolean, dark: Boolean, topLeft:
                 drop(6.5f, 16f, 4f, p)
                 drop(18f, 16f, 4f, p)
                 lightning(p)
-            }
-            Precip.HAIL -> {
-                lightning(p)
-                listOf(6.5f to 18f, 18f to 18f, 7.5f to 21.5f).forEach { (x, y) ->
-                    drawCircle(p.snow, radius = 1.2f, center = Offset(x, y))
-                }
             }
             Precip.NONE -> Unit
         }

@@ -237,11 +237,14 @@ object Altitude {
 
     /**
      * Verglas possible entre les heures [from] et [to] : pluie verglaçante, ou routes mouillées par la pluie des
-     * 12 dernières heures quand la température retombe vers 0 °C, sur le lieu ou jusqu'à 1 200 m au-dessus.
+     * 12 dernières heures quand la température retombe vers 0 °C, sur le lieu ou plus haut, jusqu'à [ceiling]
+     * (1 200 m au-dessus du lieu au plus ; en plaine, le relief des environs, pour ne pas parler de routes qui
+     * n'existent pas).
      */
-    fun iceRisks(f: Forecast, from: Int, to: Int): List<IceRisk> {
+    fun iceRisks(f: Forecast, from: Int, to: Int, ceiling: Double = Double.NaN): List<IceRisk> {
         val h = f.hourly
         val ground = ground(f)
+        val top = if (ceiling.isNaN()) ground + ICE_SEARCH_ABOVE else ceiling.coerceIn(ground, ground + ICE_SEARCH_ABOVE)
         class Hour(val i: Int, val altitude: Double, val freezingRain: Boolean)
         val risky = ArrayList<Hour>()
         for (i in from.coerceAtLeast(0) until to.coerceAtMost(h.size)) {
@@ -250,7 +253,7 @@ object Altitude {
                 risky += Hour(i, ground, freezingRain = true)
                 continue
             }
-            val iceLevel = iceAltitude(f, i, ground) ?: continue
+            val iceLevel = iceAltitude(f, i, ground, top) ?: continue
             // S'il neige à cette altitude, c'est de la neige, pas du verglas.
             val now = h.precipitation.getOrElse(i) { 0.0 }
             if (now >= WET_HOUR_MM && iceLevel >= snowLine(f, i)) continue
@@ -270,7 +273,7 @@ object Altitude {
             val group = risky.subList(k, end + 1)
             val altitude = group.minOf { it.altitude }
             val atPlace = altitude <= ground + 1
-            val reference = if (atPlace) ground else (altitude + 300).coerceAtMost(ground + ICE_SEARCH_ABOVE)
+            val reference = if (atPlace) ground else (altitude + 300).coerceAtMost(top)
             result += IceRisk(
                 start = h.time[group.first().i],
                 end = h.time[group.last().i],
@@ -285,10 +288,10 @@ object Altitude {
         return result
     }
 
-    /** Plus basse altitude (entre le lieu et 1 200 m au-dessus) où il fait au plus 0,5 °C, ou null. */
-    private fun iceAltitude(f: Forecast, i: Int, ground: Double): Double? {
+    /** Plus basse altitude (entre le lieu et [top]) où il fait au plus 0,5 °C, ou null. */
+    private fun iceAltitude(f: Forecast, i: Int, ground: Double, top: Double): Double? {
         var z = ground
-        while (z <= ground + ICE_SEARCH_ABOVE) {
+        while (z <= top) {
             val t = temperature(f, i, z)
             if (t.isNaN()) return null
             if (t <= ICE_TEMPERATURE) return z

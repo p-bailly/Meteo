@@ -56,6 +56,7 @@ import io.github.pbailly.meteo.data.IceRisk
 import io.github.pbailly.meteo.data.Outlook
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.SnowEvent
+import io.github.pbailly.meteo.data.TerrainProfile
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
 import java.time.LocalDate
 import java.util.Locale
@@ -93,7 +94,8 @@ fun DaysScreen(
 ) {
     var span by rememberSaveable { mutableIntStateOf(0) }
     val remote = state.forecast
-    val allLines = remember(remote.data) { remote.data?.let { dayLines(it) }.orEmpty() }
+    val terrain = state.terrain.data
+    val allLines = remember(remote.data, terrain) { remote.data?.let { dayLines(it, snowReference(it, terrain)) }.orEmpty() }
     PullToRefreshBox(isRefreshing = remote.loading && remote.data != null, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
         val f = remote.data
         LazyColumn(Modifier.fillMaxSize()) {
@@ -117,7 +119,7 @@ fun DaysScreen(
             val days = if (span == 0) 7 else 14
             val lines = allLines
             val today = f.daily.date.firstOrNull() ?: LocalDate.now()
-            item(key = "alerts") { Alerts(f, place, today) }
+            item(key = "alerts") { Alerts(f, place, today, terrain) }
             item(key = "header") { TableHeader() }
             val shown = lines.take(days)
             val low = shown.minOfOrNull { it.min.takeIf { v -> !v.isNaN() } ?: Double.MAX_VALUE } ?: 0.0
@@ -132,11 +134,11 @@ fun DaysScreen(
                 }
             }
             if (span == 0) lines.getOrNull(7)?.let { line ->
-                item(key = "teaser") { Teaser(f, line, onClick = { span = 1 }) }
+                item(key = "teaser") { Teaser(line, snowReference(f, terrain), onClick = { span = 1 }) }
             }
             item(key = "legend") {
                 MonoText(
-                    "pluie en mm · iso 0 en m · neige en 24 h à ${Fmt.altitude(Outlook.snowReference(Altitude.ground(f)))}",
+                    "pluie en mm · iso 0 en m · neige en 24 h à ${Fmt.altitude(snowReference(f, state.terrain.data))}",
                     size = 10.sp,
                     maxLines = 2,
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
@@ -150,17 +152,24 @@ fun DaysScreen(
     }
 }
 
-private fun dayLines(f: Forecast): List<DayLine> {
+/** Neige à 2 000 m s'il y a des montagnes autour du lieu, sinon sur le lieu même. */
+private fun snowReference(f: Forecast, terrain: TerrainProfile?): Double =
+    Outlook.snowReference(Altitude.ground(f), terrain?.elevations?.maxOrNull())
+
+/** Verglas : jusqu'au plus haut point des environs (sans relief connu, 300 m au-dessus du lieu). */
+fun iceCeiling(f: Forecast, terrain: TerrainProfile?): Double =
+    terrain?.elevations?.maxOrNull() ?: (Altitude.ground(f) + 300)
+
+private fun dayLines(f: Forecast, reference: Double): List<DayLine> {
     val d = f.daily
     val altitudeDays = Altitude.days(f).associateBy { it.date }
-    val reference = Outlook.snowReference(Altitude.ground(f))
     val now = Outlook.nowIndex(f)
     return (0 until d.size).map { i ->
         val alt = altitudeDays[d.date[i]]
         DayLine(
             index = i,
             date = d.date[i],
-            code = d.weatherCode[i],
+            code = Outlook.dayCode(f, d.date[i]),
             min = d.temperatureMin[i],
             max = d.temperatureMax[i],
             rain = d.precipitationSum[i],
@@ -179,11 +188,11 @@ private fun dayLines(f: Forecast): List<DayLine> {
 
 /** Alertes de la semaine : le prochain épisode neigeux et le premier risque de verglas. */
 @Composable
-private fun Alerts(f: Forecast, place: Place, today: LocalDate) {
-    val snow = remember(f) { Outlook.snowEvent(f, today) }
+private fun Alerts(f: Forecast, place: Place, today: LocalDate, terrain: TerrainProfile?) {
+    val snow = remember(f, terrain) { Outlook.snowEvent(f, today, reference = snowReference(f, terrain)) }
     val ice = remember(f) {
         val now = Outlook.nowIndex(f)
-        Altitude.iceRisks(f, now, now + 8 * 24).firstOrNull()
+        Altitude.iceRisks(f, now, now + 8 * 24, iceCeiling(f, terrain)).firstOrNull()
     }
     if (snow == null && ice == null) return
     Column(Modifier.padding(top = 12.dp)) {
@@ -397,9 +406,9 @@ private fun TemperatureBar(min: Double, max: Double, low: Double, high: Double, 
 
 /** Le 8e jour en résumé, sous le tableau des 7 jours. */
 @Composable
-private fun Teaser(f: Forecast, line: DayLine, onClick: () -> Unit) {
+private fun Teaser(line: DayLine, reference: Double, onClick: () -> Unit) {
     val title = Fmt.dayShort(line.date).replaceFirstChar { it.titlecase(Locale.FRANCE) } + " · " + when {
-        line.snow >= 1 -> "+${line.snow.roundToInt()} cm à ${Fmt.altitude(Outlook.snowReference(Altitude.ground(f)))}"
+        line.snow >= 1 -> "+${line.snow.roundToInt()} cm à ${Fmt.altitude(reference)}"
         line.rain >= 1 -> "${Fmt.decimal(line.rain)} mm de pluie"
         else -> weatherDescription(line.code)
     }

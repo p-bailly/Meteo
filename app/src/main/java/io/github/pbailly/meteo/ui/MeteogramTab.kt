@@ -46,6 +46,7 @@ import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.ui.theme.ChartColors
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
 import io.github.pbailly.meteo.ui.theme.AppMono
+import io.github.pbailly.meteo.ui.theme.AppSans
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -61,12 +62,18 @@ private val AXIS_WIDTH = 38.dp
 private enum class Band(val title: String?, val titleHeight: Float, val plotHeight: Float) {
     DAYS(null, 0f, 22f),
     ICONS(null, 0f, 28f),
-    TEMPERATURE("Température (°C)", 18f, 110f),
-    PRECIPITATION("Précipitations (mm)", 18f, 70f),
-    CLOUDS("Nuages", 18f, 33f),
-    WIND("Vent (km/h)", 18f, 86f),
-    PRESSURE("Pression (hPa)", 18f, 50f),
+    TEMPERATURE("Température °C", 26f, 110f),
+    PRECIPITATION("Pluie mm", 26f, 64f),
+    CLOUDS("Nuages", 26f, 12f),
+    WIND("Vent km/h", 26f, 80f),
+    PRESSURE("Pression hPa", 26f, 56f),
 }
+
+/** Bandes avec un tracé : la nuit, l'heure choisie et les séparateurs de jours ne débordent pas sur les titres. */
+private val PLOTS = listOf(Band.TEMPERATURE, Band.PRECIPITATION, Band.CLOUDS, Band.WIND, Band.PRESSURE)
+
+/** Pictogrammes, flèches de vent et probabilités : une fois toutes les 6 heures (3 h, 9 h, 15 h, 21 h). */
+private fun everySixHours(time: LocalDateTime) = time.hour % 6 == 3
 
 private class BandBox(val titleTop: Float, val top: Float, val bottom: Float) {
     val height get() = bottom - top
@@ -142,11 +149,11 @@ fun MeteogramTab(forecast: Forecast, modifier: Modifier = Modifier) {
                 drawAxes(bands, scales, colors, measurer, AXIS_WIDTH.toPx())
             }
         }
-        Text(
-            "Touchez le graphique pour lire les valeurs d'une heure. Zones grisées : nuit.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        MonoText(
+            "touchez le graphique pour lire une heure · zones bleutées : nuit",
+            size = 10.sp,
+            maxLines = 2,
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
         )
     }
 }
@@ -156,6 +163,8 @@ private class MeteogramScales(
     val precipitationTicks: List<Double>,
     val windTicks: List<Double>,
     val pressureTicks: List<Double>,
+    /** Neige sur la période : sinon, pas de « neige » dans la légende. */
+    val hasSnow: Boolean,
 ) {
     companion object {
         fun from(forecast: Forecast, hours: Int): MeteogramScales {
@@ -169,7 +178,8 @@ private class MeteogramScales(
                 temperatureTicks = niceTicks((temps.minOrNull() ?: 0.0) - 1, (temps.maxOrNull() ?: 10.0) + 1, 4),
                 precipitationTicks = niceTicks(0.0, max(2.0, precip.maxOrNull() ?: 0.0), 2),
                 windTicks = niceTicks(0.0, max(20.0, wind.maxOrNull() ?: 0.0), 3),
-                pressureTicks = niceTicks((pressure.minOrNull() ?: 1010.0) - 1, (pressure.maxOrNull() ?: 1020.0) + 1, 3),
+                pressureTicks = niceTicks((pressure.minOrNull() ?: 1010.0) - 1, (pressure.maxOrNull() ?: 1020.0) + 1, 2),
+                hasSnow = h.snowfall.finite().any { it > 0 },
             )
         }
     }
@@ -193,21 +203,23 @@ private fun DrawScope.drawMeteogram(
     val h = forecast.hourly
     val d = density
     val x = { i: Int -> (i + 0.5f) * hourPx }
-    val plotTop = bands.getValue(Band.ICONS).top
-    val plotBottom = size.height
 
-    drawRect(c.plot, Offset(0f, plotTop), Size(size.width, plotBottom - plotTop))
-
-    // Nuit : on grise les heures où is_day = 0.
+    // Fond et nuit (heures où is_day = 0) dans chaque tracé, pas sous les titres.
+    val nights = ArrayList<IntRange>()
     var i = 0
     while (i < hours) {
         if (!h.isDay[i]) {
             val start = i
             while (i < hours && !h.isDay[i]) i++
-            drawRect(c.night, Offset(start * hourPx, plotTop), Size((i - start) * hourPx, plotBottom - plotTop))
+            nights += start until i
         } else {
             i++
         }
+    }
+    PLOTS.forEach { band ->
+        val box = bands.getValue(band)
+        drawRect(c.plot, Offset(0f, box.top), Size(size.width, box.height))
+        nights.forEach { n -> drawRect(c.night, Offset(n.first * hourPx, box.top), Size((n.last + 1 - n.first) * hourPx, box.height)) }
     }
 
     // Graduations horizontales.
@@ -225,7 +237,13 @@ private fun DrawScope.drawMeteogram(
     val dayStarts = (0 until hours).filter { it == 0 || h.time[it].hour == 0 }
     dayStarts.forEachIndexed { n, start ->
         val end = dayStarts.getOrElse(n + 1) { hours }
-        if (start > 0) drawLine(c.axis, Offset(start * hourPx, daysBox.top), Offset(start * hourPx, size.height), 1f * d)
+        if (start > 0) {
+            drawLine(c.axis, Offset(start * hourPx, daysBox.top), Offset(start * hourPx, daysBox.bottom), 1f * d)
+            PLOTS.forEach { band ->
+                val box = bands.getValue(band)
+                drawLine(c.axis, Offset(start * hourPx, box.top), Offset(start * hourPx, box.bottom), 1f * d)
+            }
+        }
         val label = measurer.measure(
             Fmt.dayShort(h.time[start].toLocalDate()),
             TextStyle(color = c.ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
@@ -238,19 +256,23 @@ private fun DrawScope.drawMeteogram(
         }
     }
 
-    // Heure sélectionnée et heure actuelle.
-    drawRect(c.highlight, Offset(selected * hourPx, plotTop), Size(hourPx, plotBottom - plotTop))
-    if (now in 0 until hours) {
-        drawLine(
-            c.secondaryInk, Offset(x(now), plotTop), Offset(x(now), plotBottom), 1f * d,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f * d, 3f * d)),
-        )
+    // Heure sélectionnée et heure actuelle, dans les tracés.
+    PLOTS.forEach { band ->
+        val box = bands.getValue(band)
+        drawRect(c.highlight, Offset(selected * hourPx, box.top), Size(hourPx, box.height))
+        if (now in 0 until hours) {
+            drawLine(
+                c.secondaryInk, Offset(x(now), box.top), Offset(x(now), box.bottom), 1f * d,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f * d, 3f * d)),
+            )
+        }
     }
 
-    // Pictogrammes toutes les 3 heures.
+    // Pictogrammes toutes les 6 heures.
     val iconsBox = bands.getValue(Band.ICONS)
     val iconSize = 22f * d
-    for (k in 1 until hours step 3) {
+    for (k in 0 until hours) {
+        if (!everySixHours(h.time[k])) continue
         drawWeatherIcon(
             h.weatherCode[k], h.isDay[k], c.darkTheme,
             Offset(x(k) - iconSize / 2, iconsBox.top + (iconsBox.height - iconSize) / 2), iconSize,
@@ -282,35 +304,30 @@ private fun DrawScope.drawMeteogram(
             cornerRadius = CornerRadius(1.5f * d),
         )
     }
-    for (k in 0 until hours step 3) {
-        val prob = (k until min(k + 3, hours)).maxOfOrNull { h.precipitationProbability[it].takeIf { p -> !p.isNaN() } ?: 0.0 } ?: 0.0
-        if (prob >= 10) {
-            drawLabel(measurer, "${prob.toInt()}%", Offset((k + 1.5f) * hourPx, pBox.top + 1f * d), c.secondaryInk, 9f, 0.5f, 0f)
+    // Probabilité par tranche de 6 heures, seulement quand la pluie est vraisemblable (au moins 30 %).
+    for (k in 0 until hours) {
+        if (h.time[k].hour % 6 != 0 && k != 0) continue
+        val end = min(k + 6 - h.time[k].hour % 6, hours)
+        val prob = (k until end).maxOfOrNull { h.precipitationProbability[it].takeIf { p -> !p.isNaN() } ?: 0.0 } ?: 0.0
+        if (prob >= 30) {
+            drawLabel(measurer, "${prob.toInt()} %", Offset((k + end) / 2f * hourPx, pBox.top), c.precipitation, 9.5f, 0.5f, 0f, bold = true)
         }
     }
     drawLine(c.axis, Offset(0f, pBox.bottom), Offset(size.width, pBox.bottom), 1f * d)
 
-    // Nuages : trois rangées (hauts, moyens, bas), plus foncées quand la couverture augmente.
+    // Nuages : une seule rangée, plus foncée quand le ciel se couvre (la plus forte des trois couches).
     val cBox = bands.getValue(Band.CLOUDS)
-    val rowHeight = cBox.height / 3f
-    val layers = listOf(h.cloudCoverHigh, h.cloudCoverMid, h.cloudCoverLow)
-    layers.forEachIndexed { row, values ->
-        for (k in 0 until hours) {
-            val cover = values[k]
-            if (cover.isNaN() || cover < 5) continue
-            drawRect(
-                c.cloud.copy(alpha = (cover / 100.0 * 0.75).toFloat()),
-                Offset(k * hourPx, cBox.top + row * rowHeight + 0.5f * d),
-                Size(hourPx, rowHeight - 1f * d),
-            )
-        }
+    for (k in 0 until hours) {
+        val cover = listOf(h.cloudCoverHigh[k], h.cloudCoverMid[k], h.cloudCoverLow[k]).filter { !it.isNaN() }.maxOrNull() ?: continue
+        if (cover < 5) continue
+        drawRect(c.cloud.copy(alpha = (cover / 100.0 * 0.6).toFloat()), Offset(k * hourPx, cBox.top), Size(hourPx, cBox.height))
     }
 
     // Vent : vitesse (trait plein), rafales (pointillés) et flèches de direction toutes les 3 h.
     val wBox = bands.getValue(Band.WIND)
     val wScale = ticksScale(scales.windTicks, wBox, 20f * d)
-    for (k in 1 until hours step 3) {
-        drawWindArrow(Offset(x(k), wBox.top + 9f * d), h.windDirection[k], 12f * d, c.secondaryInk, 1.5f * d)
+    for (k in 0 until hours) {
+        if (everySixHours(h.time[k])) drawWindArrow(Offset(x(k), wBox.top + 9f * d), h.windDirection[k], 12f * d, c.secondaryInk, 1.5f * d)
     }
     drawSeries(h.windGusts, x, wScale::y, c.wind.copy(alpha = 0.7f), 1.5f * d, dashed = true, range = 0 until hours)
     drawSeries(h.windSpeed, x, wScale::y, c.wind, 2f * d, range = 0 until hours)
@@ -341,29 +358,28 @@ private fun DrawScope.drawAxes(
     axis(scales.windTicks, bands.getValue(Band.WIND), 20f * d)
     axis(scales.pressureTicks, bands.getValue(Band.PRESSURE))
 
-    val clouds = bands.getValue(Band.CLOUDS)
-    listOf("hauts", "moy.", "bas").forEachIndexed { row, label ->
-        drawLabel(measurer, label, Offset(axisWidth - 6f * d, clouds.top + clouds.height / 3f * (row + 0.5f)), c.muted, 9f, 1f, 0.5f)
-    }
-
     // Titres de bande, avec la légende des séries quand il y en a deux.
     Band.entries.forEach { band ->
         val title = band.title ?: return@forEach
         val box = bands.getValue(band)
-        val start = Offset(axisWidth + 4f * d, box.titleTop + band.titleHeight * d / 2)
-        val layout = measurer.measure(title, TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold))
-        drawLabel(measurer, title, start, c.ink, 11f, 0f, 0.5f, bold = true)
+        // Titre et légende sur la ligne du titre, mesurés dans la police où ils sont dessinés.
+        val start = Offset(axisWidth + 4f * d, box.titleTop + (band.titleHeight + 4f) * d / 2)
+        val layout = measurer.measure(title, TextStyle(color = c.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, fontFamily = AppSans))
+        drawText(layout, topLeft = Offset(start.x, start.y - layout.size.height / 2))
         val legend = when (band) {
             Band.TEMPERATURE -> listOf(Triple("réelle", c.temperature, false), Triple("ressentie", c.temperature.copy(alpha = 0.6f), true))
             Band.WIND -> listOf(Triple("moyen", c.wind, false), Triple("rafales", c.wind.copy(alpha = 0.7f), true))
-            Band.PRECIPITATION -> listOf(Triple("pluie", c.precipitation, false), Triple("neige", c.snow, false))
+            Band.PRECIPITATION -> listOfNotNull(
+                Triple("pluie", c.precipitation, false),
+                Triple("neige", c.snow, false).takeIf { scales.hasSnow },
+            )
             else -> emptyList()
         }
         var lx = start.x + layout.size.width + 12f * d
         legend.forEach { (label, color, dashed) ->
             legendSwatch(Offset(lx, start.y), color, dashed, band == Band.PRECIPITATION)
             lx += 18f * d
-            val labelLayout = measurer.measure(label, TextStyle(fontSize = 10.sp))
+            val labelLayout = measurer.measure(label, TextStyle(fontSize = 10.sp, fontFamily = AppMono))
             drawLabel(measurer, label, Offset(lx, start.y), c.secondaryInk, 10f, 0f, 0.5f)
             lx += labelLayout.size.width + 10f * d
         }

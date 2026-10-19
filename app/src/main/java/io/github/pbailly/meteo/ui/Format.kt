@@ -124,7 +124,8 @@ fun weatherDescription(code: Int): String = when (code) {
     82 -> "Violentes averses"
     85 -> "Averses de neige"
     86 -> "Fortes averses de neige"
-    95 -> "Orage"
-    96, 99 -> "Orage avec grêle"
+    95, 96 -> "Orage"
+    // La grêle annoncée par les codes 96 et 99 n'est fiable qu'en Europe centrale : on n'en parle pas.
+    99 -> "Orage fort"
     else -> "—"
 }

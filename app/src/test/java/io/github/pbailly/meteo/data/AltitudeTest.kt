@@ -117,6 +117,20 @@ class AltitudeTest {
     }
 
     @Test
+    fun `no black ice above the local relief`() {
+        // Même nuit qu'au-dessus, mais en plaine : rien ne monte au-delà de 500 m autour du lieu.
+        val f = forecast(hours = 36, ground = 448.0, t2m = 6.0, freezing = 2500.0).withHourly {
+            for (i in 18..21) precipitation[i] = 1.0
+            for (i in 26..34) {
+                freezingLevel[i] = 700.0
+                temperature[i] = 1.6
+            }
+        }
+        assertTrue(Altitude.iceRisks(f, 0, 36, ceiling = 500.0).isEmpty())
+        assertEquals(1, Altitude.iceRisks(f, 0, 36, ceiling = 900.0).size)
+    }
+
+    @Test
     fun `no black ice on a dry cold night`() {
         val f = forecast(hours = 24, ground = 448.0, t2m = -2.0, freezing = 300.0)
         assertTrue(Altitude.iceRisks(f, 0, 24).isEmpty())
