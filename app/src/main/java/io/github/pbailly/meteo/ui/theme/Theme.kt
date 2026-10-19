@@ -135,22 +135,10 @@ private val DarkChart = ChartColors(
     darkTheme = true,
 )
 
-/** Bleu glacier de l'identité : cartes « heure par heure », frise radar, sélecteurs posés sur fond coloré. */
+/** Bleu glacier de l'identité : légendes et étiquettes posées sur les cartes. */
 val HeaderBlue = Color(0xFF1C6497)
-val HeaderBlueDark = Color(0xFF154D78)
-
-/** Nuit : élément sélectionné posé sur une carte glacier. */
-val SelectedOnCard = Color(0xFF0F2133)
-
-/** Texte secondaire et probabilité de pluie sur fond glacier (contraste ≥ 4,5:1). */
-val SecondaryOnNavy = Color(0xFFD6E8F5)
-val RainChanceOnNavy = Color(0xFFCDEBFF)
 
 val LocalChartColors = staticCompositionLocalOf { LightChart }
-
-/** Bleu glacier des cartes, un peu plus sombre en thème sombre. */
-@Composable
-fun headerBlue(): Color = if (LocalChartColors.current.darkTheme) HeaderBlueDark else HeaderBlue
 
 @Composable
 fun MeteoTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {

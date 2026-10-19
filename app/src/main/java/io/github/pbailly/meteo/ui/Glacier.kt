@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Terrain
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.outlined.TrackChanges
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -113,16 +115,70 @@ fun ScreenHeader(
             .padding(start = 20.dp, end = 16.dp, top = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Le titre rétrécit un peu plutôt que d'être coupé (« Neige & altitude » à côté de son sélecteur).
-        BasicText(
-            title,
-            style = TextStyle(fontSize = 29.sp, fontWeight = FontWeight.SemiBold, fontFamily = AppSans, color = MaterialTheme.colorScheme.onBackground),
-            maxLines = 1,
-            autoSize = TextAutoSize.StepBased(minFontSize = 21.sp, maxFontSize = 29.sp, stepSize = 1.sp),
-            modifier = Modifier.weight(1f).padding(end = 8.dp),
-        )
+        HeaderTitle(title, Modifier.weight(1f))
         trailing()
     }
+}
+
+/** En-tête d'un écran ouvert depuis un onglet (détail d'un jour, météogrammes, réglages) : flèche retour et grand titre. */
+@Composable
+fun DetailHeader(
+    title: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: @Composable RowScope.() -> Unit = {},
+) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(start = 6.dp, end = 16.dp, top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour", tint = MaterialTheme.colorScheme.onBackground)
+        }
+        HeaderTitle(title, Modifier.weight(1f))
+        trailing()
+    }
+}
+
+/** Le titre rétrécit un peu plutôt que d'être coupé (« Neige & altitude » à côté de son sélecteur). */
+@Composable
+private fun HeaderTitle(title: String, modifier: Modifier) {
+    BasicText(
+        title,
+        style = TextStyle(fontSize = 29.sp, fontWeight = FontWeight.SemiBold, fontFamily = AppSans, color = MaterialTheme.colorScheme.onBackground),
+        maxLines = 1,
+        autoSize = TextAutoSize.StepBased(minFontSize = 20.sp, maxFontSize = 29.sp, stepSize = 1.sp),
+        modifier = modifier.padding(end = 8.dp),
+    )
+}
+
+/** Titre de section en Martian Mono, en capitales : « MODÈLES DE LA COMPARAISON ». */
+@Composable
+fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+    MonoText(
+        text.uppercase(java.util.Locale.FRANCE),
+        size = 10.5.sp,
+        bold = true,
+        modifier = modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
+    )
+}
+
+/** Carte blanche bordée d'un filet de glace (mesures, réglages). */
+@Composable
+fun BorderedCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Column(
+        modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, colors.outlineVariant, RoundedCornerShape(16.dp))
+            .background(colors.surfaceContainerLowest),
+        content = content,
+    )
 }
 
 /** Ligne « ⌖ Annecy · 448 m » sous les titres. */
@@ -144,10 +200,17 @@ fun PlaceLine(name: String, elevation: Double?, modifier: Modifier = Modifier) {
 
 /** Sélecteur à deux ou trois choix : l'option active en nuit, texte blanc. */
 @Composable
-fun SegmentedToggle(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+fun SegmentedToggle(
+    options: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Vrai : le sélecteur prend toute la largeur, options de même taille. */
+    fill: Boolean = false,
+) {
     val colors = MaterialTheme.colorScheme
     Row(
-        modifier
+        (if (fill) modifier.fillMaxWidth() else modifier)
             .clip(RoundedCornerShape(12.dp))
             .background(colors.surfaceContainerLow)
             .border(1.dp, colors.outlineVariant, RoundedCornerShape(12.dp))
@@ -161,7 +224,8 @@ fun SegmentedToggle(options: List<String>, selected: Int, onSelect: (Int) -> Uni
                 fontSize = 13.5.sp,
                 fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                 maxLines = 1,
-                modifier = Modifier
+                textAlign = TextAlign.Center,
+                modifier = (if (fill) Modifier.weight(1f) else Modifier)
                     .clip(RoundedCornerShape(9.dp))
                     .background(if (active) colors.onBackground else Color.Transparent)
                     .clickable { onSelect(index) }

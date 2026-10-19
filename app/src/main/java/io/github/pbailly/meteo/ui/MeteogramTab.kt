@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -389,7 +388,7 @@ private fun DrawScope.legendSwatch(at: Offset, color: Color, dashed: Boolean, bl
 private fun HourReadout(forecast: Forecast, index: Int) {
     val h = forecast.hourly
     val time = h.time[index]
-    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    BorderedCard {
         Column(Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 WeatherIcon(h.weatherCode[index], h.isDay[index], size = 36.dp)

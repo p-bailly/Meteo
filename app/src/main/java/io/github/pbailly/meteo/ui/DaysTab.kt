@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -45,7 +44,7 @@ fun DaysTab(forecast: Forecast, multiModel: MultiModelForecast?, modifier: Modif
     val predictability = remember(forecast, multiModel) {
         daily.date.map { date -> multiModel?.let { Predictability.daily(it, date) } }
     }
-    Card(modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    BorderedCard(modifier) {
         Column(Modifier.padding(vertical = 12.dp)) {
             DaySummaryLine(forecast, selected, predictability[selected], Modifier.padding(horizontal = 12.dp))
             Spacer(Modifier.height(8.dp))

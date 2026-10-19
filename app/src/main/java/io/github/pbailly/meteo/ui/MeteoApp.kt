@@ -22,8 +22,8 @@ import io.github.pbailly.meteo.ui.radar.RadarViewModel
 
 /**
  * Navigation : cinq onglets dans la barre du bas (Aujourd'hui, Prévisions, Altitude, Radar, Lieux).
- * Le détail d'un jour, les météogrammes et les réglages s'ouvrent par-dessus, avec un bouton retour.
- * Le retour arrière ramène d'abord à l'onglet Aujourd'hui.
+ * Le détail d'un jour et les météogrammes s'ouvrent dans l'onglet Prévisions, les réglages dans Lieux, avec un
+ * bouton retour. Le retour arrière ramène ensuite à l'onglet Aujourd'hui.
  */
 @Composable
 fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
@@ -35,45 +35,55 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
     val place = state.place
     val forecast = state.forecast.data
 
-    if (showSettings) {
-        val radar: RadarViewModel = viewModel()
-        val radarState by radar.state.collectAsStateWithLifecycle()
-        val layers: LayersViewModel = viewModel()
-        val layerState by layers.state.collectAsStateWithLifecycle()
-        SettingsScreen(
-            hiddenModels = state.hiddenModels,
-            onModelVisible = viewModel::setModelVisible,
-            meteoFranceKey = radarState.apiKey,
-            onSaveKey = radar::saveKey,
-            windyKey = layerState.windyKey,
-            onSaveWindyKey = layers::saveWindyKey,
-            onBack = { showSettings = false },
-        )
-        return
-    }
-    if (place != null && forecast != null && openDay >= 0) {
-        DayDetailScreen(forecast, state.multiModel.data, place, initialDay = openDay, onBack = { openDay = -1 })
-        return
-    }
-    if (place != null && showMeteograms) {
-        MeteogramsScreen(
-            state = state,
-            onBack = { showMeteograms = false },
-            onMultiModelNeeded = viewModel::ensureMultiModel,
-            onRetryMultiModel = viewModel::retryMultiModel,
-        )
-        return
-    }
-
     // Premier lancement : pas encore de lieu, on commence par la liste des lieux.
     val current = if (place == null) Tab.PLACES else tab
     BackHandler(enabled = place != null && tab != Tab.TODAY) { tab = Tab.TODAY }
     LaunchedEffect(current) { if (current == Tab.PLACES) viewModel.refreshSummaries() }
 
     Scaffold(
-        bottomBar = { if (place != null) BottomBar(current) { tab = it } },
+        bottomBar = {
+            if (place != null) {
+                BottomBar(current) {
+                    // Toucher un onglet referme le détail, les météogrammes ou les réglages.
+                    showSettings = false
+                    showMeteograms = false
+                    openDay = -1
+                    tab = it
+                }
+            }
+        },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(bottom = padding.calculateBottomPadding()).consumeWindowInsets(padding)) {
+            // Écrans ouverts depuis un onglet (la barre du bas reste visible).
+            if (showSettings) {
+                val radar: RadarViewModel = viewModel()
+                val radarState by radar.state.collectAsStateWithLifecycle()
+                val layers: LayersViewModel = viewModel()
+                val layerState by layers.state.collectAsStateWithLifecycle()
+                SettingsScreen(
+                    hiddenModels = state.hiddenModels,
+                    onModelVisible = viewModel::setModelVisible,
+                    meteoFranceKey = radarState.apiKey,
+                    onSaveKey = radar::saveKey,
+                    windyKey = layerState.windyKey,
+                    onSaveWindyKey = layers::saveWindyKey,
+                    onBack = { showSettings = false },
+                )
+                return@Box
+            }
+            if (place != null && forecast != null && openDay >= 0) {
+                DayDetailScreen(forecast, state.multiModel.data, place, initialDay = openDay, onBack = { openDay = -1 })
+                return@Box
+            }
+            if (place != null && showMeteograms) {
+                MeteogramsScreen(
+                    state = state,
+                    onBack = { showMeteograms = false },
+                    onMultiModelNeeded = viewModel::ensureMultiModel,
+                    onRetryMultiModel = viewModel::retryMultiModel,
+                )
+                return@Box
+            }
             when (current) {
                 Tab.PLACES -> PlacesScreen(
                     state = state,

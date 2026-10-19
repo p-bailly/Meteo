@@ -3,10 +3,13 @@ package io.github.pbailly.meteo.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,43 +19,38 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.outlined.Compress
 import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.PanTool
-import androidx.compose.material.icons.outlined.Umbrella
 import androidx.compose.material.icons.outlined.WaterDrop
-import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.WbTwilight
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Forecast
@@ -61,14 +59,11 @@ import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.Predictability
 import io.github.pbailly.meteo.ui.theme.AppMono
-import io.github.pbailly.meteo.ui.theme.RainChanceOnNavy
-import io.github.pbailly.meteo.ui.theme.SecondaryOnNavy
-import io.github.pbailly.meteo.ui.theme.uvColor
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import io.github.pbailly.meteo.ui.theme.LocalChartColors
+import io.github.pbailly.meteo.ui.theme.OnTemperature
+import io.github.pbailly.meteo.ui.theme.predictabilityColor
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
-
-private val WEEKDAY = DateTimeFormatter.ofPattern("EEEE", Locale.FRANCE)
 
 /** Une ligne de la prévision horaire (une heure, ou un bloc de 3 heures). */
 private class HourLine(
@@ -86,7 +81,10 @@ private class HourLine(
     val predictability: Int?,
 )
 
-/** Détail d'une journée : on glisse d'un jour à l'autre, comme sur Meteoblue. */
+/**
+ * Détail d'une journée : choix du jour (ou glisser d'un jour à l'autre, comme sur Meteoblue), résumé et
+ * prévisibilité du jour, soleil et Lune, puis la prévision heure par heure (ou par 3 heures).
+ */
 @Composable
 fun DayDetailScreen(
     forecast: Forecast,
@@ -99,40 +97,61 @@ fun DayDetailScreen(
     val days = forecast.daily.size
     val pager = rememberPagerState(initialPage = initialDay.coerceIn(0, (days - 1).coerceAtLeast(0))) { days }
     var step by rememberSaveable { mutableIntStateOf(1) }
-
-    Scaffold(
-        topBar = {
-            AppTopBar(
-                title = { Text(place.name, fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
-                },
-            )
-        },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            PageDots(count = days, current = pager.currentPage)
-            HorizontalPager(pager, Modifier.weight(1f)) { day ->
-                DayPage(forecast, multiModel, place, day, step, onStepChange = { step = it })
-            }
+    val scope = rememberCoroutineScope()
+    Column(Modifier.fillMaxSize()) {
+        val date = forecast.daily.date.getOrNull(pager.currentPage)
+        DetailHeader(date?.let { Fmt.dayLong(it) } ?: "", onBack) {
+            SegmentedToggle(listOf("1 h", "3 h"), if (step == 1) 0 else 1, { step = if (it == 0) 1 else 3 })
+        }
+        PlaceLine(place.name, place.elevation ?: forecast.elevation)
+        DayChips(forecast, multiModel, pager.currentPage) { scope.launch { pager.animateScrollToPage(it) } }
+        HorizontalPager(pager, Modifier.weight(1f)) { day ->
+            DayPage(forecast, multiModel, place, day, step)
         }
     }
 }
 
+/** Jours de la prévision ; le point sous le jour a la couleur de sa prévisibilité. */
 @Composable
-private fun PageDots(count: Int, current: Int) {
-    Row(
-        Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center,
+private fun DayChips(forecast: Forecast, multiModel: MultiModelForecast?, selected: Int, onSelect: (Int) -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val d = forecast.daily
+    val state = rememberLazyListState()
+    LaunchedEffect(selected) { state.animateScrollToItem((selected - 3).coerceAtLeast(0)) }
+    LazyRow(
+        state = state,
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
     ) {
-        for (i in 0 until count) {
-            Box(
+        itemsIndexed(d.date) { k, date ->
+            val active = k == selected
+            val percent = multiModel?.let { Predictability.daily(it, date) }
+            Column(
                 Modifier
-                    .padding(horizontal = 3.dp)
-                    .size(if (i == current) 9.dp else 6.dp)
-                    .clip(CircleShape)
-                    .background(if (i == current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline),
-            )
+                    .width(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (active) colors.onBackground else colors.surfaceContainerLowest)
+                    .border(1.dp, if (active) colors.onBackground else colors.outlineVariant, RoundedCornerShape(12.dp))
+                    .clickable { onSelect(k) }
+                    .padding(vertical = 7.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                MonoText(Fmt.dayName(date).removeSuffix("."), color = if (active) Color.White else colors.onSurfaceVariant, size = 10.sp)
+                Text(
+                    date.dayOfMonth.toString(),
+                    color = if (active) Color.White else colors.onBackground,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 17.sp,
+                )
+                Box(
+                    Modifier
+                        .padding(top = 3.dp)
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(percent?.let { predictabilityColor(it) } ?: Color.Transparent),
+                )
+            }
         }
     }
 }
@@ -144,86 +163,97 @@ private fun DayPage(
     place: Place,
     day: Int,
     step: Int,
-    onStepChange: (Int) -> Unit,
 ) {
     val d = forecast.daily
     val date = d.date[day]
     val lines = remember(forecast, multiModel, day, step) { hourLines(forecast, multiModel, day, step) }
+    val colors = MaterialTheme.colorScheme
     LazyColumn(Modifier.fillMaxSize()) {
-        item(key = "header") {
-            Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("%02d/%02d".format(date.dayOfMonth, date.monthValue), fontSize = 26.sp, fontFamily = AppMono)
-                Text(date.format(WEEKDAY), fontSize = 30.sp, fontWeight = FontWeight.Light)
-                val uv = d.uvIndexMax[day]
-                Text(
-                    buildAnnotatedString {
-                        append(weatherDescription(d.weatherCode[day]))
-                        if (!uv.isNaN()) {
-                            append(" • UV ")
-                            withStyle(SpanStyle(color = uvColor(uv), fontWeight = FontWeight.SemiBold)) { append(uv.roundToInt().toString()) }
-                        }
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
+        item(key = "summary") {
+            Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                WeatherIcon(d.weatherCode[day], true, size = 52.dp)
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text(weatherDescription(d.weatherCode[day]), fontWeight = FontWeight.SemiBold, fontSize = 18.sp, maxLines = 1)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                        MonoText("mini ${Fmt.temp(d.temperatureMin[day])} · maxi ", size = 11.5.sp)
+                        MonoText(Fmt.temp(d.temperatureMax[day]), color = colors.onBackground, size = 11.5.sp, bold = true)
+                        val uv = d.uvIndexMax[day]
+                        if (!uv.isNaN()) MonoText(" · UV ${uv.roundToInt()}", size = 11.5.sp)
+                    }
+                    MonoText(
+                        "pluie ${Fmt.decimal(d.precipitationSum[day])} mm · ${Fmt.percent(d.precipitationProbabilityMax[day])}",
+                        color = if (d.precipitationSum[day] >= 0.1) colors.primary else colors.onSurfaceVariant,
+                        size = 11.5.sp,
+                    )
+                }
+                PredictabilityBadge(multiModel?.let { Predictability.daily(it, date) }, 46.dp)
             }
         }
         item(key = "almanac") { AlmanacCard(forecast, place, day) }
-        item(key = "hourly-header") {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 12.dp)
-                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                    .background(NavyCard)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("PRÉVISION HORAIRE", color = Color.White, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                listOf(1, 3).forEach { s ->
-                    Text(
-                        "${s}h",
-                        color = if (s == step) Color.White else SecondaryOnNavy,
-                        fontFamily = AppMono,
-                        fontWeight = if (s == step) FontWeight.SemiBold else null,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(if (s == step) Color.White.copy(alpha = 0.15f) else Color.Transparent)
-                            .clickable { onStepChange(s) }
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
-                }
+        item(key = "hourly-title") {
+            Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (step == 1) "Heure par heure" else "Par 3 heures", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+                MonoText("prévisibilité à droite")
             }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                ColumnLabel("HEURE", HOUR_WIDTH)
+                ColumnLabel("", ICON_WIDTH)
+                ColumnLabel("TEMP.", TEMP_WIDTH)
+                ColumnLabel("RESS.", FEEL_WIDTH)
+                ColumnLabel("VENT", null, modifier = Modifier.weight(1f))
+                ColumnLabel("PLUIE", RAIN_WIDTH, TextAlign.End)
+                ColumnLabel("PROB.", PROB_WIDTH, TextAlign.End)
+                ColumnLabel("PRÉV.", PRED_WIDTH, TextAlign.End)
+            }
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = colors.outlineVariant)
         }
         items(lines, key = { it.index }) { line ->
-            Column(Modifier.padding(horizontal = 16.dp).background(NavyCard)) {
-                HourRow(line)
-                HorizontalDivider(Modifier.padding(horizontal = 12.dp), color = NavyDivider)
-            }
-        }
-        item(key = "hourly-footer") {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .height(12.dp)
-                    .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
-                    .background(NavyCard),
-            )
+            HourRow(line)
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = colors.outlineVariant)
         }
         item(key = "note") {
-            Text(
-                "À droite, la prévisibilité : vert quand les modèles sont d'accord, rouge quand ils divergent.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(16.dp),
+            MonoText(
+                "vent : moyen-rafales en km/h · pluie en mm · prévisibilité : accord entre 8 modèles (vert : sûr, rouge : incertain)",
+                size = 10.sp,
+                maxLines = 3,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
             )
         }
     }
 }
 
-/** Soleil, Lune, pression et humidité de la journée. */
+private val HOUR_WIDTH = 44.dp
+private val ICON_WIDTH = 34.dp
+private val TEMP_WIDTH = 40.dp
+private val FEEL_WIDTH = 38.dp
+private val RAIN_WIDTH = 40.dp
+private val PROB_WIDTH = 40.dp
+private val PRED_WIDTH = 38.dp
+
+@Composable
+private fun ColumnLabel(text: String, width: Dp?, align: TextAlign = TextAlign.Start, modifier: Modifier = Modifier) {
+    MonoText(text, size = 9.5.sp, align = align, modifier = if (width != null) modifier.width(width) else modifier)
+}
+
+/** Prévisibilité : carré à la couleur du niveau (vert sûr → rouge incertain), avec le pourcentage. */
+@Composable
+private fun PredictabilityBadge(percent: Int?, size: Dp) {
+    val colors = MaterialTheme.colorScheme
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            Modifier
+                .size(size)
+                .clip(RoundedCornerShape(10.dp))
+                .background(percent?.let { predictabilityColor(it) } ?: colors.surfaceContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(percent?.let { "$it %" } ?: "–", color = OnTemperature, fontFamily = AppMono, fontWeight = FontWeight.Medium, fontSize = 12.sp)
+        }
+        MonoText("PRÉVIS.", size = 9.sp, modifier = Modifier.padding(top = 3.dp))
+    }
+}
+
+/** Soleil, Lune, pression et humidité de la journée, en carte blanche comme les mesures d'Aujourd'hui. */
 @Composable
 private fun AlmanacCard(forecast: Forecast, place: Place, day: Int) {
     val d = forecast.daily
@@ -232,100 +262,88 @@ private fun AlmanacCard(forecast: Forecast, place: Place, day: Int) {
     val hours = forecast.hourly.time.indices.filter { forecast.hourly.time[it].toLocalDate() == date }
     val pressure = hours.map { forecast.hourly.pressure[it] }.filter { !it.isNaN() }.average()
     val humidity = hours.map { forecast.hourly.humidity[it] }.filter { !it.isNaN() }.average()
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(NavyCard)
-            .padding(horizontal = 12.dp, vertical = 14.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            RiseSet(Icons.Outlined.WbSunny, up = true, Fmt.clock(d.sunrise[day]))
-            RiseSet(Icons.Outlined.WbSunny, up = false, Fmt.clock(d.sunset[day]))
+    val colors = MaterialTheme.colorScheme
+    BorderedCard(Modifier.padding(top = 14.dp)) {
+        Row(Modifier.height(IntrinsicSize.Min)) {
+            // Lever en grand, coucher en petit (les flèches restent dans le libellé, en petit).
+            AlmanacTile(Icons.Outlined.WbTwilight, "SOLEIL ↑ ↓", Fmt.clock(d.sunrise[day]), Fmt.clock(d.sunset[day]), Modifier.weight(1f))
+            VerticalDivider(color = colors.outlineVariant)
+            AlmanacTile(Icons.Outlined.DarkMode, "LUNE ↑ ↓", Fmt.clock(moon.rise), Fmt.clock(moon.set), Modifier.weight(1f))
         }
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            RiseSet(Icons.Outlined.DarkMode, up = true, Fmt.clock(moon.rise))
-            RiseSet(Icons.Outlined.DarkMode, up = false, Fmt.clock(moon.set))
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            InfoLine(Icons.Outlined.Compress, Fmt.hPa(pressure))
-            InfoLine(Icons.Outlined.WaterDrop, Fmt.percent(humidity))
+        HorizontalDivider(color = colors.outlineVariant)
+        Row(Modifier.height(IntrinsicSize.Min)) {
+            AlmanacTile(Icons.Outlined.Compress, "PRESSION", if (pressure.isNaN()) "–" else pressure.roundToInt().toString(), "hPa", Modifier.weight(1f))
+            VerticalDivider(color = colors.outlineVariant)
+            AlmanacTile(Icons.Outlined.WaterDrop, "HUMIDITÉ", if (humidity.isNaN()) "–" else humidity.roundToInt().toString(), "%", Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun RiseSet(icon: ImageVector, up: Boolean, time: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-        Icon(
-            if (up) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
-            contentDescription = if (up) "lever" else "coucher",
-            tint = Color.White,
-            modifier = Modifier.size(16.dp),
-        )
-        Spacer(Modifier.width(4.dp))
-        Text(time, color = Color.White, fontFamily = AppMono, fontSize = 17.sp)
+private fun AlmanacTile(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, value: String, note: String, modifier: Modifier) {
+    Column(modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(5.dp))
+            MonoText(label, size = 10.sp)
+        }
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(top = 3.dp)) {
+            Text(value, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, maxLines = 1)
+            Spacer(Modifier.width(6.dp))
+            MonoText(note, size = 10.sp, modifier = Modifier.padding(bottom = 2.dp))
+        }
     }
 }
 
-@Composable
-private fun InfoLine(icon: ImageVector, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(text, color = Color.White, fontFamily = AppMono, fontSize = 17.sp)
-    }
-}
-
-/** Heure et température, ciel, ressenti, vent, pluie, probabilité et prévisibilité. */
+/** Heure, ciel, température, ressenti, vent moyen et rafales, pluie, probabilité et prévisibilité. */
 @Composable
 private fun HourRow(line: HourLine) {
+    val colors = MaterialTheme.colorScheme
+    val chart = LocalChartColors.current
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.width(60.dp).clip(RoundedCornerShape(6.dp))) {
-            Text(
-                line.label,
-                color = Color.White,
-                fontFamily = AppMono,
-                fontSize = 15.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().background(NavyDivider).padding(vertical = 2.dp),
-            )
-            TemperatureBox(line.temperature, Modifier.fillMaxWidth().height(34.dp), fontSize = 19.sp)
-        }
-        Spacer(Modifier.width(8.dp))
-        WeatherIcon(line.weatherCode, line.isDay, size = 46.dp, dark = true)
-        Spacer(Modifier.width(6.dp))
-        Column(Modifier.width(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Outlined.PanTool, contentDescription = "Ressenti", tint = Color.White, modifier = Modifier.size(18.dp))
-            Text(Fmt.temp(line.apparent), color = Color.White, fontSize = 16.sp)
-        }
-        Spacer(Modifier.width(6.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Canvas(Modifier.size(14.dp)) {
-                    drawWindArrow(center, line.windDirection, size.minDimension, Color.White, 1.6f * density)
-                }
-                Spacer(Modifier.width(6.dp))
-                Text("${line.windSpeed.roundToInt()}-${line.windGusts.roundToInt()}", color = Color.White, fontFamily = AppMono, fontSize = 15.sp)
+        MonoText(line.label, color = colors.onBackground, size = 12.5.sp, bold = true, modifier = Modifier.width(HOUR_WIDTH))
+        Box(Modifier.width(ICON_WIDTH)) { WeatherIcon(line.weatherCode, line.isDay, size = 28.dp) }
+        Text(Fmt.temp(line.temperature), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.width(TEMP_WIDTH))
+        MonoText(Fmt.temp(line.apparent), size = 11.5.sp, modifier = Modifier.width(FEEL_WIDTH))
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Canvas(Modifier.size(12.dp)) {
+                drawWindArrow(center, line.windDirection, size.minDimension, chart.secondaryInk, 1.4f * density)
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.WaterDrop, contentDescription = "Pluie", tint = Color.White, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(hourRain(line.precipitation), color = Color.White, fontFamily = AppMono, fontSize = 15.sp)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Umbrella, contentDescription = "Probabilité de pluie", tint = RainChanceOnNavy, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(Fmt.percent(line.probability), color = RainChanceOnNavy, fontFamily = AppMono, fontSize = 15.sp)
+            Spacer(Modifier.width(5.dp))
+            MonoText("${line.windSpeed.roundToInt()}-${line.windGusts.roundToInt()}", color = colors.onBackground, size = 11.5.sp)
+        }
+        val wet = !line.precipitation.isNaN() && line.precipitation >= 0.05
+        MonoText(
+            hourRain(line.precipitation).removeSuffix(" mm"),
+            color = if (wet) colors.primary else colors.onSurfaceVariant,
+            bold = wet,
+            size = 11.5.sp,
+            align = TextAlign.End,
+            modifier = Modifier.width(RAIN_WIDTH),
+        )
+        val likely = !line.probability.isNaN() && line.probability >= 50
+        MonoText(
+            Fmt.percent(line.probability).replace(" ", ""),
+            color = if (likely) colors.primary else colors.onSurfaceVariant,
+            bold = likely,
+            size = 11.5.sp,
+            align = TextAlign.End,
+            modifier = Modifier.width(PROB_WIDTH),
+        )
+        Box(Modifier.width(PRED_WIDTH), contentAlignment = Alignment.CenterEnd) {
+            Box(
+                Modifier
+                    .size(width = 30.dp, height = 22.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(line.predictability?.let { predictabilityColor(it) } ?: colors.surfaceContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(line.predictability?.toString() ?: "–", color = OnTemperature, fontFamily = AppMono, fontSize = 10.5.sp)
             }
         }
-        PredictabilitySquare(line.predictability, size = 44.dp)
     }
 }
 
@@ -348,7 +366,7 @@ private fun hourLines(forecast: Forecast, multiModel: MultiModelForecast?, day: 
         val rain = block.map { h.precipitation[it] }.filter { !it.isNaN() }
         HourLine(
             index = i,
-            label = "%02d:00".format(h.time[i].hour),
+            label = "%02d h".format(h.time[i].hour),
             temperature = h.temperature[i],
             apparent = h.apparentTemperature[i],
             weatherCode = block.maxOf { h.weatherCode[it] },

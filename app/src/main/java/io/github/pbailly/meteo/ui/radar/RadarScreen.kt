@@ -6,6 +6,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
+import io.github.pbailly.meteo.ui.DetailHeader
+import io.github.pbailly.meteo.ui.ScreenHeader
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,7 +32,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Key
@@ -36,12 +41,10 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -73,13 +76,9 @@ import io.github.pbailly.meteo.data.maps.StationObservation
 import io.github.pbailly.meteo.data.maps.TileLayer
 import io.github.pbailly.meteo.data.maps.WindyWebcams
 import io.github.pbailly.meteo.data.radar.RainClass
-import io.github.pbailly.meteo.ui.AppTopBar
 import io.github.pbailly.meteo.ui.theme.HeaderBlue
 import io.github.pbailly.meteo.ui.theme.OnTemperature
 import io.github.pbailly.meteo.ui.theme.AppMono
-import io.github.pbailly.meteo.ui.theme.RainChanceOnNavy
-import io.github.pbailly.meteo.ui.theme.SecondaryOnNavy
-import io.github.pbailly.meteo.ui.theme.SelectedOnCard
 import io.github.pbailly.meteo.ui.theme.temperatureColor
 import kotlinx.coroutines.delay
 import org.maplibre.android.geometry.LatLng
@@ -90,8 +89,6 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/** Fond de la frise des heures, un ton sous le bleu glacier des cartes. */
-private val TIMELINE_BLUE = Color(0xFF15527F)
 private const val REFRESH_MS = 2 * 60 * 1000L
 
 /**
@@ -155,11 +152,9 @@ fun RadarRoute(
         onCloseStation = layers::closeStation,
     )
 }
-private val SELECTED_BLUE = SelectedOnCard
 private val clock = DateTimeFormatter.ofPattern("HH:mm")
 private val dayHour = DateTimeFormatter.ofPattern("EEE HH'h'", Locale.FRANCE)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RadarScreen(
     place: Place,
@@ -181,143 +176,133 @@ fun RadarScreen(
     val layer = layerState.layer
     val rain = layer == MapLayer.RAIN
 
-    Scaffold(
-        topBar = {
-            AppTopBar(
-                title = { Text("Cartes", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
-                    }
-                },
-                actions = {
-                    if (rain) {
-                        IconButton(onClick = { editingKey = true }) { Icon(Icons.Filled.Key, contentDescription = "Clé Météo-France") }
-                    }
-                    IconButton(onClick = onRefresh) { Icon(Icons.Filled.Refresh, contentDescription = "Actualiser") }
-                },
+    val actions: @Composable RowScope.() -> Unit = {
+        val tint = MaterialTheme.colorScheme.onSurfaceVariant
+        if (rain) {
+            IconButton(onClick = { editingKey = true }) { Icon(Icons.Filled.Key, contentDescription = "Clé Météo-France", tint = tint) }
+        }
+        IconButton(onClick = onRefresh) { Icon(Icons.Filled.Refresh, contentDescription = "Actualiser", tint = tint) }
+    }
+    Column(Modifier.fillMaxSize()) {
+        if (onBack != null) DetailHeader("Cartes", onBack, trailing = actions) else ScreenHeader("Cartes", trailing = actions)
+        LayerTabs(layer, onLayer)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            WeatherMap(
+                overlay = if (rain) MapOverlay.Image(state.currentImage, state.bounds) else layerState.overlay,
+                center = LatLng(place.latitude, place.longitude),
+                modifier = Modifier.fillMaxSize(),
+                onWebcamClick = onWebcamClick,
+                stations = if (layer == MapLayer.TEMPERATURE) layerState.stations else emptyList(),
+                onStationClick = onStationClick,
             )
-        },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding())) {
-            LayerTabs(layer, onLayer)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                WeatherMap(
-                    overlay = if (rain) MapOverlay.Image(state.currentImage, state.bounds) else layerState.overlay,
-                    center = LatLng(place.latitude, place.longitude),
-                    modifier = Modifier.fillMaxSize(),
-                    onWebcamClick = onWebcamClick,
-                    stations = if (layer == MapLayer.TEMPERATURE) layerState.stations else emptyList(),
-                    onStationClick = onStationClick,
-                )
-                when (layer) {
-                    MapLayer.RAIN -> Legend(Modifier.align(Alignment.BottomStart))
-                    MapLayer.TEMPERATURE -> TemperatureLegend(Modifier.align(Alignment.BottomStart))
-                    MapLayer.LIGHTNING -> LightningLegend(Modifier.align(Alignment.BottomStart))
-                    else -> Unit
-                }
-                // Décalée à droite des légendes pour ne pas les recouvrir.
-                Attribution(layer, Modifier.align(Alignment.BottomEnd).padding(start = 110.dp))
-                if (state.loading && rain || layerState.loading && !rain) {
-                    CircularProgressIndicator(
-                        Modifier.align(Alignment.TopCenter).padding(top = 16.dp).size(28.dp),
-                        strokeWidth = 3.dp,
-                    )
-                }
-                val error = if (rain) state.error else layerState.error
-                when {
-                    rain && (!state.hasKey || editingKey) -> KeyCard(
-                        initial = state.apiKey.orEmpty(),
-                        onSave = {
-                            editingKey = false
-                            onSaveKey(it)
-                        },
-                        onCancel = if (state.hasKey) ({ editingKey = false }) else null,
-                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                    )
-                    layer == MapLayer.WEBCAMS && layerState.windyKey == null -> WindyKeyCard(
-                        onSave = onSaveWindyKey,
-                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                    )
-                    layerState.openWebcam != null && layer == MapLayer.WEBCAMS -> WebcamCard(
-                        layerState,
-                        onClose = onCloseWebcam,
-                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
-                    )
-                    layerState.openStation != null && layer == MapLayer.TEMPERATURE -> StationCard(
-                        layerState.openStation,
-                        onClose = onCloseStation,
-                        modifier = Modifier.align(Alignment.TopCenter).padding(16.dp),
-                    )
-                    layer == MapLayer.TEMPERATURE && layerState.observationNote != null && error == null -> Text(
-                        layerState.observationNote,
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(HeaderBlue.copy(alpha = 0.8f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
-                    error != null -> Card(Modifier.align(Alignment.TopCenter).padding(16.dp)) {
-                        Text(error, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
             when (layer) {
-                MapLayer.RAIN -> Timeline(
-                    slots = state.frames,
-                    selected = state.selected,
-                    playing = state.playing,
-                    header = rainHeader(state.frames.getOrNull(state.selected)),
-                    note = state.forecastNote.takeIf { state.frames.getOrNull(state.selected)?.isForecast != true },
-                    label = { clock.format(it.atZone(ZoneId.systemDefault())) },
-                    onSelect = onSelect,
-                    onTogglePlay = onTogglePlay,
-                )
-                MapLayer.WEBCAMS -> Unit
-                else -> Timeline(
-                    slots = layerState.times.map { RadarSlot(it) },
-                    selected = layerState.selected,
-                    playing = layerState.playing,
-                    header = null,
-                    note = null,
-                    label = {
-                        val zoned = it.atZone(ZoneId.systemDefault())
-                        if (layer == MapLayer.TEMPERATURE) dayHour.format(zoned).replaceFirstChar { c -> c.titlecase(Locale.FRANCE) } else clock.format(zoned)
-                    },
-                    onSelect = onSelect,
-                    onTogglePlay = onTogglePlay,
+                MapLayer.RAIN -> Legend(Modifier.align(Alignment.BottomStart))
+                MapLayer.TEMPERATURE -> TemperatureLegend(Modifier.align(Alignment.BottomStart))
+                MapLayer.LIGHTNING -> LightningLegend(Modifier.align(Alignment.BottomStart))
+                else -> Unit
+            }
+            // Décalée à droite des légendes pour ne pas les recouvrir.
+            Attribution(layer, Modifier.align(Alignment.BottomEnd).padding(start = 110.dp))
+            if (state.loading && rain || layerState.loading && !rain) {
+                CircularProgressIndicator(
+                    Modifier.align(Alignment.TopCenter).padding(top = 16.dp).size(28.dp),
+                    strokeWidth = 3.dp,
                 )
             }
+            val error = if (rain) state.error else layerState.error
+            when {
+                rain && (!state.hasKey || editingKey) -> KeyCard(
+                    initial = state.apiKey.orEmpty(),
+                    onSave = {
+                        editingKey = false
+                        onSaveKey(it)
+                    },
+                    onCancel = if (state.hasKey) ({ editingKey = false }) else null,
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                )
+                layer == MapLayer.WEBCAMS && layerState.windyKey == null -> WindyKeyCard(
+                    onSave = onSaveWindyKey,
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                )
+                layerState.openWebcam != null && layer == MapLayer.WEBCAMS -> WebcamCard(
+                    layerState,
+                    onClose = onCloseWebcam,
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                )
+                layerState.openStation != null && layer == MapLayer.TEMPERATURE -> StationCard(
+                    layerState.openStation,
+                    onClose = onCloseStation,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(16.dp),
+                )
+                layer == MapLayer.TEMPERATURE && layerState.observationNote != null && error == null -> Text(
+                    layerState.observationNote,
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(HeaderBlue.copy(alpha = 0.8f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                error != null -> Card(Modifier.align(Alignment.TopCenter).padding(16.dp)) {
+                    Text(error, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+        when (layer) {
+            MapLayer.RAIN -> Timeline(
+                slots = state.frames,
+                selected = state.selected,
+                playing = state.playing,
+                header = rainHeader(state.frames.getOrNull(state.selected)),
+                note = state.forecastNote.takeIf { state.frames.getOrNull(state.selected)?.isForecast != true },
+                label = { clock.format(it.atZone(ZoneId.systemDefault())) },
+                onSelect = onSelect,
+                onTogglePlay = onTogglePlay,
+            )
+            MapLayer.WEBCAMS -> Unit
+            else -> Timeline(
+                slots = layerState.times.map { RadarSlot(it) },
+                selected = layerState.selected,
+                playing = layerState.playing,
+                header = null,
+                note = null,
+                label = {
+                    val zoned = it.atZone(ZoneId.systemDefault())
+                    if (layer == MapLayer.TEMPERATURE) dayHour.format(zoned).replaceFirstChar { c -> c.titlecase(Locale.FRANCE) } else clock.format(zoned)
+                },
+                onSelect = onSelect,
+                onTogglePlay = onTogglePlay,
+            )
         }
     }
 }
 
-/** Choix de la couche, sous la barre du haut. */
+/** Choix de la couche : pastilles, l'active en nuit. */
 @Composable
 private fun LayerTabs(selected: MapLayer, onLayer: (MapLayer) -> Unit) {
+    val colors = MaterialTheme.colorScheme
     Row(
         Modifier
             .fillMaxWidth()
-            .background(HeaderBlue)
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         MapLayer.entries.forEach { layer ->
             val active = layer == selected
             Text(
                 layer.label,
-                color = if (active) Color.White else SecondaryOnNavy,
+                color = if (active) Color.White else colors.onSurfaceVariant,
                 fontWeight = if (active) FontWeight.SemiBold else null,
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(if (active) SELECTED_BLUE else Color.Transparent)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (active) colors.onBackground else colors.surfaceContainerLowest)
+                    .border(1.dp, if (active) colors.onBackground else colors.outlineVariant, RoundedCornerShape(12.dp))
                     .clickable { onLayer(layer) }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
             )
         }
     }
@@ -442,30 +427,33 @@ private fun Timeline(
         val item = selected + if (firstForecast in 0..selected) 1 else 0
         if (slots.isNotEmpty()) listState.animateScrollToItem((item - 2).coerceAtLeast(0))
     }
-    Column(Modifier.fillMaxWidth().background(HeaderBlue).navigationBarsPadding()) {
-        if (header != null) {
+    val colors = MaterialTheme.colorScheme
+    Column(Modifier.fillMaxWidth().background(colors.surfaceContainerLowest).navigationBarsPadding()) {
+        HorizontalDivider(color = colors.outlineVariant)
+        if (!header.isNullOrEmpty()) {
             Text(
                 header,
-                color = Color.White.copy(alpha = 0.8f),
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp),
+                color = colors.onSurfaceVariant,
+                fontFamily = AppMono,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp),
             )
         }
         if (note != null) {
             Text(
                 note,
-                color = RainChanceOnNavy,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(horizontal = 12.dp),
+                color = colors.primary,
+                fontFamily = AppMono,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
-        Spacer(Modifier.height(4.dp))
-        Row(Modifier.fillMaxWidth().height(52.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
             LazyRow(
-                Modifier.weight(1f).background(TIMELINE_BLUE),
+                Modifier.weight(1f),
                 state = listState,
-                contentPadding = PaddingValues(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val firstForecast = slots.indexOfFirst { it.isForecast }
@@ -474,7 +462,8 @@ private fun Timeline(
                         item(key = "separateur") {
                             Text(
                                 "Prévision ›",
-                                color = RainChanceOnNavy,
+                                color = colors.primary,
+                                fontFamily = AppMono,
                                 style = MaterialTheme.typography.labelSmall,
                                 modifier = Modifier.padding(horizontal = 6.dp),
                             )
@@ -484,32 +473,44 @@ private fun Timeline(
                         val active = index == selected
                         Text(
                             label(slot.time),
-                            color = if (slot.isForecast && !active) RainChanceOnNavy else Color.White,
+                            color = when {
+                                active -> Color.White
+                                slot.isForecast -> colors.primary
+                                else -> colors.onBackground
+                            },
                             fontWeight = if (active) FontWeight.SemiBold else null,
                             fontStyle = if (slot.isForecast) FontStyle.Italic else null,
                             fontFamily = AppMono,
-                            style = MaterialTheme.typography.titleSmall,
+                            style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (active) SELECTED_BLUE else Color.Transparent)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (active) colors.onBackground else Color.Transparent)
                                 .clickable { onSelect(index) }
-                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                                .padding(horizontal = 10.dp, vertical = 9.dp),
                         )
                     }
                 }
             }
             IconButton(onClick = { onSelect(selected - 1) }, enabled = selected > 0) {
-                Icon(Icons.Filled.ChevronLeft, contentDescription = "Image précédente", tint = Color.White)
+                Icon(Icons.Filled.ChevronLeft, contentDescription = "Image précédente", tint = colors.primary)
             }
             IconButton(onClick = { onSelect(selected + 1) }, enabled = selected < slots.lastIndex) {
-                Icon(Icons.Filled.ChevronRight, contentDescription = "Image suivante", tint = Color.White)
+                Icon(Icons.Filled.ChevronRight, contentDescription = "Image suivante", tint = colors.primary)
             }
-            IconButton(onClick = onTogglePlay, enabled = slots.size > 1, modifier = Modifier.size(52.dp)) {
+            Box(
+                Modifier
+                    .padding(end = 12.dp, start = 4.dp)
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(if (slots.size > 1) colors.primary else colors.outlineVariant)
+                    .clickable(enabled = slots.size > 1, onClick = onTogglePlay),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
                     if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                     contentDescription = if (playing) "Pause" else "Lecture",
                     tint = Color.White,
-                    modifier = Modifier.size(36.dp),
+                    modifier = Modifier.size(26.dp),
                 )
             }
         }

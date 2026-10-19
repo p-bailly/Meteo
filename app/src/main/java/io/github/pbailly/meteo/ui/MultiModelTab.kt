@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -40,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.ModelSeries
 import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.WeatherModel
@@ -177,8 +177,9 @@ private fun ModelChart(
 
     Text(
         spec.title,
-        style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.padding(horizontal = 16.dp),
+        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+        fontSize = 16.sp,
+        modifier = Modifier.padding(horizontal = 18.dp),
     )
     Canvas(
         Modifier
@@ -235,7 +236,7 @@ private fun ModelChart(
 private fun SelectedTimeTable(mm: MultiModelForecast, visible: List<WeatherModel>, selected: Int) {
     val colors = LocalChartColors.current
     val time = mm.time[selected]
-    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    BorderedCard {
         Column(Modifier.padding(12.dp)) {
             Text("${Fmt.dayLong(time.toLocalDate())} · ${Fmt.hour(time)}", style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
@@ -277,7 +278,12 @@ private fun TableRow(color: Color?, name: String, a: String, b: String, c: Strin
 private fun DailyModelTable(mm: MultiModelForecast, visible: List<WeatherModel>) {
     val colors = LocalChartColors.current
     val days = mm.time.map { it.toLocalDate() }.distinct()
-    Text("Résumé par jour", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 16.dp))
+    Text(
+        "Résumé par jour",
+        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+        fontSize = 16.sp,
+        modifier = Modifier.padding(horizontal = 18.dp),
+    )
     Spacer(Modifier.height(6.dp))
     Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         Column {

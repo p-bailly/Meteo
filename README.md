@@ -125,7 +125,7 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 - `ui/` : navigation et barre du bas (`MeteoApp`, `Glacier`), onglets (`TodayScreen`, `DaysScreen`,
   `AltitudeScreen`, `radar/RadarScreen`, `PlacesScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
   (`MeteogramsScreen`, `DaysTab`, `MeteogramTab`, `MultiModelTab`), réglages (`SettingsScreen`), pictogrammes
-  dessinés au trait (`WeatherIcon`), barre du haut (`AppTopBar`), outils de graphique (`ChartKit`), carte MapLibre
+  dessinés au trait (`WeatherIcon`), outils de graphique (`ChartKit`), carte MapLibre
   (`radar/RadarMap`).
 - `ui/theme/` : couleurs (`Theme`) et polices Archivo et Martian Mono (`Type`, fichiers dans `res/font/`).
 
