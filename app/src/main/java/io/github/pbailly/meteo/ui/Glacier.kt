@@ -25,7 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Place
-import androidx.compose.material.icons.outlined.Terrain
+import androidx.compose.material.icons.outlined.ShowChart
 import androidx.compose.material.icons.outlined.TrackChanges
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.HorizontalDivider
@@ -55,7 +55,7 @@ import io.github.pbailly.meteo.ui.theme.AppSans
 enum class Tab(val label: String, val icon: ImageVector) {
     TODAY("Aujourd'hui", Icons.Outlined.WbSunny),
     FORECAST("Prévisions", Icons.Outlined.CalendarMonth),
-    ALTITUDE("Altitude", Icons.Outlined.Terrain),
+    METEOGRAM("Météogramme", Icons.Outlined.ShowChart),
     RADAR("Radar", Icons.Outlined.TrackChanges),
     PLACES("Lieux", Icons.Outlined.Place),
 }
@@ -87,12 +87,18 @@ fun BottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
                         Spacer(Modifier.height(9.dp))
                         Icon(tab.icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
                         Spacer(Modifier.height(3.dp))
-                        Text(
+                        // « Météogramme » rétrécit un peu plutôt que d'être coupé sur les petits écrans.
+                        BasicText(
                             tab.label,
-                            color = tint,
-                            fontSize = 12.sp,
-                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                            style = TextStyle(
+                                color = tint,
+                                fontSize = 12.sp,
+                                fontFamily = AppSans,
+                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                            ),
                             maxLines = 1,
+                            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp, stepSize = 0.5.sp),
+                            modifier = Modifier.padding(horizontal = 2.dp),
                         )
                     }
                 }
@@ -237,13 +243,14 @@ fun SegmentedToggle(
 
 /** Carte bleu glacier pâle (bloc altitude, coupe du relief). */
 @Composable
-fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+fun Panel(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     Column(
         modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(MaterialTheme.colorScheme.surfaceContainer)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(14.dp),
         content = content,
     )

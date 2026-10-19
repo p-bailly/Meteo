@@ -112,4 +112,55 @@ class ObservationsTest {
         assertTrue(zooms.count { it <= 6 } in 1..30)
         assertEquals(grid.size, zooms.count { it <= 11 })
     }
+
+    @Test
+    fun `meteo-france measures are converted to display units`() {
+        val body = """
+            {"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[6.1061,45.9289]},
+             "properties":{"geo_id_insee":"74182001","validity_time":"2026-10-19T21:00:00Z","t":285.45,"td":283.15,"u":86,
+               "dd":200,"ff":5.0,"fxi10":10.0,"rr1":0.4,"pmer":101620,"vv":20000,"sss":0.15,"n":null}}]}
+        """.trimIndent()
+        val v = MeteoFranceObservations.parse(body).single().values
+        assertEquals(10.0, v.getValue(Measure.DEW_POINT), 1e-9)
+        assertEquals(86.0, v.getValue(Measure.HUMIDITY), 0.0)
+        assertEquals(18.0, v.getValue(Measure.WIND), 1e-9)
+        assertEquals(36.0, v.getValue(Measure.GUST), 1e-9)
+        assertEquals(1016.2, v.getValue(Measure.PRESSURE), 1e-9)
+        assertEquals(20.0, v.getValue(Measure.VISIBILITY), 1e-9)
+        assertEquals(15.0, v.getValue(Measure.SNOW_DEPTH), 1e-9)
+        assertTrue(Measure.CLOUDS !in v)
+        assertTrue(MeteoFranceObservations.historyUrl("74182001").endsWith("/paquet/infrahoraire-6m?id_station=74182001&format=json"))
+    }
+
+    @Test
+    fun `metar measures and 24 h history`() {
+        val body = """[
+            {"icaoId":"LFLP","obsTime":1792447200,"temp":11,"dewp":10,"wdir":"VRB","wspd":3,"visib":"6+","altim":1018,
+             "rawOb":"METAR LFLP 192200Z AUTO VRB03KT 9999 OVC017 11/10 Q1018","lat":45.93,"lon":6.1,"elev":459,"name":"Annecy/Meythet Arpt, AR, FR"},
+            {"icaoId":"LFLP","obsTime":1792443600,"temp":12,"dewp":10,"wdir":240,"wspd":10,"wgst":20,"visib":"6+","altim":1017,
+             "lat":45.93,"lon":6.1,"elev":459,"name":"Annecy/Meythet Arpt, AR, FR"}
+        ]"""
+        val latest = MetarObservations.parse(body).first()
+        assertEquals(93.5, latest.values.getValue(Measure.HUMIDITY), 0.5)
+        assertEquals(5.556, latest.values.getValue(Measure.WIND), 1e-3)
+        assertTrue(Measure.WIND_DIRECTION !in latest.values)
+        assertEquals(9.654, latest.values.getValue(Measure.VISIBILITY), 1e-3)
+        assertTrue(latest.text!!.startsWith("METAR LFLP"))
+        val history = MetarObservations.parseHistory(body)
+        assertEquals(listOf(12.0, 11.0), history.map { it.temperature })
+        assertEquals("https://aviationweather.gov/api/data/metar?ids=LFLP&hours=24&format=json", MetarObservations.historyUrl("LFLP"))
+    }
+
+    @Test
+    fun `meteoswiss measure files give a station value and the wind direction`() {
+        val body = """{"features":[
+            {"type":"Feature","id":"GVE","geometry":{"type":"Point","coordinates":[2498483.43,1122750.94]},
+             "properties":{"station_name":"Genève / Cointrin","value":4.0,"wind_direction":225,"unit":"km/h"}},
+            {"type":"Feature","id":"SIO","geometry":{"type":"Point","coordinates":[2590584.11,1118479.26]},
+             "properties":{"station_name":"Sion","value":7.0,"unit":"km/h"}}]}"""
+        assertEquals(4.0 to 225.0, MeteoSwissObservations.parseMeasure(body, "GVE"))
+        assertEquals(7.0 to null, MeteoSwissObservations.parseMeasure(body, "SIO"))
+        assertNull(MeteoSwissObservations.parseMeasure(body, "ARO"))
+        assertTrue(MeteoSwissObservations.measureUrl("luftfeuchtigkeit-10min").endsWith("messwerte-luftfeuchtigkeit-10min_en.json"))
+    }
 }

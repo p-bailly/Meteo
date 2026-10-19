@@ -84,6 +84,7 @@ fun TodayScreen(
     place: Place,
     onToggleFavorite: () -> Unit,
     onOpenPlaces: () -> Unit,
+    onOpenAltitude: () -> Unit,
     onRefresh: () -> Unit,
 ) {
     val remote = state.forecast
@@ -100,12 +101,10 @@ fun TodayScreen(
                 item(key = "header") { TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces) }
                 item(key = "status") { StatusLine(statusText(remote)) }
                 item(key = "now") { NowBlock(f) }
-                item(key = "altitude") { AltitudeNowCard(f, state.terrain.data) }
+                item(key = "altitude") { AltitudeNowCard(f, state.terrain.data, onOpenAltitude) }
                 item(key = "tiles") { MetricsGrid(f) }
                 item(key = "hours") { NextHours(f) }
-                item(key = "attribution") {
-                    Attribution(updated = remote.fetchedAt)
-                }
+                item(key = "end") { Gap(16.dp) }
             }
         }
     }
@@ -209,7 +208,7 @@ private fun NowBlock(f: Forecast) {
 
 /** Bloc « Altitude · maintenant » : coupe du relief et températures par altitude, iso 0, pluie-neige, ressenti en haut. */
 @Composable
-private fun AltitudeNowCard(f: Forecast, terrain: TerrainProfile?) {
+private fun AltitudeNowCard(f: Forecast, terrain: TerrainProfile?, onOpenAltitude: () -> Unit) {
     val i = Outlook.nowIndex(f)
     val ground = Altitude.ground(f)
     val top = if (ground < 2500) 3000.0 else ground + 1000
@@ -217,21 +216,24 @@ private fun AltitudeNowCard(f: Forecast, terrain: TerrainProfile?) {
     val iso = Altitude.freezingLevel(f, i)
     val snowLine = Altitude.snowLine(f, i)
     val colors = MaterialTheme.colorScheme
-    Panel(Modifier.padding(top = 10.dp)) {
+    // Toucher le bloc ouvre la page « Neige & altitude ».
+    Panel(Modifier.padding(top = 10.dp), onClick = onOpenAltitude) {
         PanelTitle(
             Icons.Outlined.Terrain,
             "Altitude · maintenant",
-            if (lapse.isNaN()) null else String.format(Locale.FRANCE, "%.1f °C / 100 m", lapse),
+            (if (lapse.isNaN()) "" else String.format(Locale.FRANCE, "%.1f °C / 100 m  ", lapse)) + "›",
         )
         ReliefNowChart(f, i, terrain, ground, iso, snowLine, Modifier.fillMaxWidth().height(184.dp).padding(top = 8.dp))
         HorizontalDivider(Modifier.padding(top = 10.dp, bottom = 8.dp), color = colors.outlineVariant)
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            val days = Altitude.days(f).filter { !it.date.isBefore(f.hourly.time[i].toLocalDate()) }.take(8)
-            val lowest = days.filter { !it.freezingLevel.isNaN() }.minByOrNull { it.freezingLevel }
-            val isoNote = if (lowest != null && !iso.isNaN() && iso - lowest.freezingLevel >= 300) {
-                "${Fmt.dayShort(lowest.date)} : ${Fmt.thousands(lowest.freezingLevel, 100)}"
+            // Iso 0 du jour seulement : sa fourchette jusqu'à minuit.
+            val today = f.hourly.time[i].toLocalDate()
+            val rest = (i until f.hourly.size).takeWhile { f.hourly.time[it].toLocalDate() == today }
+                .map { Altitude.freezingLevel(f, it) }.filter { !it.isNaN() }
+            val isoNote = if (rest.size >= 2 && rest.max() - rest.min() >= 100) {
+                "auj. ${Fmt.thousands(rest.min(), 100)}–${Fmt.thousands(rest.max(), 100)}"
             } else {
-                "stable"
+                "stable aujourd'hui"
             }
             AltitudeCell("ISO 0 °C", Fmt.altitude(iso, 100), isoNote, colors.primary, Modifier.weight(1f))
             VerticalDivider(color = colors.outlineVariant)
@@ -457,15 +459,12 @@ private fun Tile(icon: ImageVector, label: String, value: String, unit: String, 
     }
 }
 
-/** Heures restantes de la journée (au moins 8) : pictogramme, température, probabilité et cumul de pluie. */
+/** Les 48 prochaines heures, à faire défiler : pictogramme, température, probabilité et cumul de pluie. */
 @Composable
 private fun NextHours(f: Forecast) {
     val h = f.hourly
     val start = Outlook.nowIndex(f)
-    val day = h.time.getOrNull(start)?.toLocalDate() ?: return
-    var end = start
-    while (end < h.size && h.time[end].toLocalDate() == day) end++
-    val hours = (start until minOf(h.size, maxOf(end, start + 8))).toList()
+    val hours = (start until minOf(h.size, start + 48)).toList()
     if (hours.isEmpty()) return
     val colors = MaterialTheme.colorScheme
     Row(
@@ -473,7 +472,7 @@ private fun NextHours(f: Forecast) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("Prochaines heures", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
-        val (summary, wet) = rainSummary(f, hours)
+        val (summary, wet) = rainSummary(f, hours.take(24))
         MonoText(summary, color = if (wet) colors.primary else colors.onSurfaceVariant, bold = wet)
     }
     val measurer = rememberTextMeasurer()
@@ -497,8 +496,15 @@ private fun NextHours(f: Forecast) {
             val line = Path()
             hours.forEachIndexed { k, idx ->
                 val cx = col * k + col / 2
-                val label = if (k == 0) "Maint." else "%d h".format(h.time[idx].hour)
-                drawLabel(measurer, label, Offset(cx, 0f), if (k == 0) colors.onBackground else chart.muted, 10.5f, anchorX = 0.5f, bold = k == 0)
+                // À minuit, le nom du jour remplace l'heure, avec un trait plus marqué.
+                val midnight = k > 0 && h.time[idx].hour == 0
+                val label = when {
+                    k == 0 -> "Maint."
+                    midnight -> Fmt.dayName(h.time[idx].toLocalDate())
+                    else -> "%d h".format(h.time[idx].hour)
+                }
+                if (midnight) drawLine(chart.axis, Offset(col * k, 0f), Offset(col * k, barBottom), 1.5.dp.toPx())
+                drawLabel(measurer, label, Offset(cx, 0f), if (k == 0 || midnight) colors.onBackground else chart.muted, 10.5f, anchorX = 0.5f, bold = k == 0 || midnight)
                 val icon = 30.dp.toPx()
                 drawWeatherIcon(h.weatherCode[idx], h.isDay[idx], dark, Offset(cx - icon / 2, 20.dp.toPx()), icon)
                 val t = h.temperature[idx]
@@ -544,7 +550,7 @@ private fun NextHours(f: Forecast) {
 private fun rainSummary(f: Forecast, hours: List<Int>): Pair<String, Boolean> {
     val h = f.hourly
     val wet = hours.filter { (h.precipitation[it].takeIf { v -> !v.isNaN() } ?: 0.0) >= 0.1 }
-    if (wet.isEmpty()) return "sec jusqu'à ${h.time[hours.last()].hour + 1} h" to false
+    if (wet.isEmpty()) return "sec sur 24 h" to false
     val first = wet.first()
     var last = first
     for (idx in wet.drop(1)) if (idx - last <= 2) last = idx else break
@@ -552,7 +558,8 @@ private fun rainSummary(f: Forecast, hours: List<Int>): Pair<String, Boolean> {
     val ground = Altitude.ground(f)
     val snow = Altitude.snow(f, first..last, ground)
     // Heures des barres, bornes comprises : « 17-20 h ».
-    val span = when {
+    val tomorrow = if (h.time[first].toLocalDate() != h.time[hours.first()].toLocalDate()) "demain " else ""
+    val span = tomorrow + when {
         first == hours.first() -> "jusqu'à ${(h.time[last].hour + 1) % 24} h"
         first == last -> "${h.time[first].hour} h"
         else -> "${h.time[first].hour}-${h.time[last].hour} h"
@@ -577,16 +584,3 @@ fun ErrorState(message: String, onRetry: () -> Unit) {
     }
 }
 
-/** Sources des données, en bas des onglets, avec l'heure de mise à jour. */
-@Composable
-fun Attribution(updated: Long = 0L) {
-    val minutes = ((System.currentTimeMillis() - updated) / 60_000).coerceAtLeast(0)
-    Text(
-        (if (updated > 0) "Mis à jour " + (if (minutes < 1) "à l'instant" else "il y a $minutes min") + ". " else "") +
-            "Données météo : Open-Meteo.com (licence CC BY 4.0), d'après les modèles de Météo-France, DWD, ECMWF, NOAA, " +
-            "UK Met Office, MeteoSwiss et ECCC. Relief : Copernicus DEM, sommets © OpenStreetMap.",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(16.dp),
-    )
-}

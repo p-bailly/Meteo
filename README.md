@@ -17,29 +17,34 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
 
 ## Ce que fait l'app
 
-Cinq onglets dans la barre du bas :
+Cinq onglets dans la barre du bas, ou en glissant d'une page à l'autre (sauf sur la carte, où le glissement déplace
+la carte) :
 
 - **Aujourd'hui** : le lieu et son altitude, la température en grand, le ciel, le ressenti et les extrêmes du jour ;
   le bloc **Altitude · maintenant** : coupe du relief du lieu vers le plus haut sommet des environs, température
   sur place, à 1 000, 1 500, 2 000, 3 000 m et au sommet, gradient (°C / 100 m), iso 0 °C (tirets) et limite
   pluie-neige (pointillés), ressenti et vent à 2 000 m, risque de verglas ; puis vent, rafales, humidité, pression
-  (et sa tendance), indice UV, coucher et lever du soleil ; et les **prochaines heures** (pictogramme, courbe de
-  température, probabilité et barres de pluie, résumé « pluie 17-20 h · 3,0 mm »).
-- **Prévisions** (7 ou 14 jours) : alertes **retour de la neige** (jours, limite pluie-neige, cumuls à 2 000 m,
-  iso 0) et **verglas possible** (créneau, routes concernées) ; tableau des jours : mini-maxi, pluie, iso 0 °C,
-  neige à 2 000 m, et **fenêtres de beau temps** (au moins 6 h sèches, peu nuageuses, vent < 20 km/h). Toucher un
-  jour ouvre son **détail heure par heure** (avec la prévisibilité, comme sur Meteoblue) ; lien vers les
-  **météogrammes** (7 jours, 14 jours avec la prévisibilité, comparaison de 8 modèles).
-- **Altitude** (« Neige & altitude », par jour ou par tranche de 3 heures) : coupe du relief vallée → sommets avec
+  (et sa tendance), indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler
+  (pictogramme, courbe de température, probabilité et barres de pluie, résumé « pluie 17-20 h · 3,0 mm »).
+  Toucher le bloc Altitude ouvre la page **Neige & altitude** (voir plus bas).
+- **Prévisions** (14 jours par défaut, ou 7) : alertes **retour de la neige** (jours, limite pluie-neige, cumuls
+  à 2 000 m) et **verglas possible** (créneau, routes concernées) ; tableau des jours : mini-maxi, pluie (mm), vent
+  maximal (km/h), ensoleillement (heures), neige s'il en tombe, iso 0 °C du jour, et **fenêtres de beau temps**
+  (au moins 6 h sèches, peu nuageuses, vent < 20 km/h). Toucher un jour ouvre son **détail heure par heure** (avec la
+  prévisibilité, comme sur Meteoblue).
+- **Météogramme** : météogramme horaire sur 7 jours, graphique 14 jours avec la prévisibilité, et comparaison de
+  8 modèles avec leur moyenne.
+- **Neige & altitude** (depuis le bloc Altitude d'Aujourd'hui ; par jour ou par tranche de 3 heures) : coupe du relief vallée → sommets avec
   l'iso 0, la limite pluie-neige, les sommets nommés, la neige attendue à 2 000 et 3 000 m et les pentes enneigées ;
   iso 0 et limite pluie-neige jour par jour, neige à 2 000 m ; température, ressenti, vent et neige au sommet,
   à 2 000 m et sur le lieu.
 - **Radar** : les cartes, avec frise des heures et animation :
   - **Pluie** : radar Météo-France et sa prévision (voir ci-dessous pour la clé) ;
-  - **Température** à 2 m : modèle ICON-EU du DWD (sans clé), heure par heure sur 24 h puis toutes les 3 h
-    jusqu'à 72 h, colorée comme les cases de température de l'app ; à l'heure actuelle, les **vrais relevés**
-    des stations en pastilles (toucher une pastille : station, altitude, heure du relevé) : stations Météo-France
-    avec la clé (environ 1 800), stations de MétéoSuisse et aéroports (METAR) sans clé ;
+  - **Température** à 2 m maintenant : modèle ICON-EU du DWD (sans clé), colorée comme les cases de température de
+    l'app, avec les **vrais relevés** des stations en pastilles : stations Météo-France avec la clé (environ 1 800),
+    stations de MétéoSuisse et aéroports (METAR) sans clé. Toucher une pastille affiche toutes les mesures de la
+    station (humidité, point de rosée, vent, rafales, pression, pluie, neige au sol, visibilité…) et sa température
+    des dernières 24 heures (Météo-France et aéroports) ;
   - **Satellite** : Meteosat de 3e génération (EUMETSAT, sans clé), une image toutes les 10 min sur 2 h,
     vraies couleurs le jour, nuages et lumières des villes la nuit ;
   - **Foudre** : imageur d'éclairs de Meteosat (EUMETSAT, sans clé), éclairs par 5 min sur la dernière heure ;

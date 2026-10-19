@@ -88,7 +88,8 @@ private class Slot(
  * à 2 000 m et sur le lieu.
  */
 @Composable
-fun AltitudeScreen(state: MeteoUiState, place: Place, onRefresh: () -> Unit) {
+fun AltitudeScreen(state: MeteoUiState, place: Place, onRefresh: () -> Unit, onBack: (() -> Unit)? = null) {
+    if (onBack != null) androidx.activity.compose.BackHandler(onBack = onBack)
     var mode by rememberSaveable { mutableIntStateOf(0) }
     var day by rememberSaveable { mutableIntStateOf(0) }
     var hour by rememberSaveable { mutableIntStateOf(4) }
@@ -98,9 +99,10 @@ fun AltitudeScreen(state: MeteoUiState, place: Place, onRefresh: () -> Unit) {
         val f = remote.data
         LazyColumn(Modifier.fillMaxSize()) {
             item(key = "title") {
-                ScreenHeader("Neige & altitude") {
+                val toggle: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {
                     SegmentedToggle(listOf("Jours", "Heures"), mode, { mode = it })
                 }
+                if (onBack != null) DetailHeader("Neige & altitude", onBack, trailing = toggle) else ScreenHeader("Neige & altitude", trailing = toggle)
                 PlaceLine(place.name, place.elevation ?: f?.elevation)
                 StatusLine(statusText(remote), Modifier.padding(top = 6.dp))
             }

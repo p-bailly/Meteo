@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AcUnit
-import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.CircularProgressIndicator
@@ -74,25 +73,31 @@ private class DayLine(
     val min: Double,
     val max: Double,
     val rain: Double,
+    /** Vent maximal du jour, km/h. */
+    val wind: Double,
+    /** Ensoleillement, en secondes. */
+    val sunshine: Double,
     val altitude: AltitudeDay?,
     val snow: Double,
     /** Fenêtre de beau temps, « 9-17 h », ou null. */
     val window: String?,
+    /** Iso 0 °C maintenant, pour la ligne d'aujourd'hui seulement. */
+    val freezingNow: Double? = null,
 )
 
 /**
- * Onglet « Prévisions » : alertes (retour de la neige, verglas), puis un tableau des 7 ou 14 jours avec mini et
- * maxi, pluie, iso 0 °C et neige à 2 000 m, et les fenêtres de beau temps. Toucher un jour ouvre son détail.
+ * Onglet « Prévisions » : alertes (retour de la neige, verglas), puis un tableau des 14 (ou 7) jours avec mini et
+ * maxi, pluie, vent, ensoleillement, la neige s'il en tombe, l'iso 0 °C d'aujourd'hui et les fenêtres de beau temps.
+ * Toucher un jour ouvre son détail.
  */
 @Composable
 fun DaysScreen(
     state: MeteoUiState,
     place: Place,
     onOpenDay: (Int) -> Unit,
-    onOpenMeteograms: () -> Unit,
     onRefresh: () -> Unit,
 ) {
-    var span by rememberSaveable { mutableIntStateOf(0) }
+    var span by rememberSaveable { mutableIntStateOf(1) }
     val remote = state.forecast
     val terrain = state.terrain.data
     val allLines = remember(remote.data, terrain) { remote.data?.let { dayLines(it, snowReference(it, terrain)) }.orEmpty() }
@@ -120,15 +125,16 @@ fun DaysScreen(
             val lines = allLines
             val today = f.daily.date.firstOrNull() ?: LocalDate.now()
             item(key = "alerts") { Alerts(f, place, today, terrain) }
-            item(key = "header") { TableHeader() }
             val shown = lines.take(days)
+            val snowColumn = shown.any { it.snow >= 1 }
+            item(key = "header") { TableHeader(snowColumn) }
             val low = shown.minOfOrNull { it.min.takeIf { v -> !v.isNaN() } ?: Double.MAX_VALUE } ?: 0.0
             val high = shown.maxOfOrNull { it.max.takeIf { v -> !v.isNaN() } ?: -Double.MAX_VALUE } ?: 1.0
             shown.forEachIndexed { k, line ->
                 item(key = "day-${line.index}") {
-                    DayTableRow(line, today, low, high, onClick = { onOpenDay(line.index) })
+                    DayTableRow(line, today, low, high, snowColumn, onClick = { onOpenDay(line.index) })
                     val next = shown.getOrNull(k + 1)
-                    if (next != null && line.window == null && next.window == null) {
+                    if (next != null && !line.highlighted && !next.highlighted) {
                         HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 }
@@ -138,16 +144,13 @@ fun DaysScreen(
             }
             item(key = "legend") {
                 MonoText(
-                    "pluie en mm · iso 0 en m · neige en 24 h à ${Fmt.altitude(snowReference(f, state.terrain.data))}",
+                    "pluie en mm · vent maxi en km/h · soleil en heures" +
+                        if (snowColumn) " · neige en 24 h à ${Fmt.altitude(snowReference(f, terrain))}" else "",
                     size = 10.sp,
                     maxLines = 2,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 18.dp),
                 )
             }
-            item(key = "meteograms") {
-                LinkCard(Icons.Outlined.BarChart, "Météogrammes", "graphiques heure par heure et comparaison des modèles", onOpenMeteograms)
-            }
-            item(key = "attribution") { Attribution(updated = remote.fetchedAt) }
         }
     }
 }
@@ -173,6 +176,8 @@ private fun dayLines(f: Forecast, reference: Double): List<DayLine> {
             min = d.temperatureMin[i],
             max = d.temperatureMax[i],
             rain = d.precipitationSum[i],
+            wind = d.windSpeedMax[i],
+            sunshine = d.sunshineDuration[i],
             altitude = alt,
             snow = alt?.let { Altitude.snow(f, it.hours, reference) } ?: 0.0,
             window = if (i < 7) {
@@ -182,6 +187,7 @@ private fun dayLines(f: Forecast, reference: Double): List<DayLine> {
             } else {
                 null
             },
+            freezingNow = if (i == 0) Altitude.freezingLevel(f, now).takeIf { !it.isNaN() } else null,
         )
     }
 }
@@ -221,11 +227,10 @@ private fun SnowCard(event: SnowEvent, today: LocalDate) {
         1 -> amounts[0]
         else -> amounts.dropLast(1).joinToString(", ") + " puis " + amounts.last()
     } + " cm à ${Fmt.altitude(event.reference)}"
-    val iso = event.freezingLevel.takeIf { it < Double.MAX_VALUE }?.let { " · iso 0 à ${Fmt.thousands(it, 100)}" }.orEmpty()
     AlertCard(
         icon = Icons.Outlined.AcUnit,
         title = (if (event.afterDryDays) "Retour de la neige · " else "Neige · ") + span,
-        lines = listOfNotNull(limit, amountText + iso),
+        lines = listOfNotNull(limit, amountText),
         accent = MaterialTheme.colorScheme.primary,
         background = MaterialTheme.colorScheme.secondaryContainer,
     )
@@ -283,20 +288,23 @@ private fun AlertCard(icon: ImageVector, title: String, lines: List<String>, acc
     }
 }
 
-private val DAY_WIDTH = 64.dp
-private val ICON_WIDTH = 34.dp
-private val RAIN_WIDTH = 42.dp
-private val ISO_WIDTH = 52.dp
-private val SNOW_WIDTH = 48.dp
+private val DAY_WIDTH = 52.dp
+private val ICON_WIDTH = 32.dp
+private val NUMBER_WIDTH = 34.dp
+private val SNOW_WIDTH = 44.dp
+
+/** Ligne mise en avant : fenêtre de beau temps, ou aujourd'hui avec son iso 0. */
+private val DayLine.highlighted: Boolean get() = window != null
 
 @Composable
-private fun TableHeader() {
+private fun TableHeader(snowColumn: Boolean) {
     Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 16.dp, top = 12.dp, bottom = 6.dp)) {
         HeaderCell("JOUR", DAY_WIDTH + ICON_WIDTH)
-        HeaderCell("MINI · MAXI", null, Modifier.weight(1f).padding(start = 8.dp))
-        HeaderCell("PLUIE", RAIN_WIDTH, align = TextAlign.End)
-        HeaderCell("ISO 0", ISO_WIDTH, align = TextAlign.End)
-        HeaderCell("NEIGE", SNOW_WIDTH, align = TextAlign.End)
+        HeaderCell("MINI · MAXI", null, Modifier.weight(1f).padding(start = 4.dp))
+        HeaderCell("PLUIE", NUMBER_WIDTH, align = TextAlign.End)
+        HeaderCell("VENT", NUMBER_WIDTH + 4.dp, align = TextAlign.End)
+        HeaderCell("SOLEIL", NUMBER_WIDTH + 8.dp, align = TextAlign.End)
+        if (snowColumn) HeaderCell("NEIGE", SNOW_WIDTH, align = TextAlign.End)
     }
     HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
 }
@@ -306,18 +314,19 @@ private fun HeaderCell(text: String, width: Dp?, modifier: Modifier = Modifier, 
     Text(
         text,
         fontFamily = io.github.pbailly.meteo.ui.theme.AppMono,
-        fontSize = 10.sp,
+        fontSize = 9.5.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = align,
         maxLines = 1,
+        softWrap = false,
         modifier = if (width != null) modifier.width(width) else modifier,
     )
 }
 
 @Composable
-private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Double, onClick: () -> Unit) {
+private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Double, snowColumn: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val highlighted = line.window != null
+    val highlighted = line.highlighted
     Column(
         Modifier
             .fillMaxWidth()
@@ -333,60 +342,68 @@ private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Doub
                     if (line.date == today) "Auj." else Fmt.dayName(line.date).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.FRANCE) },
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 16.sp,
+                    maxLines = 1,
                 )
-                MonoText(Fmt.dayMonth(line.date), size = 10.sp)
+                MonoText(Fmt.dayMonth(line.date), size = 9.5.sp)
             }
             Box(Modifier.width(ICON_WIDTH)) { WeatherIcon(line.code, true, size = 28.dp) }
-            Row(Modifier.weight(1f).padding(start = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                MonoText(Fmt.temp(line.min), size = 12.sp, modifier = Modifier.width(30.dp))
-                TemperatureBar(line.min, line.max, low, high, Modifier.weight(1f).height(8.dp))
+            Row(Modifier.weight(1f).padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                MonoText(Fmt.temp(line.min), size = 11.5.sp, modifier = Modifier.width(28.dp))
+                TemperatureBar(line.min, line.max, low, high, Modifier.weight(1f).height(7.dp))
                 Text(
                     Fmt.temp(line.max),
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
+                    fontSize = 15.sp,
                     textAlign = TextAlign.End,
-                    modifier = Modifier.width(36.dp),
+                    maxLines = 1,
+                    modifier = Modifier.width(34.dp),
                 )
             }
             val wet = !line.rain.isNaN() && line.rain >= 0.1
-            MonoText(
-                Fmt.decimal(line.rain),
-                color = if (wet) colors.primary else colors.onSurfaceVariant,
-                bold = wet,
-                size = 12.5.sp,
-                align = TextAlign.End,
-                modifier = Modifier.width(RAIN_WIDTH),
-            )
-            MonoText(
-                line.altitude?.freezingLevel?.let { Fmt.thousands(it, 100) } ?: "–",
-                color = colors.onBackground,
-                bold = true,
-                size = 12.5.sp,
-                align = TextAlign.End,
-                modifier = Modifier.width(ISO_WIDTH),
-            )
-            Text(
-                if (line.snow >= 1) "+${line.snow.roundToInt()} cm" else "–",
-                color = if (line.snow >= 1) colors.primary else colors.onSurfaceVariant,
-                fontWeight = if (line.snow >= 1) FontWeight.SemiBold else FontWeight.Normal,
-                fontSize = 14.sp,
-                textAlign = TextAlign.End,
-                maxLines = 1,
-                modifier = Modifier.width(SNOW_WIDTH),
-            )
-        }
-        line.window?.let { window ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = DAY_WIDTH, top = 6.dp)) {
-                Box(Modifier.size(6.dp).clip(CircleShape).background(colors.primary))
-                Spacer(Modifier.width(6.dp))
-                MonoText(
-                    "Fenêtre $window · sec, vent < 20 km/h",
-                    color = colors.primary,
-                    size = 10.5.sp,
+            NumberCell(Fmt.decimal(line.rain), NUMBER_WIDTH, if (wet) colors.primary else colors.onSurfaceVariant, wet)
+            val windy = !line.wind.isNaN() && line.wind >= 40
+            NumberCell(if (line.wind.isNaN()) "–" else line.wind.roundToInt().toString(), NUMBER_WIDTH + 4.dp, if (windy) AlertRed else colors.onBackground, windy)
+            NumberCell(sunshineHours(line.sunshine), NUMBER_WIDTH + 8.dp, colors.onBackground, false)
+            if (snowColumn) {
+                Text(
+                    if (line.snow >= 1) "+${line.snow.roundToInt()} cm" else "–",
+                    color = if (line.snow >= 1) colors.primary else colors.onSurfaceVariant,
+                    fontWeight = if (line.snow >= 1) FontWeight.SemiBold else FontWeight.Normal,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                    modifier = Modifier.width(SNOW_WIDTH),
                 )
             }
         }
+        line.freezingNow?.let { iso ->
+            SubLine("iso 0 °C maintenant : ${Fmt.altitude(iso, 100)}", colors.onSurfaceVariant)
+        }
+        line.window?.let { window ->
+            SubLine("Fenêtre $window · sec, vent < 20 km/h", colors.primary)
+        }
     }
+}
+
+@Composable
+private fun NumberCell(text: String, width: Dp, color: Color, bold: Boolean) {
+    MonoText(text, color = color, bold = bold, size = 12.sp, align = TextAlign.End, modifier = Modifier.width(width))
+}
+
+@Composable
+private fun SubLine(text: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = DAY_WIDTH, top = 6.dp)) {
+        Box(Modifier.size(6.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(6.dp))
+        MonoText(text, color = color, size = 10.5.sp)
+    }
+}
+
+/** Ensoleillement en heures : « 0 », « 4,5 », « 9 ». */
+private fun sunshineHours(seconds: Double): String = when {
+    seconds.isNaN() -> "–"
+    seconds < 900 -> "0"
+    else -> Fmt.decimal(Math.round(seconds / 1800.0) / 2.0)
 }
 
 /** Barre mini-maxi, placée sur l'échelle de la semaine affichée. */

@@ -38,7 +38,36 @@ data class StationObservation(
     val temperature: Double,
     val time: Instant,
     val source: ObservationSource,
+    /** Les autres mesures du relevé, dans les unités de [Measure]. */
+    val values: Map<Measure, Double> = emptyMap(),
+    /** Message brut (METAR des aéroports). */
+    val text: String? = null,
 )
+
+/** Mesures d'une station, avec leur unité d'affichage. */
+enum class Measure(val label: String, val unit: String, val decimals: Int = 0) {
+    DEW_POINT("Point de rosée", "°C", 1),
+    HUMIDITY("Humidité", "%"),
+    WIND("Vent moyen", "km/h"),
+    WIND_DIRECTION("Direction du vent", "°"),
+    GUST("Rafales", "km/h"),
+    PRESSURE("Pression (mer)", "hPa", 1),
+    RAIN_1H("Pluie sur 1 h", "mm", 1),
+    RAIN_10MIN("Pluie sur 10 min", "mm", 1),
+    SNOW_DEPTH("Neige au sol", "cm"),
+    VISIBILITY("Visibilité", "km", 1),
+    CLOUDS("Nébulosité", "%"),
+    SUNSHINE("Soleil (dernière période)", "min"),
+}
+
+/** Point d'historique d'une station : heure et température. */
+data class StationReading(val time: Instant, val temperature: Double)
+
+/** Humidité relative (%) d'après la température et le point de rosée (formule de Magnus). */
+fun relativeHumidity(celsius: Double, dewPoint: Double): Double {
+    fun e(t: Double) = 6.112 * kotlin.math.exp(17.62 * t / (243.12 + t))
+    return (100 * e(dewPoint) / e(celsius)).coerceIn(0.0, 100.0)
+}
 
 /** Nom et altitude d'une station Météo-France (liste des stations). */
 data class StationInfo(val name: String, val altitude: Double?)
@@ -96,11 +125,44 @@ object MeteoFranceObservations {
                 longitude = lon,
                 altitude = info?.altitude ?: p.number("alti") ?: p.number("altitude"),
                 // Le paquet donne des kelvins.
-                temperature = if (t > 150) t - 273.15 else t,
+                temperature = kelvin(t),
                 time = time,
                 source = ObservationSource.METEO_FRANCE,
+                values = values(p),
             )
         }
+    }
+
+    /** Relevés des dernières 24 heures d'une station, toutes les 6 minutes. */
+    fun historyUrl(id: String): String = "$BASE/paquet/infrahoraire-6m?id_station=$id&format=json"
+
+    /** Historique (JSON ou GeoJSON) : la température de chaque relevé, dans l'ordre du temps. */
+    fun parseHistory(body: String): List<StationReading> =
+        parse(body).map { StationReading(it.time, it.temperature) }.sortedBy { it.time }
+
+    private fun kelvin(v: Double) = if (v > 150) v - 273.15 else v
+
+    /**
+     * Mesures du paquet, converties : kelvins en °C, m/s en km/h, pascals en hPa, mètres de neige en cm,
+     * mètres de visibilité en km. Les champs absents ou vides sont ignorés.
+     */
+    private fun values(p: JsonObject): Map<Measure, Double> {
+        val out = LinkedHashMap<Measure, Double>()
+        fun put(measure: Measure, value: Double?) {
+            if (value != null && !value.isNaN()) out[measure] = value
+        }
+        put(Measure.DEW_POINT, p.number("td")?.let(::kelvin))
+        put(Measure.HUMIDITY, p.number("u"))
+        put(Measure.WIND, p.number("ff")?.times(3.6))
+        put(Measure.WIND_DIRECTION, p.number("dd"))
+        put(Measure.GUST, (p.number("fxi10") ?: p.number("fxi") ?: p.number("fxy"))?.times(3.6))
+        put(Measure.PRESSURE, (p.number("pmer") ?: p.number("pres"))?.let { if (it > 2000) it / 100 else it })
+        put(Measure.RAIN_1H, p.number("rr1") ?: p.number("rr_per"))
+        put(Measure.SNOW_DEPTH, p.number("sss")?.let { if (it < 20) it * 100 else it })
+        put(Measure.VISIBILITY, p.number("vv")?.div(1000))
+        put(Measure.CLOUDS, p.number("n")?.let { if (it <= 8) it * 12.5 else it })
+        put(Measure.SUNSHINE, p.number("insolh"))
+        return out
     }
 
     /** Liste des stations (CSV séparé par des points-virgules) : identifiant → nom et altitude. */
@@ -138,6 +200,31 @@ object MeteoFranceObservations {
 object MeteoSwissObservations {
     const val URL =
         "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-lufttemperatur-10min/ch.meteoschweiz.messwerte-lufttemperatur-10min_en.json"
+
+    /** Autres mesures de MétéoSuisse, un fichier par mesure (lus quand on touche une station). */
+    val MEASURES = mapOf(
+        Measure.HUMIDITY to "luftfeuchtigkeit-10min",
+        Measure.DEW_POINT to "taupunkt-10min",
+        Measure.WIND to "windgeschwindigkeit-kmh-10min",
+        Measure.GUST to "wind-boeenspitze-kmh-10min",
+        Measure.RAIN_10MIN to "niederschlag-10min",
+        Measure.PRESSURE to "luftdruck-qnh-10min",
+        Measure.SUNSHINE to "sonnenscheindauer-10min",
+    )
+
+    fun measureUrl(name: String): String =
+        "https://data.geo.admin.ch/ch.meteoschweiz.messwerte-$name/ch.meteoschweiz.messwerte-${name}_en.json"
+
+    /** Valeur d'une station dans le fichier d'une mesure ; pour le vent, aussi sa direction. */
+    fun parseMeasure(body: String, stationId: String): Pair<Double, Double?>? {
+        val root = json.parseToJsonElement(body).jsonObject
+        val features = root["features"] as? JsonArray ?: return null
+        val feature = features.firstOrNull { ((it as? JsonObject)?.get("id") as? JsonPrimitive)?.contentOrNull == stationId } as? JsonObject
+            ?: return null
+        val props = feature["properties"] as? JsonObject ?: return null
+        val value = props.number("value") ?: return null
+        return value to props.number("wind_direction")
+    }
 
     fun parse(body: String): List<StationObservation> {
         val root = json.parseToJsonElement(body).jsonObject
@@ -194,8 +281,32 @@ object MetarObservations {
                 temperature = t,
                 time = Instant.ofEpochSecond(seconds),
                 source = ObservationSource.METAR,
+                values = values(o, t),
+                text = o.text("rawOb"),
             )
         }
+    }
+
+    /** Dernières 24 heures d'un aéroport (un message toutes les 30 ou 60 minutes). */
+    fun historyUrl(id: String): String = "https://aviationweather.gov/api/data/metar?ids=$id&hours=24&format=json"
+
+    fun parseHistory(body: String): List<StationReading> =
+        parse(body).map { StationReading(it.time, it.temperature) }.sortedBy { it.time }
+
+    /** Nœuds en km/h, pression QNH en hPa, visibilité en miles (« 6+ ») en km, humidité d'après le point de rosée. */
+    private fun values(o: JsonObject, t: Double): Map<Measure, Double> {
+        val out = LinkedHashMap<Measure, Double>()
+        val dew = o.number("dewp")
+        if (dew != null) {
+            out[Measure.DEW_POINT] = dew
+            out[Measure.HUMIDITY] = relativeHumidity(t, dew)
+        }
+        o.number("wspd")?.let { out[Measure.WIND] = it * 1.852 }
+        o.number("wdir")?.let { out[Measure.WIND_DIRECTION] = it }
+        o.number("wgst")?.let { out[Measure.GUST] = it * 1.852 }
+        o.number("altim")?.let { out[Measure.PRESSURE] = it }
+        o.text("visib")?.removeSuffix("+")?.toDoubleOrNull()?.let { out[Measure.VISIBILITY] = it * 1.609 }
+        return out
     }
 
     /** « Annecy/Meythet Arpt, AR, FR » → « Annecy/Meythet (aéroport) ». */

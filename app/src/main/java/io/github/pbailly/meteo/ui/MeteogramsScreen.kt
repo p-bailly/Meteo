@@ -22,19 +22,22 @@ import androidx.compose.ui.unit.dp
 
 private val TABS = listOf("7 jours", "14 jours", "Modèles")
 
-/** Écran « Météogrammes » : météogramme horaire, graphique 14 jours et comparaison des modèles. */
+/**
+ * Onglet « Météogramme » : météogramme horaire, graphique 14 jours et comparaison des modèles.
+ * Avec [onBack], il s'ouvre aussi par-dessus un onglet, avec une flèche retour.
+ */
 @Composable
 fun MeteogramsScreen(
     state: MeteoUiState,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onMultiModelNeeded: () -> Unit,
     onRetryMultiModel: () -> Unit,
 ) {
-    BackHandler(onBack = onBack)
+    if (onBack != null) BackHandler(onBack = onBack)
     var tab by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { onMultiModelNeeded() }
     Column(Modifier.fillMaxSize()) {
-        DetailHeader("Météogrammes", onBack)
+        if (onBack != null) DetailHeader("Météogramme", onBack) else ScreenHeader("Météogramme")
         state.place?.let { PlaceLine(it.name, it.elevation ?: state.forecast.data?.elevation) }
         SegmentedToggle(TABS, tab, { tab = it }, Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), fill = true)
         val data = state.forecast.data
@@ -49,7 +52,7 @@ fun MeteogramsScreen(
                 1 -> DaysTab(data, state.multiModel.data)
                 else -> MultiModelTab(state.multiModel, state.hiddenModels, onRetry = onRetryMultiModel)
             }
-            Attribution()
+            Spacer(Modifier.height(16.dp))
         }
     }
 }

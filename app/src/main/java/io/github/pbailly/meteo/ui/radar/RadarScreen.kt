@@ -7,6 +7,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
@@ -72,7 +73,21 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.maps.DwdTemperature
-import io.github.pbailly.meteo.data.maps.StationObservation
+import io.github.pbailly.meteo.data.Outlook
+import io.github.pbailly.meteo.data.maps.Measure
+import io.github.pbailly.meteo.data.maps.ObservationSource
+import io.github.pbailly.meteo.data.maps.StationReading
+import io.github.pbailly.meteo.ui.Fmt
+import io.github.pbailly.meteo.ui.drawLabel
+import io.github.pbailly.meteo.ui.theme.LocalChartColors
+import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import io.github.pbailly.meteo.data.maps.TileLayer
 import io.github.pbailly.meteo.data.maps.WindyWebcams
 import io.github.pbailly.meteo.data.radar.RainClass
@@ -153,7 +168,6 @@ fun RadarRoute(
     )
 }
 private val clock = DateTimeFormatter.ofPattern("HH:mm")
-private val dayHour = DateTimeFormatter.ofPattern("EEE HH'h'", Locale.FRANCE)
 
 @Composable
 fun RadarScreen(
@@ -232,19 +246,22 @@ fun RadarScreen(
                 layerState.openStation != null && layer == MapLayer.TEMPERATURE -> StationCard(
                     layerState.openStation,
                     onClose = onCloseStation,
-                    modifier = Modifier.align(Alignment.TopCenter).padding(16.dp),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
                 )
-                layer == MapLayer.TEMPERATURE && layerState.observationNote != null && error == null -> Text(
-                    layerState.observationNote,
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier
+                layer == MapLayer.TEMPERATURE && layerState.observationNote != null && error == null -> Column(
+                    Modifier
                         .align(Alignment.TopEnd)
                         .padding(8.dp)
                         .clip(RoundedCornerShape(6.dp))
                         .background(HeaderBlue.copy(alpha = 0.8f))
                         .padding(horizontal = 8.dp, vertical = 4.dp),
-                )
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    // Une information par ligne, jamais coupée en deux.
+                    layerState.observationNote.lines().forEach { line ->
+                        Text(line, color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
+                    }
+                }
                 error != null -> Card(Modifier.align(Alignment.TopCenter).padding(16.dp)) {
                     Text(error, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
                 }
@@ -261,17 +278,15 @@ fun RadarScreen(
                 onSelect = onSelect,
                 onTogglePlay = onTogglePlay,
             )
-            MapLayer.WEBCAMS -> Unit
+            // Température : seulement la carte actuelle, pas de frise.
+            MapLayer.WEBCAMS, MapLayer.TEMPERATURE -> Unit
             else -> Timeline(
                 slots = layerState.times.map { RadarSlot(it) },
                 selected = layerState.selected,
                 playing = layerState.playing,
                 header = null,
                 note = null,
-                label = {
-                    val zoned = it.atZone(ZoneId.systemDefault())
-                    if (layer == MapLayer.TEMPERATURE) dayHour.format(zoned).replaceFirstChar { c -> c.titlecase(Locale.FRANCE) } else clock.format(zoned)
-                },
+                label = { clock.format(it.atZone(ZoneId.systemDefault())) },
                 onSelect = onSelect,
                 onTogglePlay = onTogglePlay,
             )
@@ -314,7 +329,7 @@ private fun rainHeader(slot: RadarSlot?): String = when {
     slot.isForecast -> ""
     else -> {
         val ago = Duration.between(slot.time, Instant.now()).toMinutes()
-        "Observation Météo-France de ${clock.format(slot.time.atZone(ZoneId.systemDefault()))}" +
+        "Radar de ${clock.format(slot.time.atZone(ZoneId.systemDefault()))}" +
             if (ago in 0..600) " · il y a $ago min" else ""
     }
 }
@@ -322,11 +337,13 @@ private fun rainHeader(slot: RadarSlot?): String = when {
 /** Légende des intensités, en bas à gauche comme sur Meteoblue. */
 @Composable
 private fun Legend(modifier: Modifier = Modifier) {
-    Column(modifier.padding(bottom = 8.dp).width(104.dp)) {
+    Column(modifier.padding(bottom = 8.dp).width(IntrinsicSize.Max)) {
         Text(
             "Précipitations",
             color = Color.White,
             style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            softWrap = false,
             modifier = Modifier.fillMaxWidth().background(HeaderBlue.copy(alpha = 0.85f)).padding(horizontal = 6.dp, vertical = 3.dp),
         )
         RainClass.entries.forEach { c ->
@@ -334,6 +351,8 @@ private fun Legend(modifier: Modifier = Modifier) {
                 c.label,
                 color = if (c == RainClass.MODERATE || c == RainClass.HEAVY || c == RainClass.VERY_HEAVY) Color.White else Color(0xFF0B0B0B),
                 style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                softWrap = false,
                 modifier = Modifier.fillMaxWidth().background(Color(c.argb)).padding(horizontal = 6.dp, vertical = 3.dp),
             )
         }
@@ -343,11 +362,13 @@ private fun Legend(modifier: Modifier = Modifier) {
 /** Légende de température : les couleurs des cases de température de l'app. */
 @Composable
 private fun TemperatureLegend(modifier: Modifier = Modifier) {
-    Column(modifier.padding(bottom = 8.dp).width(64.dp)) {
+    Column(modifier.padding(bottom = 8.dp).width(IntrinsicSize.Max)) {
         Text(
             "°C",
             color = Color.White,
             style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            softWrap = false,
             modifier = Modifier.fillMaxWidth().background(HeaderBlue.copy(alpha = 0.85f)).padding(horizontal = 6.dp, vertical = 3.dp),
         )
         listOf(35, 30, 25, 20, 15, 10, 5, 0, -5, -10).forEach { t ->
@@ -365,11 +386,13 @@ private fun TemperatureLegend(modifier: Modifier = Modifier) {
 /** Légende de la foudre : nombre d'éclairs en 5 minutes (échelle d'EUMETSAT). */
 @Composable
 private fun LightningLegend(modifier: Modifier = Modifier) {
-    Column(modifier.padding(bottom = 8.dp).width(104.dp)) {
+    Column(modifier.padding(bottom = 8.dp).width(IntrinsicSize.Max)) {
         Text(
             "Éclairs / 5 min",
             color = Color.White,
             style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            softWrap = false,
             modifier = Modifier.fillMaxWidth().background(HeaderBlue.copy(alpha = 0.85f)).padding(horizontal = 6.dp, vertical = 3.dp),
         )
         listOf(
@@ -380,6 +403,8 @@ private fun LightningLegend(modifier: Modifier = Modifier) {
                 label,
                 color = if (color.luminance() < 0.4f) Color.White else Color(0xFF0B0B0B),
                 style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                softWrap = false,
                 modifier = Modifier.fillMaxWidth().background(color).padding(horizontal = 6.dp, vertical = 3.dp),
             )
         }
@@ -436,6 +461,8 @@ private fun Timeline(
                 color = colors.onSurfaceVariant,
                 fontFamily = AppMono,
                 style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp),
             )
         }
@@ -445,6 +472,8 @@ private fun Timeline(
                 color = colors.primary,
                 fontFamily = AppMono,
                 style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
@@ -517,37 +546,128 @@ private fun Timeline(
     }
 }
 
-/** Relevé de la station touchée : nom, altitude, température et heure. */
+/** Station touchée : nom, altitude, heure du relevé, toutes ses mesures et sa température des dernières 24 heures. */
 @Composable
-private fun StationCard(station: StationObservation, onClose: () -> Unit, modifier: Modifier = Modifier) {
-    Card(modifier.clickable(onClick = onClose)) {
-        Row(Modifier.padding(horizontal = 14.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(temperatureColor(station.temperature)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    String.format(Locale.FRANCE, "%.1f°", station.temperature),
-                    color = OnTemperature,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
+private fun StationCard(details: StationDetails, onClose: () -> Unit, modifier: Modifier = Modifier) {
+    val station = details.station
+    val colors = MaterialTheme.colorScheme
+    Card(
+        modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLowest),
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(temperatureColor(station.temperature)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        String.format(Locale.FRANCE, "%.1f°", station.temperature),
+                        color = OnTemperature,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(station.name ?: station.id, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                    Text(
+                        listOfNotNull(
+                            station.altitude?.let { "${it.roundToInt()} m" },
+                            "relevé de ${clock.format(station.time.atZone(ZoneId.systemDefault()))}",
+                            station.source.label.substringBefore(" ("),
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = AppMono,
+                        color = colors.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Fermer") }
+            }
+            // Mesures, deux par ligne.
+            val shown = details.values.entries.filter { it.key != Measure.WIND_DIRECTION }.toList()
+            shown.chunked(2).forEach { pair ->
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    pair.forEach { (measure, value) ->
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                measure.label.uppercase(Locale.FRANCE),
+                                fontFamily = AppMono,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colors.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                            Text(measureText(measure, value, details.values), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        }
+                    }
+                    if (pair.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+            when {
+                details.history.size >= 2 -> HistoryChart(details.history, Modifier.fillMaxWidth().padding(top = 12.dp).height(86.dp))
+                details.loading -> Box(Modifier.fillMaxWidth().padding(top = 12.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                }
+                station.source == ObservationSource.METEO_FRANCE -> Text(
+                    "Les dernières 24 h demandent la clé Météo-France abonnée aux observations.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp),
                 )
             }
-            Spacer(Modifier.width(12.dp))
-            Column {
-                Text(station.name ?: station.id, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                Text(
-                    listOfNotNull(
-                        station.altitude?.let { "${it.roundToInt()} m" },
-                        "relevé de ${clock.format(station.time.atZone(ZoneId.systemDefault()))}",
-                        station.source.label,
-                    ).joinToString(" · "),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = AppMono,
-                )
+            station.text?.let {
+                Text(it, fontFamily = AppMono, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+            }
+        }
+    }
+}
+
+/** « 12 km/h NO », « 1 016,2 hPa », « 82 % ». */
+private fun measureText(measure: Measure, value: Double, all: Map<Measure, Double>): String {
+    val number = if (measure.decimals == 0) value.roundToInt().toString() else String.format(Locale.FRANCE, "%.${measure.decimals}f", value)
+    val direction = if (measure == Measure.WIND) all[Measure.WIND_DIRECTION]?.let { " " + Outlook.compass(it) }.orEmpty() else ""
+    return "$number ${measure.unit}$direction"
+}
+
+/** Température des dernières 24 heures, avec le mini et le maxi. */
+@Composable
+private fun HistoryChart(history: List<StationReading>, modifier: Modifier) {
+    val measurer = rememberTextMeasurer()
+    val colors = MaterialTheme.colorScheme
+    val chart = LocalChartColors.current
+    Column(modifier) {
+        val min = history.minBy { it.temperature }
+        val max = history.maxBy { it.temperature }
+        Text(
+            "DERNIÈRES 24 H · mini ${Fmt.temp(min.temperature)} à ${clock.format(min.time.atZone(ZoneId.systemDefault()))}" +
+                " · maxi ${Fmt.temp(max.temperature)} à ${clock.format(max.time.atZone(ZoneId.systemDefault()))}",
+            fontFamily = AppMono,
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Canvas(Modifier.fillMaxWidth().weight(1f).padding(top = 4.dp)) {
+            val t0 = history.first().time.epochSecond.toDouble()
+            val t1 = history.last().time.epochSecond.toDouble().coerceAtLeast(t0 + 1)
+            val lo = min.temperature - 0.5
+            val hi = max.temperature + 0.5
+            val bottom = size.height - 14.dp.toPx()
+            fun x(r: StationReading) = ((r.time.epochSecond - t0) / (t1 - t0) * size.width).toFloat()
+            fun y(v: Double) = (bottom - (v - lo) / (hi - lo) * bottom).toFloat()
+            val path = Path()
+            history.forEachIndexed { k, r -> if (k == 0) path.moveTo(x(r), y(r.temperature)) else path.lineTo(x(r), y(r.temperature)) }
+            drawLine(chart.axis, Offset(0f, bottom), Offset(size.width, bottom), 1.dp.toPx())
+            drawPath(path, chart.temperature, style = Stroke(2.dp.toPx()))
+            drawCircle(chart.temperature, 3.dp.toPx(), Offset(x(history.last()), y(history.last().temperature)))
+            listOf(history.first(), history.last()).forEachIndexed { k, r ->
+                drawLabel(measurer, clock.format(r.time.atZone(ZoneId.systemDefault())), Offset(if (k == 0) 0f else size.width, size.height), chart.muted, 9.5f, anchorX = k.toFloat(), anchorY = 1f)
             }
         }
     }
