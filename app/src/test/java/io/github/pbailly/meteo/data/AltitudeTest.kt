@@ -1,8 +1,6 @@
 package io.github.pbailly.meteo.data
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -95,69 +93,6 @@ class AltitudeTest {
         assertEquals(-24.0, Altitude.windChill(-11.0, 60.0), 1.0)
         assertEquals(12.0, Altitude.windChill(12.0, 60.0), 0.0)
         assertEquals(-5.0, Altitude.windChill(-5.0, 3.0), 0.0)
-    }
-
-    @Test
-    fun `black ice after evening rain followed by a cold night`() {
-        // Pluie de 18 h à 21 h (iso 0 à 2 500 m), puis la nuit l'iso 0 descend à 700 m, lieu à 448 m.
-        val f = forecast(hours = 36, ground = 448.0, t2m = 6.0, freezing = 2500.0).withHourly {
-            for (i in 18..21) precipitation[i] = 1.0
-            for (i in 26..34) {
-                freezingLevel[i] = 700.0
-                temperature[i] = 1.6
-            }
-        }
-        val risks = Altitude.iceRisks(f, 0, 36)
-        assertEquals(1, risks.size)
-        val risk = risks.single()
-        assertFalse(risk.atPlace)
-        assertEquals(LocalDateTime.of(2026, 10, 27, 2, 0), risk.start)
-        // 0,5 °C : un peu sous l'iso 0, à 50 m près.
-        assertTrue(risk.altitude in 500.0..700.0)
-    }
-
-    @Test
-    fun `no black ice above the local relief`() {
-        // Même nuit qu'au-dessus, mais en plaine : rien ne monte au-delà de 500 m autour du lieu.
-        val f = forecast(hours = 36, ground = 448.0, t2m = 6.0, freezing = 2500.0).withHourly {
-            for (i in 18..21) precipitation[i] = 1.0
-            for (i in 26..34) {
-                freezingLevel[i] = 700.0
-                temperature[i] = 1.6
-            }
-        }
-        assertTrue(Altitude.iceRisks(f, 0, 36, ceiling = 500.0).isEmpty())
-        assertEquals(1, Altitude.iceRisks(f, 0, 36, ceiling = 900.0).size)
-    }
-
-    @Test
-    fun `no black ice on a dry cold night`() {
-        val f = forecast(hours = 24, ground = 448.0, t2m = -2.0, freezing = 300.0)
-        assertTrue(Altitude.iceRisks(f, 0, 24).isEmpty())
-    }
-
-    @Test
-    fun `freezing rain is always a black ice risk at the place`() {
-        val f = forecast(hours = 3, ground = 448.0, t2m = 1.0, freezing = 1200.0).withHourly { weatherCode[1] = 67 }
-        val risk = Altitude.iceRisks(f, 0, 3).single()
-        assertTrue(risk.atPlace)
-        assertTrue(risk.freezingRain)
-    }
-
-    @Test
-    fun `fair weather window is the longest dry calm sunny spell of the day`() {
-        val f = forecast(hours = 24, ground = 448.0, t2m = 15.0, freezing = 3000.0, wind = 10.0, code = 1).withHourly {
-            precipitation[13] = 0.5
-            precipitation[17] = 0.5
-        }
-        assertNull(Altitude.fairWindow(f, 0..23))
-        val dry = forecast(hours = 24, ground = 448.0, t2m = 15.0, freezing = 3000.0, wind = 10.0, code = 0).withHourly {
-            windSpeed[8] = 25.0
-            windSpeed[17] = 25.0
-        }
-        assertEquals(9..16, Altitude.fairWindow(dry, 0..23))
-        assertNotNull(Altitude.fairWindow(dry, 0..23, from = 10))
-        assertNull(Altitude.fairWindow(dry, 0..23, from = 12))
     }
 
     private class Level(val hPa: Int, val height: Double, val t: Double, val wind: Double, val dir: Double)

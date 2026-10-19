@@ -10,6 +10,7 @@ import io.github.pbailly.meteo.data.OpenMeteoException
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.PlacesStore
 import io.github.pbailly.meteo.data.SettingsStore
+import io.github.pbailly.meteo.data.Terrain
 import io.github.pbailly.meteo.data.TerrainProfile
 import io.github.pbailly.meteo.data.TerrainRepository
 import io.github.pbailly.meteo.data.WeatherModel
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
+import io.github.pbailly.meteo.data.networkMessage
 import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -85,6 +87,37 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
             loadTerrain(it)
         }
         loadSummaries(force = false)
+        backfillDepartments()
+    }
+
+    /** Les lieux enregistrés avant l'ajout du département le retrouvent par une recherche, une seule fois. */
+    private fun backfillDepartments() {
+        val missing = (_state.value.favorites + listOfNotNull(_state.value.place)).filter { it.admin2 == null }.distinctBy { it.id }
+        if (missing.isEmpty()) return
+        viewModelScope.launch {
+            val found = missing.associate { place ->
+                val match = runCatching { repository.search(place.name) }.getOrNull()
+                    ?.filter { Terrain.distanceKm(it.latitude, it.longitude, place.latitude, place.longitude) < 3 }
+                    ?.minByOrNull { Terrain.distanceKm(it.latitude, it.longitude, place.latitude, place.longitude) }
+                // Vide : cherché sans succès, on ne recommencera pas.
+                place.id to (match?.admin2 ?: "")
+            }
+            fun Place.filled() = if (admin2 == null) copy(admin2 = found[id] ?: admin2) else this
+            val favorites = _state.value.favorites.map { it.filled() }
+            store.saveFavorites(favorites)
+            val current = _state.value.place?.filled()
+            current?.let { store.saveLastPlace(it) }
+            _state.update { it.copy(favorites = favorites, place = current ?: it.place) }
+        }
+    }
+
+    /** Glisser-déposer dans la liste des lieux : le favori [from] prend la place [to]. */
+    fun moveFavorite(from: Int, to: Int) {
+        val list = _state.value.favorites.toMutableList()
+        if (from !in list.indices || to !in list.indices || from == to) return
+        list.add(to, list.removeAt(from))
+        store.saveFavorites(list)
+        _state.update { it.copy(favorites = list) }
     }
 
     fun selectPlace(place: Place) {
@@ -213,7 +246,8 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun loadSummaries(force: Boolean) {
-        val places = _state.value.favorites
+        // Toujours dans le même ordre : réordonner les favoris ne relance pas d'appel.
+        val places = _state.value.favorites.sortedBy { it.id }
         summariesJob?.cancel()
         if (places.isEmpty()) {
             _state.update { it.copy(summaries = Remote()) }
@@ -265,8 +299,6 @@ private inline fun <T> runLoading(block: () -> T): Result<T> = try {
 
 private fun Exception.userMessage(): String = when (this) {
     is OpenMeteoException -> message ?: "Erreur Open-Meteo"
-    is java.net.UnknownHostException, is java.net.ConnectException, is java.net.SocketTimeoutException ->
-        "Pas de connexion internet"
-    is IOException -> message ?: "Erreur réseau"
+    is IOException -> networkMessage()
     else -> "Erreur : ${message ?: javaClass.simpleName}"
 }

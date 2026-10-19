@@ -70,6 +70,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
                     onLocate = { viewModel.locate { goTo(Tab.TODAY) } },
                     onLocationDenied = viewModel::onLocationDenied,
                     onOpenSettings = { showSettings = true },
+                    onMoveFavorite = viewModel::moveFavorite,
                 )
             }
             when {

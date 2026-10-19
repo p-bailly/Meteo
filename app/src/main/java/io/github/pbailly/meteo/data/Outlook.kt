@@ -5,24 +5,7 @@ import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 
-/** Épisode neigeux : jours consécutifs avec au moins 1 cm à l'altitude de référence. */
-class SnowEvent(
-    val days: List<AltitudeDay>,
-    /** Cumul de chaque jour à [reference], en cm. */
-    val amounts: List<Double>,
-    val reference: Double,
-    /** Iso 0 °C le plus bas de l'épisode. */
-    val freezingLevel: Double,
-    /** Neige sur le lieu lui-même pendant l'épisode, en cm. */
-    val atPlace: Double,
-    /** Vrai quand l'épisode ne commence pas aujourd'hui (« retour de la neige »). */
-    val afterDryDays: Boolean,
-)
-
-/** Note d'un lieu dans la liste : une alerte (ressenti, verglas) ou une information (neige à venir). */
-data class PlaceNote(val text: String, val alert: Boolean)
-
-/** Ce qu'on annonce à partir de la prévision : neige, verglas, notes des lieux. */
+/** Ce qu'on annonce à partir de la prévision : pictogramme du jour, moment de la pluie, altitude des cumuls de neige. */
 object Outlook {
     /** En dessous de ce relief, pas de montagne autour du lieu : la neige compte sur le lieu, pas à 2 000 m. */
     private const val MOUNTAIN_RELIEF = 1500.0
@@ -38,68 +21,12 @@ object Outlook {
         else -> Math.round(elevation / 100.0) * 100.0
     }
 
-    /** Jour neigeux : au moins 2 cm ; épisode annoncé : au moins 3 cm en tout. */
-    private const val SNOWY_DAY_CM = 2.0
-    private const val SNOW_EVENT_CM = 3.0
-
-    /** Premier épisode neigeux des [maxDays] prochains jours, à partir d'aujourd'hui. */
-    fun snowEvent(f: Forecast, today: LocalDate, maxDays: Int = 8, reference: Double = snowReference(Altitude.ground(f))): SnowEvent? {
-        val ground = Altitude.ground(f)
-        val days = Altitude.days(f).filter { !it.date.isBefore(today) }.take(maxDays)
-        val amounts = days.map { Altitude.snow(f, it.hours, reference) }
-        var first = -1
-        var last = -1
-        var k = 0
-        while (k < days.size) {
-            if (amounts[k] < SNOWY_DAY_CM) {
-                k++
-                continue
-            }
-            var end = k
-            while (end + 1 < days.size && amounts[end + 1] >= SNOWY_DAY_CM) end++
-            if ((k..end).sumOf { amounts[it] } >= SNOW_EVENT_CM) {
-                first = k
-                last = end
-                break
-            }
-            k = end + 1
-        }
-        if (first < 0) return null
-        val event = days.subList(first, last + 1)
-        return SnowEvent(
-            days = event,
-            amounts = amounts.subList(first, last + 1),
-            reference = reference,
-            freezingLevel = event.minOf { it.freezingLevel.takeIf { v -> !v.isNaN() } ?: Double.MAX_VALUE },
-            atPlace = event.sumOf { Altitude.snow(f, it.hours, ground) },
-            afterDryDays = first > 0,
-        )
-    }
-
     /** Index de l'heure en cours dans la prévision. */
     fun nowIndex(f: Forecast, now: LocalDateTime = LocalDateTime.now(ZoneOffset.ofTotalSeconds(f.utcOffsetSeconds))): Int {
         val times = f.hourly.time
         val hour = now.truncatedTo(ChronoUnit.HOURS)
         val index = times.indexOf(hour)
         return if (index >= 0) index else if (times.isNotEmpty() && hour.isAfter(times.last())) times.lastIndex else 0
-    }
-
-    /** Note d'un favori : ressenti glacial, verglas dans la semaine, ou prochaine neige sur place. */
-    fun placeNote(f: Forecast, today: LocalDate, now: Int = nowIndex(f)): PlaceNote? {
-        f.current?.let { c ->
-            if (!c.apparentTemperature.isNaN() && c.apparentTemperature <= -10) {
-                return PlaceNote("ressenti ${degrees(c.apparentTemperature)} · ${compass(c.windDirection)} ${kmh(c.windSpeed)}", alert = true)
-            }
-        }
-        Altitude.iceRisks(f, now, now + 8 * 24).firstOrNull { it.atPlace }?.let { risk ->
-            return PlaceNote("verglas possible ${dayLabel(risk.start.toLocalDate(), today)} ${partOfDay(risk.start.hour)}", alert = true)
-        }
-        val ground = Altitude.ground(f)
-        for (day in Altitude.days(f).filter { !it.date.isBefore(today) }) {
-            val cm = Altitude.snow(f, day.hours, ground)
-            if (cm >= 1.0) return PlaceNote("neige ${dayLabel(day.date, today)} : +${Math.round(cm)} cm", alert = false)
-        }
-        return null
     }
 
     private val THUNDER_CODES = setOf(95, 96, 99)
@@ -154,23 +81,31 @@ object Outlook {
         return day.map { minOf(h.weatherCode[it], 3) }.average().let { Math.round(it).toInt() }.coerceIn(0, 3)
     }
 
+    /**
+     * Quand tombe une pluie qui commence à [start], vu depuis [now] : le matin et en journée, une pluie du jour
+     * même est pour « aujourd'hui » ; le soir (à partir de 18 h), et pour une pluie d'après minuit, c'est « cette
+     * nuit » jusqu'à 7 h le lendemain ; ensuite « demain » ou le jour (« jeu. 22 »).
+     */
+    fun rainPeriod(start: LocalDateTime, now: LocalDateTime): String {
+        val today = now.toLocalDate()
+        val evening = now.hour >= 18 || now.hour < 6
+        // La nuit en cours (avant 6 h) ou la prochaine se termine à 7 h.
+        val nightEnd = if (now.hour < 6) today.atTime(7, 0) else today.plusDays(1).atTime(7, 0)
+        return when {
+            start.toLocalDate() == today && !evening -> "aujourd'hui"
+            start.isBefore(nightEnd) -> "cette nuit"
+            start.toLocalDate() == today -> "aujourd'hui"
+            start.toLocalDate() == today.plusDays(1) -> "demain"
+            else -> dayLabel(start.toLocalDate(), today)
+        }
+    }
+
     /** « auj. », « demain » ou « lun. 26 ». */
     fun dayLabel(date: LocalDate, today: LocalDate): String = when (date) {
         today -> "auj."
         today.plusDays(1) -> "demain"
         else -> date.format(java.time.format.DateTimeFormatter.ofPattern("EEE d", java.util.Locale.FRANCE))
     }
-
-    fun partOfDay(hour: Int): String = when (hour) {
-        in 5..11 -> "matin"
-        in 12..17 -> "après-midi"
-        in 18..22 -> "soir"
-        else -> "nuit"
-    }
-
-    private fun degrees(v: Double) = "${Math.round(v)}°"
-
-    private fun kmh(v: Double) = if (v.isNaN()) "–" else "${Math.round(v)} km/h"
 
     private val COMPASS = listOf("N", "NE", "E", "SE", "S", "SO", "O", "NO")
 

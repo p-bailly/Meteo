@@ -72,7 +72,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.pbailly.meteo.data.Place
-import io.github.pbailly.meteo.data.maps.DwdTemperature
 import io.github.pbailly.meteo.data.Outlook
 import io.github.pbailly.meteo.data.maps.Measure
 import io.github.pbailly.meteo.data.maps.ObservationSource
@@ -416,7 +415,7 @@ private fun LightningLegend(modifier: Modifier = Modifier) {
 private fun Attribution(layer: MapLayer, modifier: Modifier = Modifier) {
     val text = when (layer) {
         MapLayer.RAIN -> "Radar : Météo-France"
-        MapLayer.TEMPERATURE -> DwdTemperature.ATTRIBUTION + " · relevés Météo-France, MétéoSuisse, NOAA"
+        MapLayer.TEMPERATURE -> "© DWD · relevés Météo-France, MétéoSuisse, NOAA"
         MapLayer.SATELLITE -> TileLayer.SATELLITE.attribution
         MapLayer.LIGHTNING -> TileLayer.LIGHTNING.attribution
         MapLayer.WEBCAMS -> WindyWebcams.ATTRIBUTION
@@ -425,6 +424,8 @@ private fun Attribution(layer: MapLayer, modifier: Modifier = Modifier) {
         text,
         color = Color.White,
         style = MaterialTheme.typography.labelSmall,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = modifier
             .padding(6.dp)
             .clip(RoundedCornerShape(4.dp))

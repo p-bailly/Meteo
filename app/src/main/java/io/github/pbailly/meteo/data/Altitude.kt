@@ -1,7 +1,6 @@
 package io.github.pbailly.meteo.data
 
 import java.time.LocalDate
-import java.time.LocalDateTime
 import kotlin.math.pow
 
 /** Vent à une altitude : vitesse en km/h et direction d'où il vient, en degrés. */
@@ -19,22 +18,10 @@ class AltitudeDay(
     val precipitation: Double,
 )
 
-/** Créneau de verglas possible : sur le lieu même, ou sur les routes au-dessus de [altitude]. */
-class IceRisk(
-    val start: LocalDateTime,
-    val end: LocalDateTime,
-    val altitude: Double,
-    val atPlace: Boolean,
-    val freezingRain: Boolean,
-    /** Température la plus basse du créneau, 300 m au-dessus de [altitude] (ou sur le lieu). */
-    val minTemperature: Double,
-    val referenceAltitude: Double,
-)
-
 /**
  * Météo en altitude, calculée sur le téléphone à partir de la prévision du lieu : la température entre le sol
  * et chaque niveau de pression du modèle (dont l'altitude réelle est connue), le vent des niveaux, la limite
- * pluie-neige, la neige tombée à une altitude donnée, le verglas et les fenêtres de beau temps.
+ * pluie-neige et la neige tombée à une altitude donnée.
  */
 object Altitude {
     /** La limite pluie-neige se tient en moyenne 300 m sous l'isotherme 0 °C. */
@@ -52,13 +39,6 @@ object Altitude {
     /** Une heure est « mouillée » à partir de 0,1 mm, une journée à partir de 0,5 mm. */
     private const val WET_HOUR_MM = 0.1
     private const val WET_DAY_MM = 0.5
-
-    /** Verglas : on cherche jusqu'à 1 200 m au-dessus du lieu (routes de col). */
-    private const val ICE_SEARCH_ABOVE = 1200.0
-    private const val ICE_TEMPERATURE = 0.5
-    private const val ICE_WET_MM = 0.3
-    private const val ICE_WET_HOURS = 12
-    private val FREEZING_CODES = setOf(56, 57, 66, 67)
 
     /** Altitude du point de prévision (modèle de terrain à 90 m d'Open-Meteo). */
     fun ground(f: Forecast, fallback: Double? = null): Double =
@@ -233,98 +213,5 @@ object Altitude {
         if (celsius.isNaN() || kmh.isNaN() || celsius > 10 || kmh < 4.8) return celsius
         val v = kmh.pow(0.16)
         return 13.12 + 0.6215 * celsius - 11.37 * v + 0.3965 * celsius * v
-    }
-
-    /**
-     * Verglas possible entre les heures [from] et [to] : pluie verglaçante, ou routes mouillées par la pluie des
-     * 12 dernières heures quand la température retombe vers 0 °C, sur le lieu ou plus haut, jusqu'à [ceiling]
-     * (1 200 m au-dessus du lieu au plus ; en plaine, le relief des environs, pour ne pas parler de routes qui
-     * n'existent pas).
-     */
-    fun iceRisks(f: Forecast, from: Int, to: Int, ceiling: Double = Double.NaN): List<IceRisk> {
-        val h = f.hourly
-        val ground = ground(f)
-        val top = if (ceiling.isNaN()) ground + ICE_SEARCH_ABOVE else ceiling.coerceIn(ground, ground + ICE_SEARCH_ABOVE)
-        class Hour(val i: Int, val altitude: Double, val freezingRain: Boolean)
-        val risky = ArrayList<Hour>()
-        for (i in from.coerceAtLeast(0) until to.coerceAtMost(h.size)) {
-            val code = h.weatherCode.getOrElse(i) { -1 }
-            if (code in FREEZING_CODES) {
-                risky += Hour(i, ground, freezingRain = true)
-                continue
-            }
-            val iceLevel = iceAltitude(f, i, ground, top) ?: continue
-            // S'il neige à cette altitude, c'est de la neige, pas du verglas.
-            val now = h.precipitation.getOrElse(i) { 0.0 }
-            if (now >= WET_HOUR_MM && iceLevel >= snowLine(f, i)) continue
-            var wet = 0.0
-            for (j in (i - ICE_WET_HOURS).coerceAtLeast(0)..i) {
-                val p = h.precipitation.getOrElse(j) { 0.0 }
-                if (p >= WET_HOUR_MM && iceLevel < snowLine(f, j)) wet += p
-            }
-            if (wet >= ICE_WET_MM) risky += Hour(i, iceLevel, freezingRain = false)
-        }
-        // Heures voisines (à 2 h près) regroupées en créneaux.
-        val result = ArrayList<IceRisk>()
-        var k = 0
-        while (k < risky.size) {
-            var end = k
-            while (end + 1 < risky.size && risky[end + 1].i - risky[end].i <= 2) end++
-            val group = risky.subList(k, end + 1)
-            val altitude = group.minOf { it.altitude }
-            val atPlace = altitude <= ground + 1
-            val reference = if (atPlace) ground else (altitude + 300).coerceAtMost(top)
-            result += IceRisk(
-                start = h.time[group.first().i],
-                end = h.time[group.last().i],
-                altitude = altitude,
-                atPlace = atPlace,
-                freezingRain = group.any { it.freezingRain },
-                minTemperature = group.minOf { temperature(f, it.i, reference) },
-                referenceAltitude = reference,
-            )
-            k = end + 1
-        }
-        return result
-    }
-
-    /** Plus basse altitude (entre le lieu et [top]) où il fait au plus 0,5 °C, ou null. */
-    private fun iceAltitude(f: Forecast, i: Int, ground: Double, top: Double): Double? {
-        var z = ground
-        while (z <= top) {
-            val t = temperature(f, i, z)
-            if (t.isNaN()) return null
-            if (t <= ICE_TEMPERATURE) return z
-            z += 50
-        }
-        return null
-    }
-
-    /**
-     * Fenêtre de beau temps d'une journée : la plus longue suite d'heures entre 8 h et 20 h, sèches, peu nuageuses,
-     * avec moins de 20 km/h de vent. Au moins 6 heures, sinon null. Ne commence pas avant l'heure [from].
-     */
-    fun fairWindow(f: Forecast, hours: IntRange, from: Int = 0): IntRange? {
-        val h = f.hourly
-        var best: IntRange? = null
-        var runStart = -1
-        fun close(endExclusive: Int) {
-            if (runStart >= 0 && endExclusive - runStart >= 6 && (best == null || endExclusive - runStart > best!!.count())) {
-                best = runStart until endExclusive
-            }
-            runStart = -1
-        }
-        for (i in hours) {
-            val hour = h.time[i].hour
-            val ok = i >= from && hour in 8..19 &&
-                h.precipitation.getOrElse(i) { 0.0 }.let { it.isNaN() || it < WET_HOUR_MM } &&
-                h.precipitationProbability.getOrElse(i) { Double.NaN }.let { it.isNaN() || it <= 20 } &&
-                h.windSpeed.getOrElse(i) { Double.NaN }.let { !it.isNaN() && it < 20 } &&
-                h.weatherCode.getOrElse(i) { -1 } in 0..2
-            if (ok && runStart < 0) runStart = i
-            if (!ok) close(i)
-        }
-        close(hours.last + 1)
-        return best
     }
 }

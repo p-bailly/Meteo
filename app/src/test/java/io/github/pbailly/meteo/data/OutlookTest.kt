@@ -65,6 +65,22 @@ class OutlookTest {
         assertEquals(2000.0, Outlook.snowReference(173.0), 0.0)
     }
 
+    @Test
+    fun `rain is announced for today, tonight or tomorrow`() {
+        val afternoon = LocalDateTime.of(2026, 10, 19, 15, 0)
+        assertEquals("aujourd'hui", Outlook.rainPeriod(LocalDateTime.of(2026, 10, 19, 17, 0), afternoon))
+        // En journée, une pluie du soir est encore pour aujourd'hui ; le soir venu, c'est pour cette nuit.
+        assertEquals("aujourd'hui", Outlook.rainPeriod(LocalDateTime.of(2026, 10, 19, 22, 0), afternoon))
+        val evening = LocalDateTime.of(2026, 10, 19, 19, 0)
+        assertEquals("cette nuit", Outlook.rainPeriod(LocalDateTime.of(2026, 10, 19, 22, 0), evening))
+        assertEquals("demain", Outlook.rainPeriod(LocalDateTime.of(2026, 10, 20, 9, 0), evening))
+        assertEquals("cette nuit", Outlook.rainPeriod(LocalDateTime.of(2026, 10, 20, 4, 0), afternoon))
+        assertEquals("demain", Outlook.rainPeriod(LocalDateTime.of(2026, 10, 20, 9, 0), afternoon))
+        val lateNight = LocalDateTime.of(2026, 10, 20, 2, 0)
+        assertEquals("cette nuit", Outlook.rainPeriod(LocalDateTime.of(2026, 10, 20, 4, 0), lateNight))
+        assertEquals("aujourd'hui", Outlook.rainPeriod(LocalDateTime.of(2026, 10, 20, 10, 0), lateNight))
+    }
+
     private fun forecast(codes: (Int) -> Int, rain: (Int) -> Double): Forecast {
         val n = 24
         val start = LocalDateTime.of(2026, 10, 26, 0, 0)

@@ -139,6 +139,7 @@ object OpenMeteoApi {
                 latitude = lat,
                 longitude = lon,
                 admin1 = o.string("admin1"),
+                admin2 = o.string("admin2"),
                 country = o.string("country"),
                 elevation = o.double("elevation"),
             )

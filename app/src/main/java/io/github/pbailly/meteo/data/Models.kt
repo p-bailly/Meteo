@@ -12,11 +12,16 @@ data class Place(
     val admin1: String? = null,
     val country: String? = null,
     val elevation: Double? = null,
+    /** Département (en France ; sinon la subdivision équivalente). Vide quand on l'a cherché sans le trouver. */
+    val admin2: String? = null,
 ) {
     /** Identifiant stable, arrondi à ~10 m, utilisé pour les favoris et le cache. */
     val id: String get() = String.format(Locale.ROOT, "%.4f_%.4f", latitude, longitude)
 
-    val subtitle: String get() = listOfNotNull(admin1, country).distinct().joinToString(", ")
+    /** Le département, ou à défaut la région : « Drôme », « Haute-Savoie ». */
+    val department: String? get() = admin2?.takeIf { it.isNotBlank() } ?: admin1?.takeIf { it.isNotBlank() }
+
+    val subtitle: String get() = listOfNotNull(department, country).distinct().joinToString(", ")
 }
 
 /** Modèles proposés dans l'onglet MultiModèle. L'ordre fixe la couleur de chaque modèle. */

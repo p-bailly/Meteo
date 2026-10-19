@@ -3,7 +3,6 @@ package io.github.pbailly.meteo.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.coroutines.cancellation.CancellationException
@@ -79,7 +78,9 @@ class WeatherRepository(
     }
 }
 
-private fun defaultHttpGet(url: String): String {
+private fun defaultHttpGet(url: String): String = retryOnNetworkError { httpGetOnce(url) }
+
+private fun httpGetOnce(url: String): String {
     val connection = URL(url).openConnection() as HttpURLConnection
     try {
         connection.connectTimeout = 15_000
@@ -92,7 +93,7 @@ private fun defaultHttpGet(url: String): String {
         if (code !in 200..299) {
             // Open-Meteo renvoie {"error":true,"reason":"..."} : on laisse le parseur en tirer le message.
             if (body.contains("\"reason\"")) return body
-            throw IOException("Erreur HTTP $code")
+            throw HttpStatusException(code)
         }
         return body
     } finally {

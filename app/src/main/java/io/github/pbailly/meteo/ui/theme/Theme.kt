@@ -86,6 +86,8 @@ data class ChartColors(
     val wind: Color,
     val pressure: Color,
     val cloud: Color,
+    /** Orange de l'identité : soleil, heure actuelle, maxima. */
+    val accent: Color,
     /** Une couleur par modèle, dans l'ordre de [io.github.pbailly.meteo.data.WeatherModel]. */
     val series: List<Color>,
     val darkTheme: Boolean,
@@ -106,6 +108,7 @@ private val LightChart = ChartColors(
     wind = Color(0xFF1BAF7A),
     pressure = Color(0xFF4B5F73),
     cloud = Color(0xFF4B5F73),
+    accent = Color(0xFFE2701F),
     series = listOf(
         Color(0xFF2A78D6), Color(0xFFEB6834), Color(0xFF1BAF7A), Color(0xFFEDA100),
         Color(0xFFE87BA4), Color(0xFF008300), Color(0xFF6250D6), Color(0xFFE34948),
@@ -128,6 +131,7 @@ private val DarkChart = ChartColors(
     wind = Color(0xFF199E70),
     pressure = Color(0xFFA9BDCF),
     cloud = Color(0xFFA9BDCF),
+    accent = Color(0xFFFF9E58),
     series = listOf(
         Color(0xFF3987E5), Color(0xFFD95926), Color(0xFF199E70), Color(0xFFC98500),
         Color(0xFFD55181), Color(0xFF008300), Color(0xFF9085E9), Color(0xFFE66767),

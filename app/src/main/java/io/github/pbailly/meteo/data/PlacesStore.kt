@@ -39,6 +39,7 @@ class PlacesStore(context: Context) {
         put("latitude", place.latitude)
         put("longitude", place.longitude)
         place.admin1?.let { put("admin1", it) }
+        place.admin2?.let { put("admin2", it) }
         place.country?.let { put("country", it) }
         place.elevation?.let { put("elevation", it) }
     }
@@ -52,6 +53,7 @@ class PlacesStore(context: Context) {
             latitude = lat,
             longitude = lon,
             admin1 = o["admin1"]?.jsonPrimitive?.contentOrNull,
+            admin2 = o["admin2"]?.jsonPrimitive?.contentOrNull,
             country = o["country"]?.jsonPrimitive?.contentOrNull,
             elevation = o["elevation"]?.jsonPrimitive?.doubleOrNull,
         )

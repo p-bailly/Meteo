@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -26,12 +25,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.GpsFixed
 import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarOutline
-import androidx.compose.material.icons.outlined.SwapVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,16 +44,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -62,28 +65,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import io.github.pbailly.meteo.data.Altitude
 import io.github.pbailly.meteo.data.Forecast
-import io.github.pbailly.meteo.data.Outlook
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.ui.theme.AppMono
-import java.time.LocalDate
-import java.util.Locale
 
 private val AlertRed = Color(0xFFC8202A)
 
-/** Une ligne de la liste : un lieu, ou un repère d'altitude (iso 0, limite pluie-neige) intercalé. */
-private sealed interface Entry {
-    val altitude: Double
-
-    class Spot(val place: Place, val forecast: Forecast?, override val altitude: Double, val favorite: Boolean, val current: Boolean) : Entry
-
-    class Mark(val text: String, override val altitude: Double, val freezing: Boolean) : Entry
-}
+/** Une ligne de la liste : un lieu, sa prévision courte, favori ou non, affiché ou non. */
+private class Spot(val place: Place, val forecast: Forecast?, val altitude: Double, val favorite: Boolean, val current: Boolean)
 
 /**
- * Onglet « Lieux » : recherche, météo à ma position, puis les favoris rangés par altitude, avec l'iso 0 °C du jour
- * et la prochaine limite pluie-neige intercalées à leur altitude. « Modifier » permet de retirer des favoris.
+ * Onglet « Lieux » : recherche, météo à ma position, puis les favoris dans l'ordre choisi (appui long puis glisser
+ * pour les réordonner). « Modifier » permet de retirer des favoris.
  */
 @Composable
 fun PlacesScreen(
@@ -94,6 +87,7 @@ fun PlacesScreen(
     onLocate: () -> Unit,
     onLocationDenied: () -> Unit,
     onOpenSettings: () -> Unit,
+    onMoveFavorite: (Int, Int) -> Unit,
 ) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
@@ -103,21 +97,52 @@ fun PlacesScreen(
     }
     val searching = state.search.query.trim().length >= 2
 
-    LazyColumn(Modifier.fillMaxSize().imePadding()) {
+    // Glisser-déposer : appui long sur un favori, puis glisser ; il échange sa place avec celui qu'il survole.
+    val listState = rememberLazyListState()
+    var dragKey by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val favorites by rememberUpdatedState(state.favorites)
+    val move by rememberUpdatedState(onMoveFavorite)
+    fun favoriteKey(place: Place) = "fav-${place.id}"
+    val dragModifier = Modifier.pointerInput(Unit) {
+        detectDragGesturesAfterLongPress(
+            onDragStart = { offset ->
+                listState.layoutInfo.visibleItemsInfo
+                    .firstOrNull { (it.key as? String)?.startsWith("fav-") == true && offset.y.toInt() in it.offset..(it.offset + it.size) }
+                    ?.let {
+                        dragKey = it.key as String
+                        dragOffset = 0f
+                    }
+            },
+            onDrag = { change, amount ->
+                val key = dragKey ?: return@detectDragGesturesAfterLongPress
+                change.consume()
+                dragOffset += amount.y
+                val items = listState.layoutInfo.visibleItemsInfo
+                val dragged = items.firstOrNull { it.key == key } ?: return@detectDragGesturesAfterLongPress
+                val middle = dragged.offset + dragOffset + dragged.size / 2f
+                val target = items.firstOrNull {
+                    it.key != key && (it.key as? String)?.startsWith("fav-") == true && middle.toInt() in it.offset..(it.offset + it.size)
+                } ?: return@detectDragGesturesAfterLongPress
+                val from = favorites.indexOfFirst { favoriteKey(it) == key }
+                val to = favorites.indexOfFirst { favoriteKey(it) == target.key }
+                if (from >= 0 && to >= 0) {
+                    move(from, to)
+                    // Le favori prend la place de l'autre : on garde son dessin sous le doigt.
+                    dragOffset -= (target.offset - dragged.offset)
+                }
+            },
+            onDragEnd = { dragKey = null; dragOffset = 0f },
+            onDragCancel = { dragKey = null; dragOffset = 0f },
+        )
+    }
+
+    LazyColumn(Modifier.fillMaxSize().imePadding().then(dragModifier), state = listState) {
         item(key = "title") {
             ScreenHeader("Lieux") {
                 IconButton(onClick = onOpenSettings) { Icon(Icons.Outlined.Settings, contentDescription = "Réglages", tint = colors.onSurfaceVariant) }
                 if (state.favorites.isNotEmpty()) OutlineChip(if (editing) "Terminé" else "Modifier", onClick = { editing = !editing })
             }
-            val count = state.favorites.size
-            MonoText(
-                when (count) {
-                    0 -> "aucun favori"
-                    1 -> "1 favori"
-                    else -> "$count favoris · rangés par altitude"
-                },
-                modifier = Modifier.padding(start = 20.dp, top = 2.dp),
-            )
             OutlinedTextField(
                 value = state.search.query,
                 onValueChange = onQueryChange,
@@ -168,8 +193,8 @@ fun PlacesScreen(
             searchResults(state, onSelect, onToggleFavorite)
             return@LazyColumn
         }
-        val entries = entries(state)
-        if (entries.none { it is Entry.Spot }) {
+        val spots = spots(state)
+        if (spots.isEmpty()) {
             item(key = "empty") {
                 Text(
                     "Recherche un lieu, puis touche l'étoile sur sa page pour l'ajouter aux favoris.",
@@ -179,61 +204,69 @@ fun PlacesScreen(
             }
             return@LazyColumn
         }
-        items(entries, key = { e -> if (e is Entry.Spot) "place-${e.place.id}" else "mark-${(e as Entry.Mark).freezing}" }) { e ->
-            when (e) {
-                is Entry.Spot -> SpotRow(e, editing, onSelect, onToggleFavorite)
-                is Entry.Mark -> MarkRow(e)
-            }
+        items(spots, key = { if (it.favorite) favoriteKey(it.place) else "current-${it.place.id}" }) { spot ->
+            val dragging = spot.favorite && dragKey == favoriteKey(spot.place)
+            SpotRow(
+                spot,
+                editing,
+                dragging,
+                onSelect,
+                onToggleFavorite,
+                Modifier
+                    .zIndex(if (dragging) 1f else 0f)
+                    .graphicsLayer {
+                        translationY = if (dragging) dragOffset else 0f
+                        shadowElevation = if (dragging) 8.dp.toPx() else 0f
+                    }
+                    .then(if (dragging) Modifier else Modifier.animateItem()),
+            )
         }
-        item(key = "footer") {
-            Row(Modifier.padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 18.dp)) {
-                Icon(Icons.Outlined.SwapVert, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(6.dp))
-                MonoText("Iso 0 et limite pluie-neige s'intercalent entre vos lieux selon leur altitude.", size = 11.sp, maxLines = 3)
+        if (state.favorites.size > 1) {
+            item(key = "footer") {
+                MonoText(
+                    "appui long puis glisser pour changer l'ordre",
+                    size = 10.5.sp,
+                    modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 18.dp),
+                )
             }
         }
     }
 }
 
-/** Favoris (et le lieu affiché s'il n'en est pas un), du plus haut au plus bas, avec les repères d'altitude. */
-private fun entries(state: MeteoUiState): List<Entry> {
+/** Le lieu affiché s'il n'est pas un favori, puis les favoris dans l'ordre choisi. */
+private fun spots(state: MeteoUiState): List<Spot> {
     val current = state.place
     val currentForecast = state.forecast.data
-    val spots = state.favorites.map { p ->
+    val favorites = state.favorites.map { p ->
         val f = if (p.id == current?.id && currentForecast != null) currentForecast else state.summaries.data?.get(p.id)
-        Entry.Spot(p, f, p.elevation ?: f?.elevation ?: 0.0, favorite = true, current = p.id == current?.id)
-    }.toMutableList<Entry>()
-    if (current != null && state.favorites.none { it.id == current.id }) {
-        spots += Entry.Spot(current, currentForecast, current.elevation ?: currentForecast?.elevation ?: 0.0, favorite = false, current = true)
+        Spot(p, f, p.elevation ?: f?.elevation ?: 0.0, favorite = true, current = p.id == current?.id)
     }
-    val marks = ArrayList<Entry>()
-    if (currentForecast != null) {
-        val now = Outlook.nowIndex(currentForecast)
-        val iso = Altitude.freezingLevel(currentForecast, now)
-        if (!iso.isNaN()) marks += Entry.Mark("ISO 0 °C AUJ. · ${Fmt.altitude(iso, 100).uppercase(Locale.FRANCE)}", iso, freezing = true)
-        val today = currentForecast.hourly.time.getOrNull(now)?.toLocalDate() ?: LocalDate.now()
-        // La plus basse limite pluie-neige de la semaine, quand il pleut ou neige.
-        Altitude.days(currentForecast).filter { !it.date.isBefore(today) }.take(8).filter { it.snowLine != null }.minByOrNull { it.snowLine!! }?.let { d ->
-            val label = Outlook.dayLabel(d.date, today).uppercase(Locale.FRANCE)
-            marks += Entry.Mark("PLUIE-NEIGE $label · ${Fmt.altitude(d.snowLine!!, 100).uppercase(Locale.FRANCE)}", d.snowLine, freezing = false)
-        }
+    val shown = if (current != null && state.favorites.none { it.id == current.id }) {
+        listOf(Spot(current, currentForecast, current.elevation ?: currentForecast?.elevation ?: 0.0, favorite = false, current = true))
+    } else {
+        emptyList()
     }
-    // Les repères au-dessus du plus haut lieu ou sous le plus bas restent en tête ou en fin de liste.
-    return (spots + marks).sortedByDescending { it.altitude }
+    return shown + favorites
 }
 
 @Composable
-private fun SpotRow(e: Entry.Spot, editing: Boolean, onSelect: (Place) -> Unit, onToggleFavorite: (Place) -> Unit) {
+private fun SpotRow(
+    e: Spot,
+    editing: Boolean,
+    dragging: Boolean,
+    onSelect: (Place) -> Unit,
+    onToggleFavorite: (Place) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = MaterialTheme.colorScheme
     val f = e.forecast
     val c = f?.current
     val today = f?.daily?.date?.indexOf(c?.time?.toLocalDate())?.takeIf { it >= 0 } ?: 0
-    val note = remember(f) { f?.let { Outlook.placeNote(it, it.daily.date.getOrNull(today) ?: LocalDate.now()) } }
-    Column {
+    Column(modifier.background(colors.background)) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(if (e.current) colors.surfaceContainer else Color.Transparent)
+                .background(if (e.current || dragging) colors.surfaceContainer else Color.Transparent)
                 .clickable { onSelect(e.place) }
                 .padding(start = 12.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
                 .height(IntrinsicSize.Min),
@@ -246,13 +279,10 @@ private fun SpotRow(e: Entry.Spot, editing: Boolean, onSelect: (Place) -> Unit, 
             VerticalDivider(Modifier.padding(horizontal = 12.dp), color = colors.outlineVariant)
             Column(Modifier.weight(1f)) {
                 Text(e.place.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val sub = when {
-                    note != null -> note.text
-                    else -> listOfNotNull(e.place.admin1?.takeIf { it.isNotBlank() }, if (e.current) "affiché" else null).joinToString(" · ")
-                }
-                if (sub.isNotEmpty()) MonoText(sub, color = if (note?.alert == true) AlertRed else colors.onSurfaceVariant, size = 10.sp, maxLines = 2)
+                e.place.department?.let { MonoText(it, size = 10.5.sp) }
             }
             if (editing) {
+                if (e.favorite) Icon(Icons.Outlined.DragHandle, contentDescription = "Appui long pour déplacer", tint = colors.onSurfaceVariant)
                 IconButton(onClick = { onToggleFavorite(e.place) }) {
                     if (e.favorite) {
                         Icon(Icons.Outlined.RemoveCircleOutline, contentDescription = "Retirer des favoris", tint = AlertRed)
@@ -274,32 +304,6 @@ private fun SpotRow(e: Entry.Spot, editing: Boolean, onSelect: (Place) -> Unit, 
                 }
             } else {
                 Box(Modifier.width(108.dp), contentAlignment = Alignment.CenterEnd) { MonoText("…") }
-            }
-        }
-        HorizontalDivider(color = colors.outlineVariant)
-    }
-}
-
-@Composable
-private fun MarkRow(e: Entry.Mark) {
-    val colors = MaterialTheme.colorScheme
-    val color = if (e.freezing) colors.primary else colors.onBackground
-    Column {
-        Row(
-            Modifier.fillMaxWidth().background(colors.surfaceContainerLow).padding(horizontal = 16.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            MonoText(e.text, color = color, size = 10.5.sp, bold = true)
-            Spacer(Modifier.width(8.dp))
-            Canvas(Modifier.weight(1f).height(6.dp)) {
-                drawLine(
-                    color.copy(alpha = 0.6f),
-                    Offset(0f, size.height / 2),
-                    Offset(size.width, size.height / 2),
-                    1.2.dp.toPx(),
-                    cap = StrokeCap.Round,
-                    pathEffect = if (e.freezing) PathEffect.dashPathEffect(floatArrayOf(6f, 5f)) else PathEffect.dashPathEffect(floatArrayOf(1.5f, 5f)),
-                )
             }
         }
         HorizontalDivider(color = colors.outlineVariant)

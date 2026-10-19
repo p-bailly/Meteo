@@ -56,6 +56,7 @@ class DeviceLocation(private val context: Context) {
             latitude = location.latitude,
             longitude = location.longitude,
             admin1 = address?.adminArea,
+            admin2 = address?.subAdminArea ?: "",
             country = address?.countryName,
             elevation = if (location.hasAltitude()) location.altitude else null,
         )

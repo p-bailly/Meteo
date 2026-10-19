@@ -40,6 +40,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import io.github.pbailly.meteo.data.networkMessage
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
@@ -455,7 +456,6 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
 
 private fun Exception.userMessage(): String = when (this) {
     is MapKeyException -> "Clé Windy refusée : vérifie-la dans les Réglages."
-    is java.net.UnknownHostException, is java.net.ConnectException, is java.net.SocketTimeoutException -> "Pas de connexion internet"
-    is IOException -> message ?: "Erreur réseau"
+    is IOException -> networkMessage()
     else -> "Carte indisponible : ${message ?: javaClass.simpleName}"
 }

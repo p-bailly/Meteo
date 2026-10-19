@@ -1,13 +1,9 @@
 package io.github.pbailly.meteo.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,16 +12,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -33,7 +23,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -57,6 +47,9 @@ import kotlin.math.min
 private const val METEOGRAM_DAYS = 7
 private val HOUR_WIDTH = 8.dp
 private val AXIS_WIDTH = 38.dp
+
+/** Marge en haut de la bande du vent, pour que les flèches posées sur la courbe ne débordent pas. */
+private const val WIND_TOP = 12f
 
 /** Bandes horizontales du météogramme, en dp : (titre, hauteur du tracé). */
 private enum class Band(val title: String?, val titleHeight: Float, val plotHeight: Float) {
@@ -111,7 +104,6 @@ fun MeteogramTab(forecast: Forecast, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     val hourPx = with(density) { HOUR_WIDTH.toPx() }
     val now = remember(forecast) { nowIndex(hourly.time, forecast.utcOffsetSeconds) }
-    var selected by rememberSaveable(forecast) { mutableStateOf(now) }
     val (bands, totalHeightPx) = remember(density.density) { layoutBands(density.density) }
     val totalHeight = with(density) { totalHeightPx.toDp() }
     val scroll = rememberScrollState()
@@ -125,22 +117,12 @@ fun MeteogramTab(forecast: Forecast, modifier: Modifier = Modifier) {
     }
 
     Column(modifier.fillMaxWidth()) {
-        HourReadout(forecast, selected.coerceIn(0, hours - 1))
-        Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth()) {
             Row {
                 Spacer(Modifier.width(AXIS_WIDTH))
                 Box(Modifier.horizontalScroll(scroll)) {
-                    Canvas(
-                        Modifier
-                            .size(width = HOUR_WIDTH * hours, height = totalHeight)
-                            .pointerInput(hours) {
-                                detectTapGestures { offset ->
-                                    selected = (offset.x / hourPx).toInt().coerceIn(0, hours - 1)
-                                }
-                            },
-                    ) {
-                        drawMeteogram(forecast, hours, hourPx, bands, scales, colors, now, selected, measurer, scroll.value.toFloat())
+                    Canvas(Modifier.size(width = HOUR_WIDTH * hours, height = totalHeight)) {
+                        drawMeteogram(forecast, hours, hourPx, bands, scales, colors, now, measurer, scroll.value.toFloat())
                     }
                 }
             }
@@ -150,9 +132,8 @@ fun MeteogramTab(forecast: Forecast, modifier: Modifier = Modifier) {
             }
         }
         MonoText(
-            "touchez le graphique pour lire une heure · zones bleutées : nuit",
+            "bleuté : nuit · flèches : sens du vent · orange : maintenant",
             size = 10.sp,
-            maxLines = 2,
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
         )
     }
@@ -196,7 +177,6 @@ private fun DrawScope.drawMeteogram(
     scales: MeteogramScales,
     c: ChartColors,
     now: Int,
-    selected: Int,
     measurer: TextMeasurer,
     scrollX: Float,
 ) {
@@ -229,7 +209,7 @@ private fun DrawScope.drawMeteogram(
     }
     grid(scales.temperatureTicks, bands.getValue(Band.TEMPERATURE))
     grid(scales.precipitationTicks, bands.getValue(Band.PRECIPITATION), 14f * d)
-    grid(scales.windTicks, bands.getValue(Band.WIND), 20f * d)
+    grid(scales.windTicks, bands.getValue(Band.WIND), WIND_TOP * d)
     grid(scales.pressureTicks, bands.getValue(Band.PRESSURE))
 
     // Jours : séparateurs, et nom du jour qui reste visible au bord gauche pendant le défilement.
@@ -256,13 +236,12 @@ private fun DrawScope.drawMeteogram(
         }
     }
 
-    // Heure sélectionnée et heure actuelle, dans les tracés.
-    PLOTS.forEach { band ->
-        val box = bands.getValue(band)
-        drawRect(c.highlight, Offset(selected * hourPx, box.top), Size(hourPx, box.height))
-        if (now in 0 until hours) {
+    // Heure actuelle, en orange, dans les tracés.
+    if (now in 0 until hours) {
+        PLOTS.forEach { band ->
+            val box = bands.getValue(band)
             drawLine(
-                c.secondaryInk, Offset(x(now), box.top), Offset(x(now), box.bottom), 1f * d,
+                c.accent, Offset(x(now), box.top), Offset(x(now), box.bottom), 1.5f * d,
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f * d, 3f * d)),
             )
         }
@@ -323,14 +302,20 @@ private fun DrawScope.drawMeteogram(
         drawRect(c.cloud.copy(alpha = (cover / 100.0 * 0.6).toFloat()), Offset(k * hourPx, cBox.top), Size(hourPx, cBox.height))
     }
 
-    // Vent : vitesse (trait plein), rafales (pointillés) et flèches de direction toutes les 3 h.
+    // Vent : vitesse (trait plein), rafales (pointillés), et sur la courbe du vent moyen une flèche toutes les
+    // 6 heures qui montre où il va, détourée pour rester lisible sur la courbe et les rafales.
     val wBox = bands.getValue(Band.WIND)
-    val wScale = ticksScale(scales.windTicks, wBox, 20f * d)
-    for (k in 0 until hours) {
-        if (everySixHours(h.time[k])) drawWindArrow(Offset(x(k), wBox.top + 9f * d), h.windDirection[k], 12f * d, c.secondaryInk, 1.5f * d)
-    }
+    val wScale = ticksScale(scales.windTicks, wBox, WIND_TOP * d)
     drawSeries(h.windGusts, x, wScale::y, c.wind.copy(alpha = 0.7f), 1.5f * d, dashed = true, range = 0 until hours)
     drawSeries(h.windSpeed, x, wScale::y, c.wind, 2f * d, range = 0 until hours)
+    for (k in 0 until hours) {
+        val speed = h.windSpeed[k]
+        if (!everySixHours(h.time[k]) || speed.isNaN()) continue
+        val at = Offset(x(k), wScale.y(speed))
+        drawCircle(c.plot, radius = 9f * d, center = at)
+        drawCircle(c.wind, radius = 9f * d, center = at, style = Stroke(1f * d))
+        drawWindArrow(at, h.windDirection[k], 12f * d, c.ink, 1.8f * d)
+    }
 
     // Pression au niveau de la mer.
     val prBox = bands.getValue(Band.PRESSURE)
@@ -355,7 +340,7 @@ private fun DrawScope.drawAxes(
     }
     axis(scales.temperatureTicks, bands.getValue(Band.TEMPERATURE))
     axis(scales.precipitationTicks, bands.getValue(Band.PRECIPITATION), 14f * d)
-    axis(scales.windTicks, bands.getValue(Band.WIND), 20f * d)
+    axis(scales.windTicks, bands.getValue(Band.WIND), WIND_TOP * d)
     axis(scales.pressureTicks, bands.getValue(Band.PRESSURE))
 
     // Titres de bande, avec la légende des séries quand il y en a deux.
@@ -396,67 +381,4 @@ private fun DrawScope.legendSwatch(at: Offset, color: Color, dashed: Boolean, bl
             pathEffect = if (dashed) PathEffect.dashPathEffect(floatArrayOf(4f * d, 3f * d)) else null,
         )
     }
-}
-
-/** Valeurs de l'heure sélectionnée, au-dessus du graphique. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun HourReadout(forecast: Forecast, index: Int) {
-    val h = forecast.hourly
-    val time = h.time[index]
-    BorderedCard {
-        Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                WeatherIcon(h.weatherCode[index], h.isDay[index], size = 36.dp)
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Text(
-                        "${Fmt.dayLong(time.toLocalDate())} · ${Fmt.hour(time)}",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        weatherDescription(h.weatherCode[index]),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Metric("Temp.", Fmt.temp(h.temperature[index]))
-                Metric("Ressentie", Fmt.temp(h.apparentTemperature[index]))
-                Metric("Pluie", Fmt.mm(h.precipitation[index]) + " · " + Fmt.percent(h.precipitationProbability[index]))
-                if (h.snowfall[index] > 0) Metric("Neige", Fmt.cm(h.snowfall[index]))
-                Metric("Vent", "${Fmt.kmh(h.windSpeed[index])} ${Fmt.compass(h.windDirection[index])}")
-                Metric("Rafales", Fmt.kmh(h.windGusts[index]))
-                Metric("Humidité", Fmt.percent(h.humidity[index]))
-                Metric("Pression", Fmt.hPa(h.pressure[index]))
-                Metric(
-                    "Nuages b/m/h",
-                    listOf(h.cloudCoverLow, h.cloudCoverMid, h.cloudCoverHigh)
-                        .joinToString("/") { Fmt.percent(it[index]).removeSuffix(" %") } + " %",
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun Metric(label: String, value: String) {
-    Column {
-        MetricLabel(label)
-        Text(value, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-/** Libellé de mesure : capitales en Martian Mono, comme les axes des graphiques. */
-@Composable
-fun MetricLabel(label: String) {
-    Text(
-        label.uppercase(),
-        style = MaterialTheme.typography.labelSmall,
-        fontFamily = AppMono,
-        letterSpacing = 0.6.sp,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
 }

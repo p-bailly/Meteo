@@ -28,7 +28,6 @@ import androidx.compose.material.icons.outlined.Air
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.StarOutline
-import androidx.compose.material.icons.outlined.Terrain
 import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material.icons.outlined.WbTwilight
@@ -150,7 +149,7 @@ private fun TodayHeader(f: Forecast, place: Place, favorite: Boolean, onToggleFa
             val time = f.current?.time ?: LocalDateTime.now()
             MonoText(
                 listOfNotNull(
-                    (place.admin1 ?: place.country)?.takeIf { it.isNotBlank() },
+                    place.department ?: place.country?.takeIf { it.isNotBlank() },
                     Fmt.dateLine(time.toLocalDate()),
                     Fmt.clock(time),
                 ).joinToString(" · "),
@@ -179,28 +178,29 @@ private fun TodayHeader(f: Forecast, place: Place, favorite: Boolean, onToggleFa
 private fun NowBlock(f: Forecast) {
     val c = f.current ?: return
     val today = f.daily.date.indexOf(c.time.toLocalDate()).coerceAtLeast(0)
+    val accent = LocalChartColors.current.accent
     Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 6.dp), verticalAlignment = Alignment.Top) {
-        Text(
-            if (c.temperature.isNaN()) "–" else c.temperature.roundToInt().toString(),
-            fontFamily = AppCondensed,
-            fontWeight = FontWeight.Light,
-            fontSize = 112.sp,
-            lineHeight = 112.sp,
-        )
-        Text("°C", fontFamily = AppSans, fontWeight = FontWeight.Light, fontSize = 26.sp, modifier = Modifier.padding(top = 16.dp))
+        // La température, et le ressenti juste en dessous.
+        Column {
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    if (c.temperature.isNaN()) "–" else c.temperature.roundToInt().toString(),
+                    fontFamily = AppCondensed,
+                    fontWeight = FontWeight.Light,
+                    fontSize = 112.sp,
+                    lineHeight = 112.sp,
+                )
+                Text("°C", fontFamily = AppSans, fontWeight = FontWeight.Light, fontSize = 26.sp, modifier = Modifier.padding(top = 16.dp))
+            }
+            MonoText("ressenti ${Fmt.temp(c.apparentTemperature)}", size = 13.sp, modifier = Modifier.padding(start = 4.dp))
+        }
         Spacer(Modifier.weight(1f))
         Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(top = 20.dp)) {
             WeatherIcon(c.weatherCode, c.isDay, size = 50.dp)
             Text(weatherDescription(c.weatherCode), fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1)
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                MonoText("ressenti ${Fmt.temp(c.apparentTemperature)}")
-                Spacer(Modifier.width(10.dp))
-                MonoText(
-                    "${Fmt.temp(f.daily.temperatureMax.getOrElse(today) { Double.NaN })} / " +
-                        Fmt.temp(f.daily.temperatureMin.getOrElse(today) { Double.NaN }),
-                    color = MaterialTheme.colorScheme.onBackground,
-                    bold = true,
-                )
+                MonoText(Fmt.temp(f.daily.temperatureMax.getOrElse(today) { Double.NaN }), color = accent, bold = true, size = 13.sp)
+                MonoText(" / " + Fmt.temp(f.daily.temperatureMin.getOrElse(today) { Double.NaN }), color = MaterialTheme.colorScheme.primary, bold = true, size = 13.sp)
             }
         }
     }
@@ -211,19 +211,12 @@ private fun NowBlock(f: Forecast) {
 private fun AltitudeNowCard(f: Forecast, terrain: TerrainProfile?, onOpenAltitude: () -> Unit) {
     val i = Outlook.nowIndex(f)
     val ground = Altitude.ground(f)
-    val top = if (ground < 2500) 3000.0 else ground + 1000
-    val lapse = Altitude.lapseRate(f, i, ground, top)
     val iso = Altitude.freezingLevel(f, i)
     val snowLine = Altitude.snowLine(f, i)
     val colors = MaterialTheme.colorScheme
     // Toucher le bloc ouvre la page « Neige & altitude ».
     Panel(Modifier.padding(top = 10.dp), onClick = onOpenAltitude) {
-        PanelTitle(
-            Icons.Outlined.Terrain,
-            "Altitude · maintenant",
-            (if (lapse.isNaN()) "" else String.format(Locale.FRANCE, "%.1f °C / 100 m  ", lapse)) + "›",
-        )
-        ReliefNowChart(f, i, terrain, ground, iso, snowLine, Modifier.fillMaxWidth().height(184.dp).padding(top = 8.dp))
+        ReliefNowChart(f, i, terrain, ground, iso, snowLine, Modifier.fillMaxWidth().height(184.dp))
         HorizontalDivider(Modifier.padding(top = 10.dp, bottom = 8.dp), color = colors.outlineVariant)
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
             // Iso 0 du jour seulement : sa fourchette jusqu'à minuit.
@@ -237,7 +230,7 @@ private fun AltitudeNowCard(f: Forecast, terrain: TerrainProfile?, onOpenAltitud
             }
             AltitudeCell("ISO 0 °C", Fmt.altitude(iso, 100), isoNote, colors.primary, Modifier.weight(1f))
             VerticalDivider(color = colors.outlineVariant)
-            AltitudeCell("PLUIE-NEIGE", Fmt.altitude(snowLine, 100), "verglas : ${iceToday(f, i, terrain)}", colors.onBackground, Modifier.weight(1f))
+            AltitudeCell("PLUIE-NEIGE", Fmt.altitude(snowLine, 100), "iso 0 − 300 m", colors.onBackground, Modifier.weight(1f))
             VerticalDivider(color = colors.outlineVariant)
             val high = if (ground < 1700) 2000.0 else 3000.0
             val wind = Altitude.wind(f, i, high)
@@ -253,15 +246,6 @@ private fun AltitudeNowCard(f: Forecast, terrain: TerrainProfile?, onOpenAltitud
     }
 }
 
-/** Verglas des 24 prochaines heures : « nul », « possible » sur place, ou « > 900 m ». */
-private fun iceToday(f: Forecast, now: Int, terrain: TerrainProfile?): String {
-    val risks = Altitude.iceRisks(f, now, now + 24, iceCeiling(f, terrain))
-    return when {
-        risks.isEmpty() -> "nul"
-        risks.any { it.atPlace } -> "possible"
-        else -> "> ${Fmt.thousands(risks.minOf { it.altitude }, 100)} m"
-    }
-}
 
 @Composable
 private fun AltitudeCell(label: String, value: String, note: String, valueColor: Color, modifier: Modifier) {
@@ -413,9 +397,9 @@ private fun MetricsGrid(f: Forecast) {
         Row(Modifier.height(IntrinsicSize.Min)) {
             Tile(Icons.Outlined.Speed, "PRESSION", number(c.pressure), "hPa$arrow", Modifier.weight(1f))
             VerticalDivider(color = colors.outlineVariant)
-            Tile(Icons.Outlined.WbSunny, "INDICE UV", if (uv.isNaN()) "–" else uv.roundToInt().toString(), uvLabel(uv), Modifier.weight(1f))
+            Tile(Icons.Outlined.WbSunny, "INDICE UV", if (uv.isNaN()) "–" else uv.roundToInt().toString(), uvLabel(uv), Modifier.weight(1f), accent = true)
             VerticalDivider(color = colors.outlineVariant)
-            Tile(Icons.Outlined.WbTwilight, "SOLEIL", sunMain, sunNote, Modifier.weight(1f))
+            Tile(Icons.Outlined.WbTwilight, "SOLEIL", sunMain, sunNote, Modifier.weight(1f), accent = true)
         }
     }
 }
@@ -444,10 +428,11 @@ private fun sunTimes(f: Forecast, now: LocalDateTime): Pair<String, String> {
 }
 
 @Composable
-private fun Tile(icon: ImageVector, label: String, value: String, unit: String, modifier: Modifier) {
+private fun Tile(icon: ImageVector, label: String, value: String, unit: String, modifier: Modifier, accent: Boolean = false) {
     Column(modifier.padding(horizontal = 9.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(14.dp))
+            val tint = if (accent) LocalChartColors.current.accent else MaterialTheme.colorScheme.onSurfaceVariant
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(5.dp))
             MonoText(label, size = 10.sp)
         }
@@ -467,13 +452,11 @@ private fun NextHours(f: Forecast) {
     val hours = (start until minOf(h.size, start + 48)).toList()
     if (hours.isEmpty()) return
     val colors = MaterialTheme.colorScheme
-    Row(
-        Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("Prochaines heures", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
+    // Titre, puis la pluie des 24 prochaines heures en dessous : ni l'un ni l'autre ne passe à la ligne.
+    Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 6.dp)) {
+        Text("Prochaines heures", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, maxLines = 1)
         val (summary, wet) = rainSummary(f, hours.take(24))
-        MonoText(summary, color = if (wet) colors.primary else colors.onSurfaceVariant, bold = wet)
+        MonoText(summary, color = if (wet) colors.primary else colors.onSurfaceVariant, bold = wet, modifier = Modifier.padding(top = 2.dp))
     }
     val measurer = rememberTextMeasurer()
     val chart = LocalChartColors.current
@@ -504,7 +487,12 @@ private fun NextHours(f: Forecast) {
                     else -> "%d h".format(h.time[idx].hour)
                 }
                 if (midnight) drawLine(chart.axis, Offset(col * k, 0f), Offset(col * k, barBottom), 1.5.dp.toPx())
-                drawLabel(measurer, label, Offset(cx, 0f), if (k == 0 || midnight) colors.onBackground else chart.muted, 10.5f, anchorX = 0.5f, bold = k == 0 || midnight)
+                val labelColor = when {
+                    k == 0 -> chart.accent
+                    midnight -> colors.onBackground
+                    else -> chart.muted
+                }
+                drawLabel(measurer, label, Offset(cx, 0f), labelColor, 10.5f, anchorX = 0.5f, bold = k == 0 || midnight)
                 val icon = 30.dp.toPx()
                 drawWeatherIcon(h.weatherCode[idx], h.isDay[idx], dark, Offset(cx - icon / 2, 20.dp.toPx()), icon)
                 val t = h.temperature[idx]
@@ -558,8 +546,7 @@ private fun rainSummary(f: Forecast, hours: List<Int>): Pair<String, Boolean> {
     val ground = Altitude.ground(f)
     val snow = Altitude.snow(f, first..last, ground)
     // Heures des barres, bornes comprises : « 17-20 h ».
-    val tomorrow = if (h.time[first].toLocalDate() != h.time[hours.first()].toLocalDate()) "demain " else ""
-    val span = tomorrow + when {
+    val span = Outlook.rainPeriod(h.time[first], h.time[hours.first()]) + " " + when {
         first == hours.first() -> "jusqu'à ${(h.time[last].hour + 1) % 24} h"
         first == last -> "${h.time[first].hour} h"
         else -> "${h.time[first].hour}-${h.time[last].hour} h"

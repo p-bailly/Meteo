@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -60,7 +61,7 @@ import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.Outlook
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.TerrainProfile
-import io.github.pbailly.meteo.ui.theme.AppSans
+import io.github.pbailly.meteo.ui.theme.AppMono
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
 import java.time.LocalDate
 import java.util.Locale
@@ -130,7 +131,7 @@ fun AltitudeScreen(state: MeteoUiState, place: Place, onRefresh: () -> Unit, onB
                 val title = if (mode == 0) "Coupe du relief · ${Fmt.dayShort(slot.date)}" else "Coupe du relief · ${Fmt.dayShort(slot.date)}, ${slot.main}"
                 Panel(Modifier.padding(top = 12.dp)) {
                     PanelTitle(Icons.Outlined.Terrain, title, "vallée → sommets")
-                    CrossSection(f, slot, state.terrain.data, place, Modifier.fillMaxWidth().height(230.dp).padding(top = 10.dp))
+                    CrossSection(f, slot, state.terrain.data, place, Modifier.fillMaxWidth().height(290.dp).padding(top = 10.dp))
                     Legend()
                 }
             }
@@ -142,7 +143,7 @@ fun AltitudeScreen(state: MeteoUiState, place: Place, onRefresh: () -> Unit, onB
                     Text(if (mode == 0) "Jour par jour" else "Heure par heure", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
                     MonoText("altitudes en km")
                 }
-                TrendChart(f, slots, selected, reference, Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(210.dp))
+                TrendChart(f, slots, selected, reference, Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(260.dp))
             }
             item(key = "table") { AltitudeTable(f, slot, mode, state.terrain.data, place) }
             item(key = "note") {
@@ -170,7 +171,7 @@ private fun daySlots(f: Forecast): List<Slot> {
             sample = if (d.date == today) maxOf(noon, now) else noon,
             top = Fmt.dayName(d.date).removeSuffix("."),
             main = d.date.dayOfMonth.toString(),
-            axis = Fmt.dayName(d.date).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.FRANCE) } + " " + d.date.dayOfMonth,
+            axis = Fmt.dayName(d.date).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.FRANCE) } + "\n" + d.date.dayOfMonth,
             freezingLevel = d.freezingLevel,
             snowLine = d.snowLine,
         )
@@ -306,7 +307,7 @@ private fun CrossSection(f: Forecast, slot: Slot, terrain: TerrainProfile?, plac
         while (t < maxAlt) {
             if (y(t) > top) {
                 drawLine(chart.grid, Offset(left, y(t)), Offset(right, y(t)), 1.dp.toPx())
-                drawLabel(measurer, Fmt.thousands(t), Offset(0f, y(t)), chart.muted, 10f, anchorY = 0.5f)
+                drawLabel(measurer, Fmt.thousands(t), Offset(0f, y(t)), chart.muted, 11f, anchorY = 0.5f)
             }
             t += tick
         }
@@ -319,7 +320,7 @@ private fun CrossSection(f: Forecast, slot: Slot, terrain: TerrainProfile?, plac
             lineTo(left, bottom)
             close()
         }
-        drawPath(fill, colors.primary.copy(alpha = 0.12f))
+        drawPath(fill, colors.primary.copy(alpha = 0.16f))
         if (snowing) {
             clipPath(fill) {
                 clipRect(left, 0f, right, y(snowLine!!), ClipOp.Intersect) {
@@ -327,7 +328,7 @@ private fun CrossSection(f: Forecast, slot: Slot, terrain: TerrainProfile?, plac
                 }
             }
         }
-        drawPath(line, colors.primary, style = Stroke(1.6.dp.toPx(), cap = StrokeCap.Round))
+        drawPath(line, colors.primary, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round))
 
         // Pluie au fond de la vallée quand elle tombe sous la limite pluie-neige.
         if (snowLine != null && ground < snowLine && Altitude.rain(f, slot.hours, ground) >= 0.5) {
@@ -339,12 +340,19 @@ private fun CrossSection(f: Forecast, slot: Slot, terrain: TerrainProfile?, plac
             }
         }
 
-        // Sommets nommés.
-        terrain?.labels?.forEach { label ->
-            val px = x(label.index)
-            val py = y(elevations[label.index])
-            val text = shortName(label.name) + Fmt.thousands(label.elevation)
-            drawLabel(measurer, text, Offset(px.coerceIn(left + 40.dp.toPx(), right - 50.dp.toPx()), py - 4.dp.toPx()), colors.onBackground, 10f, anchorX = 0.5f, anchorY = 1f, bold = true)
+        // Lignes et étiquettes : iso 0 au-dessus de sa ligne, pluie-neige en dessous, côté vallée (à gauche) où le
+        // relief ne les cache pas. Les étiquettes suivantes évitent la place déjà prise.
+        val background = colors.surfaceContainerLowest
+        val taken = ArrayList<Rect>()
+        if (!iso.isNaN() && iso < maxAlt) {
+            val yy = y(iso)
+            drawLine(colors.primary, Offset(left, yy), Offset(right, yy), 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 9f)))
+            taken += drawTag(measurer, "ISO 0 °C · ${Fmt.altitude(iso, 100)}", left + 6.dp.toPx(), yy, colors.primary, background, above = true)
+        }
+        if (snowLine != null && snowLine > minAlt && snowLine < maxAlt) {
+            val yy = y(snowLine)
+            drawLine(colors.onBackground, Offset(left, yy), Offset(right, yy), 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 6f)), cap = StrokeCap.Round)
+            taken += drawTag(measurer, "PLUIE-NEIGE · ${Fmt.altitude(snowLine, 100)}", left + 6.dp.toPx(), yy, colors.onBackground, background, above = false)
         }
 
         // Neige attendue à 2 000 et 3 000 m, sur le versant vers le sommet.
@@ -355,33 +363,31 @@ private fun CrossSection(f: Forecast, slot: Slot, terrain: TerrainProfile?, plac
             val range = if (summitIndex >= placeIndex) placeIndex..summitIndex else summitIndex..placeIndex
             val k = range.firstOrNull { elevations[it] >= alt } ?: continue
             val point = Offset(x(k), y(elevations[k]))
-            drawCircle(colors.primary, 3.5.dp.toPx(), point)
-            drawText(
-                measurer.measure("+${cm.roundToInt()} cm", TextStyle(color = colors.primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFamily = AppSans)),
-                topLeft = Offset(point.x - 50.dp.toPx(), point.y - 20.dp.toPx()),
-            )
+            drawCircle(colors.primary, 4.dp.toPx(), point)
+            drawPill(measurer, "+${cm.roundToInt()} cm", Offset(point.x - 6.dp.toPx(), point.y - 6.dp.toPx()), colors.primary, background, 13f, 1f, 1f, left, right, taken)
+                ?.let { taken += it }
         }
 
-        val background = colors.surfaceContainerLowest
-        if (!iso.isNaN() && iso < maxAlt) {
-            val yy = y(iso)
-            drawLine(colors.primary, Offset(left, yy), Offset(right, yy), 1.6.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 9f)))
-            drawTagRight(measurer, "ISO 0 °C · ${Fmt.altitude(iso, 100)}", right, yy, colors.primary, background, above = true)
-        }
-        if (snowLine != null && snowLine > minAlt && snowLine < maxAlt) {
-            val yy = y(snowLine)
-            drawLine(colors.onBackground, Offset(left, yy), Offset(right, yy), 1.6.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 5f)), cap = StrokeCap.Round)
-            drawTagRight(measurer, "PLUIE-NEIGE · ${Fmt.altitude(snowLine, 100)}", right, yy, colors.onBackground, background, above = false)
+        // Sommets nommés, sur fond pour rester lisibles ; un nom qui en chevaucherait un autre est omis.
+        terrain?.labels?.forEach { label ->
+            val px = x(label.index)
+            val py = y(elevations[label.index])
+            val text = shortName(label.name) + Fmt.thousands(label.elevation)
+            drawPill(measurer, text, Offset(px, py - 5.dp.toPx()), colors.onBackground, background, 11.5f, 0.5f, 1f, left, right, taken)
+                ?.let { taken += it }
         }
 
-        drawLabel(
+        drawPill(
             measurer,
             place.name,
-            Offset((x(placeIndex)).coerceAtLeast(left + 4.dp.toPx()), bottom - 4.dp.toPx()),
+            Offset(x(placeIndex), bottom - 4.dp.toPx()),
             colors.onBackground,
-            10f,
-            anchorY = 1f,
-            bold = true,
+            background,
+            11.5f,
+            0f,
+            1f,
+            left,
+            right,
         )
     }
 }
@@ -397,25 +403,55 @@ private fun shortName(name: String?): String {
     return (if (short.length > 18) short.take(17) + "…" else short) + " "
 }
 
-/** Étiquette encadrée posée au bout droit d'une ligne. */
-private fun DrawScope.drawTagRight(
-    measurer: androidx.compose.ui.text.TextMeasurer,
+/** Étiquette encadrée posée au-dessus ou au-dessous d'une ligne, à partir de [left] ; renvoie la place occupée. */
+private fun DrawScope.drawTag(
+    measurer: TextMeasurer,
     text: String,
-    right: Float,
+    left: Float,
     y: Float,
     color: Color,
     background: Color,
     above: Boolean,
-) {
-    val layout = measurer.measure(text, TextStyle(color = color, fontSize = 10.sp, fontFamily = io.github.pbailly.meteo.ui.theme.AppMono, fontWeight = FontWeight.Medium))
-    val pad = 4.dp.toPx()
+): Rect {
+    val layout = measurer.measure(text, TextStyle(color = color, fontSize = 11.sp, fontFamily = AppMono, fontWeight = FontWeight.SemiBold))
+    val pad = 5.dp.toPx()
     val w = layout.size.width + 2 * pad
     val h = layout.size.height + pad
-    val top = if (above) y - h - 2.dp.toPx() else y + 2.dp.toPx()
-    val left = right - w - 2.dp.toPx()
-    drawRoundRect(background, Offset(left, top), Size(w, h), CornerRadius(4.dp.toPx()))
-    drawRoundRect(color, Offset(left, top), Size(w, h), CornerRadius(4.dp.toPx()), style = Stroke(1.dp.toPx()))
+    val top = if (above) y - h - 3.dp.toPx() else y + 3.dp.toPx()
+    drawRoundRect(background, Offset(left, top), Size(w, h), CornerRadius(5.dp.toPx()))
+    drawRoundRect(color, Offset(left, top), Size(w, h), CornerRadius(5.dp.toPx()), style = Stroke(1.dp.toPx()))
     drawText(layout, topLeft = Offset(left + pad, top + pad / 2))
+    return Rect(left, top, left + w, top + h)
+}
+
+/**
+ * Texte sur un fond arrondi, ancré en [at] ([anchorX], [anchorY] comme [drawLabel]) et gardé entre [minX] et
+ * [maxX]. Rien n'est dessiné s'il chevauche une des zones [avoid] : renvoie alors null, sinon la place occupée.
+ */
+private fun DrawScope.drawPill(
+    measurer: TextMeasurer,
+    text: String,
+    at: Offset,
+    color: Color,
+    background: Color,
+    sizeSp: Float,
+    anchorX: Float,
+    anchorY: Float,
+    minX: Float,
+    maxX: Float,
+    avoid: List<Rect> = emptyList(),
+): Rect? {
+    val layout = measurer.measure(text, TextStyle(color = color, fontSize = sizeSp.sp, fontFamily = AppMono, fontWeight = FontWeight.SemiBold))
+    val padX = 4.dp.toPx()
+    val padY = 1.dp.toPx()
+    val w = layout.size.width + 2 * padX
+    val h = layout.size.height + 2 * padY
+    val left = (at.x - w * anchorX).coerceIn(minX, maxOf(minX, maxX - w))
+    val rect = Rect(left, at.y - h * anchorY, left + w, at.y - h * anchorY + h)
+    if (avoid.any { it.overlaps(rect) }) return null
+    drawRoundRect(background.copy(alpha = 0.88f), rect.topLeft, rect.size, CornerRadius(5.dp.toPx()))
+    drawText(layout, topLeft = Offset(rect.left + padX, rect.top + padY))
+    return rect
 }
 
 /** Iso 0 °C (tirets, points) et limite pluie-neige (pointillés, losanges) jour par jour, puis la neige à 2 000 m. */
@@ -430,9 +466,10 @@ private fun TrendChart(f: Forecast, slots: List<Slot>, selected: Int, reference:
         val col = (size.width - axis) / slots.size
         fun cx(k: Int) = axis + col * k + col / 2
         val plotTop = 18.dp.toPx()
-        val plotBottom = size.height - 72.dp.toPx()
+        val plotBottom = size.height - 84.dp.toPx()
         val values = slots.flatMap { listOfNotNull(it.freezingLevel.takeIf { v -> !v.isNaN() }, it.snowLine) }
-        val lo = ((values.minOrNull() ?: 1000.0) - 400).coerceAtLeast(0.0)
+        // Marge sous la plus basse limite pluie-neige pour sa valeur, au-dessus des jours.
+        val lo = ((values.minOrNull() ?: 1000.0) - 600).coerceAtLeast(0.0)
         val hi = (values.maxOrNull() ?: 3000.0) + 300
         val scaleMin = Math.floor(lo / 1000) * 1000
         val scaleMax = maxOf(Math.ceil(hi / 1000) * 1000, scaleMin + 2000)
@@ -449,7 +486,7 @@ private fun TrendChart(f: Forecast, slots: List<Slot>, selected: Int, reference:
         while (t <= scaleMax) {
             if (t > 0) {
                 drawLine(chart.grid, Offset(axis, y(t)), Offset(size.width, y(t)), 1.dp.toPx())
-                drawLabel(measurer, Fmt.thousands(t), Offset(0f, y(t)), chart.muted, 10f, anchorY = 0.5f)
+                drawLabel(measurer, Fmt.thousands(t), Offset(0f, y(t)), chart.muted, 11f, anchorY = 0.5f)
             }
             t += 1000
         }
@@ -462,7 +499,7 @@ private fun TrendChart(f: Forecast, slots: List<Slot>, selected: Int, reference:
             if (!started) isoPath.moveTo(cx(k), y(s.freezingLevel)) else isoPath.lineTo(cx(k), y(s.freezingLevel))
             started = true
         }
-        drawPath(isoPath, colors.primary, style = Stroke(1.6.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f))))
+        drawPath(isoPath, colors.primary, style = Stroke(2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f))))
         val snowPath = Path()
         var previous: Int? = null
         slots.forEachIndexed { k, s ->
@@ -470,14 +507,17 @@ private fun TrendChart(f: Forecast, slots: List<Slot>, selected: Int, reference:
             if (previous == k - 1) snowPath.lineTo(cx(k), y(line)) else snowPath.moveTo(cx(k), y(line))
             previous = k
         }
-        drawPath(snowPath, colors.onBackground, style = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 5f))))
+        drawPath(snowPath, colors.onBackground, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 6f))))
 
+        // Valeurs sur fond, iso 0 au-dessus de son point et pluie-neige sous son losange : elles ne se croisent pas.
+        val background = colors.surfaceContainerLowest
         slots.forEachIndexed { k, s ->
             val bold = k == selected
+            val tint = if (bold) colors.surfaceContainer else background
             if (!s.freezingLevel.isNaN()) {
                 val p = Offset(cx(k), y(s.freezingLevel))
-                drawCircle(colors.primary, 3.5.dp.toPx(), p)
-                drawLabel(measurer, km(s.freezingLevel), Offset(p.x, p.y - 5.dp.toPx()), colors.primary, 10.5f, anchorX = 0.5f, anchorY = 1f, bold = true)
+                drawCircle(colors.primary, 4.dp.toPx(), p)
+                drawPill(measurer, km(s.freezingLevel), Offset(p.x, p.y - 6.dp.toPx()), colors.primary, tint, 12f, 0.5f, 1f, axis, size.width)
             }
             val line = s.snowLine
             if (line != null) {
@@ -486,25 +526,27 @@ private fun TrendChart(f: Forecast, slots: List<Slot>, selected: Int, reference:
                 val diamond = Path().apply {
                     moveTo(p.x, p.y - r); lineTo(p.x + r, p.y); lineTo(p.x, p.y + r); lineTo(p.x - r, p.y); close()
                 }
-                drawPath(diamond, colors.surfaceContainerLowest)
-                drawPath(diamond, colors.onBackground, style = Stroke(1.4.dp.toPx()))
-                drawLabel(measurer, km(line), Offset(p.x, p.y + 6.dp.toPx()), colors.onBackground, 10.5f, anchorX = 0.5f)
-            } else if (!s.freezingLevel.isNaN()) {
-                drawLabel(measurer, "sec", Offset(cx(k), y(s.freezingLevel) + 30.dp.toPx()), chart.muted, 9.5f, anchorX = 0.5f)
+                drawPath(diamond, background)
+                drawPath(diamond, colors.onBackground, style = Stroke(1.6.dp.toPx()))
+                drawPill(measurer, km(line), Offset(p.x, p.y + 7.dp.toPx()), colors.onBackground, tint, 12f, 0.5f, 0f, axis, size.width)
             }
-            drawLabel(measurer, s.axis, Offset(cx(k), plotBottom + 8.dp.toPx()), if (bold) colors.onBackground else chart.muted, 9.5f, anchorX = 0.5f, bold = bold)
+            // Jour (ou heure) sur deux lignes : « Lun » puis « 20 ».
+            s.axis.split("\n").forEachIndexed { n, text ->
+                val color = if (bold) colors.onBackground else chart.muted
+                drawLabel(measurer, text, Offset(cx(k), plotBottom + (8 + 15 * n).dp.toPx()), color, 11f, anchorX = 0.5f, bold = bold || n == 0)
+            }
         }
 
         // Neige à 2 000 m.
-        val rowTop = plotBottom + 30.dp.toPx()
+        val rowTop = plotBottom + 42.dp.toPx()
         val rowBottom = size.height - 4.dp.toPx()
         drawLine(chart.axis, Offset(axis, rowBottom), Offset(size.width, rowBottom), 1.dp.toPx())
-        drawLabel(measurer, "cm à", Offset(0f, rowTop + 6.dp.toPx()), chart.muted, 9.5f)
-        drawLabel(measurer, Fmt.thousands(reference), Offset(0f, rowTop + 20.dp.toPx()), chart.muted, 9.5f)
+        drawLabel(measurer, "cm à", Offset(0f, rowTop + 4.dp.toPx()), chart.muted, 10f)
+        drawLabel(measurer, Fmt.thousands(reference), Offset(0f, rowTop + 18.dp.toPx()), chart.muted, 10f)
         val maxCm = maxOf(10.0, snow.maxOrNull() ?: 0.0)
         snow.forEachIndexed { k, cm ->
             if (cm < 1) {
-                drawLabel(measurer, "0", Offset(cx(k), rowBottom - 2.dp.toPx()), chart.muted, 10f, anchorX = 0.5f, anchorY = 1f)
+                drawLabel(measurer, "0", Offset(cx(k), rowBottom - 2.dp.toPx()), chart.muted, 11f, anchorX = 0.5f, anchorY = 1f)
                 return@forEachIndexed
             }
             val h = ((cm / maxCm) * (rowBottom - rowTop - 16.dp.toPx())).toFloat().coerceAtLeast(10.dp.toPx())
@@ -519,7 +561,7 @@ private fun TrendChart(f: Forecast, slots: List<Slot>, selected: Int, reference:
                 }
             }
             drawRoundRect(colors.primary, rect.topLeft, rect.size, CornerRadius(3.dp.toPx()), style = Stroke(1.dp.toPx()))
-            drawLabel(measurer, "+${cm.roundToInt()}", Offset(cx(k), rect.top - 2.dp.toPx()), colors.primary, 10f, anchorX = 0.5f, anchorY = 1f, bold = true)
+            drawLabel(measurer, "+${cm.roundToInt()}", Offset(cx(k), rect.top - 2.dp.toPx()), colors.primary, 11.5f, anchorX = 0.5f, anchorY = 1f, bold = true)
         }
     }
 }

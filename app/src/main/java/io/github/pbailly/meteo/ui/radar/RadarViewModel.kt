@@ -24,6 +24,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import io.github.pbailly.meteo.data.networkMessage
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
@@ -342,8 +343,6 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
 private fun Exception.userMessage(): String = when (this) {
     is RadarAuthException ->
         "Clé Météo-France refusée. Vérifie la clé et l'abonnement à l'API « DonneesPubliquesRadar » (bouton clé en haut)."
-    is java.net.UnknownHostException, is java.net.ConnectException, is java.net.SocketTimeoutException ->
-        "Pas de connexion internet"
-    is IOException -> message ?: "Erreur réseau"
+    is IOException -> networkMessage()
     else -> "Radar indisponible : ${message ?: javaClass.simpleName}"
 }

@@ -1,5 +1,8 @@
 package io.github.pbailly.meteo.data.radar
 
+import io.github.pbailly.meteo.data.HttpStatusException
+import io.github.pbailly.meteo.data.retryOnNetworkError
+
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +25,7 @@ import java.time.Instant
 /** Une image radar enregistrée sur le téléphone (PNG Web Mercator couvrant [MeteoFranceRadar.BOUNDS]). */
 data class RadarFrame(val time: Instant, val file: File)
 
-class RadarAuthException : IOException("Clé Météo-France refusée")
+class RadarAuthException : HttpStatusException(401, "Clé Météo-France refusée")
 
 class RadarPixels(val width: Int, val height: Int, val argb: IntArray)
 
@@ -125,7 +128,7 @@ class MeteoFranceRadar(
 }
 
 /** GET sur les API Météo-France, avec la clé dans l'en-tête `apikey`. */
-internal fun meteoFranceGet(url: String, apiKey: String, accept: String): ByteArray {
+internal fun meteoFranceGet(url: String, apiKey: String, accept: String): ByteArray = retryOnNetworkError {
     val connection = URL(url).openConnection() as HttpURLConnection
     try {
         connection.connectTimeout = 15_000
@@ -133,10 +136,10 @@ internal fun meteoFranceGet(url: String, apiKey: String, accept: String): ByteAr
         connection.setRequestProperty("apikey", apiKey)
         connection.setRequestProperty("Accept", accept)
         when (val code = connection.responseCode) {
-            in 200..299 -> return connection.inputStream.use { it.readBytes() }
+            in 200..299 -> connection.inputStream.use { it.readBytes() }
             401, 403 -> throw RadarAuthException()
-            429 -> throw IOException("Trop de demandes à Météo-France, réessaie dans quelques minutes")
-            else -> throw IOException("Météo-France : erreur HTTP $code")
+            429 -> throw HttpStatusException(429, "Trop de demandes à Météo-France, réessaie dans quelques minutes")
+            else -> throw HttpStatusException(code, "Météo-France indisponible (erreur $code), réessaie plus tard")
         }
     } finally {
         connection.disconnect()

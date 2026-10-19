@@ -20,24 +20,30 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
 Cinq onglets dans la barre du bas, ou en glissant d'une page à l'autre (sauf sur la carte, où le glissement déplace
 la carte) :
 
-- **Aujourd'hui** : le lieu et son altitude, la température en grand, le ciel, le ressenti et les extrêmes du jour ;
-  le bloc **Altitude · maintenant** : coupe du relief du lieu vers le plus haut sommet des environs, température
-  sur place, à 1 000, 1 500, 2 000, 3 000 m et au sommet, gradient (°C / 100 m), iso 0 °C (tirets) et limite
-  pluie-neige (pointillés), ressenti et vent à 2 000 m, risque de verglas ; puis vent, rafales, humidité, pression
-  (et sa tendance), indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler
-  (pictogramme, courbe de température, probabilité et barres de pluie, résumé « pluie 17-20 h · 3,0 mm »).
-  Toucher le bloc Altitude ouvre la page **Neige & altitude** (voir plus bas).
-- **Prévisions** (14 jours par défaut, ou 7) : alertes **retour de la neige** (jours, limite pluie-neige, cumuls
-  à 2 000 m) et **verglas possible** (créneau, routes concernées) ; tableau des jours : mini-maxi, pluie (mm), vent
-  maximal (km/h), ensoleillement (heures), neige s'il en tombe, iso 0 °C du jour, et **fenêtres de beau temps**
-  (au moins 6 h sèches, peu nuageuses, vent < 20 km/h). Toucher un jour ouvre son **détail heure par heure** (avec la
+- **Aujourd'hui** : le lieu, son département et son altitude, la température en grand avec le ressenti juste en
+  dessous, le ciel et les extrêmes du jour (maxi en orange, mini en bleu) ; le bloc altitude : coupe du relief du
+  lieu vers le plus haut sommet des environs, température sur place, à 1 000, 1 500, 2 000, 3 000 m et au sommet,
+  iso 0 °C (tirets) et limite pluie-neige (pointillés), ressenti et vent à 2 000 m ; puis vent, rafales, humidité,
+  pression (et sa tendance), indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler
+  (pictogramme, courbe de température, probabilité et barres de pluie) avec le résumé de la pluie : « pluie
+  aujourd'hui 17-20 h · 3,0 mm » le matin et en journée, « pluie cette nuit… » le soir (et pour une pluie d'après
+  minuit), sinon « demain ». Toucher le bloc altitude ouvre la page **Neige & altitude** (voir plus bas).
+- **Prévisions** (14 jours par défaut, ou 7) : pour chaque jour, le pictogramme, la barre mini-maxi (du bleu à
+  l'orange), et l'un sous l'autre la pluie (goutte, mm), le vent maximal (flèche dans la direction où il souffle,
+  km/h, en rouge à partir de 40) et l'ensoleillement (soleil, heures) ; la neige attendue s'il en tombe, et l'iso
+  0 °C actuelle sur la ligne d'aujourd'hui. Toucher un jour ouvre son **détail heure par heure** (avec la
   prévisibilité, comme sur Meteoblue).
-- **Météogramme** : météogramme horaire sur 7 jours, graphique 14 jours avec la prévisibilité, et comparaison de
-  8 modèles avec leur moyenne.
-- **Neige & altitude** (depuis le bloc Altitude d'Aujourd'hui ; par jour ou par tranche de 3 heures) : coupe du relief vallée → sommets avec
-  l'iso 0, la limite pluie-neige, les sommets nommés, la neige attendue à 2 000 et 3 000 m et les pentes enneigées ;
-  iso 0 et limite pluie-neige jour par jour, neige à 2 000 m ; température, ressenti, vent et neige au sommet,
-  à 2 000 m et sur le lieu.
+- **Météogramme** :
+  - **7 jours**, heure par heure : température et ressenti, pluie et sa probabilité, nuages, vent moyen et rafales,
+    pression ; sur la courbe du vent moyen, une flèche toutes les 6 heures montre où va le vent ; trait orange :
+    maintenant ;
+  - **14 jours**, en grand, à faire glisser du doigt : pictogramme, accord des modèles (prévisibilité), mini-maxi,
+    cumul de pluie et vent du jour (flèche de la direction dominante et vitesse maximale) ;
+  - **Modèles** : comparaison de 8 modèles avec leur moyenne.
+- **Neige & altitude** (depuis le bloc altitude d'Aujourd'hui ; par jour ou par tranche de 3 heures) : coupe du
+  relief vallée → sommets avec l'iso 0, la limite pluie-neige, les sommets nommés, la neige attendue à 2 000 et
+  3 000 m et les pentes enneigées ; iso 0 et limite pluie-neige jour par jour, neige à 2 000 m ; température,
+  ressenti, vent et neige au sommet, à 2 000 m et sur le lieu.
 - **Radar** : les cartes, avec frise des heures et animation :
   - **Pluie** : radar Météo-France et sa prévision (voir ci-dessous pour la clé) ;
   - **Température** à 2 m maintenant : modèle ICON-EU du DWD (sans clé), colorée comme les cases de température de
@@ -51,10 +57,9 @@ la carte) :
   - **Webcams** autour du lieu : Windy, avec une clé gratuite (api.windy.com) à saisir dans les Réglages ;
     toucher un point affiche l'image et le lien vers la page Windy.
 - **Lieux** : recherche (ville, col, station, sommet), **météo à ma position** (GPS du téléphone, sans les services
-  Google), favoris **rangés par altitude** avec leur température, leurs extrêmes et une note (ressenti glacial,
-  verglas, neige à venir) ; l'iso 0 °C du jour et la plus basse limite pluie-neige de la semaine s'intercalent entre
-  les lieux, à leur altitude. « Modifier » retire des favoris ; l'engrenage ouvre les **Réglages** (modèles de la
-  comparaison, clés Météo-France et Windy).
+  Google), favoris avec leur département, leur altitude, leur température et leurs extrêmes, **dans l'ordre choisi** :
+  appui long sur un lieu puis glisser pour le déplacer. « Modifier » retire des favoris ; l'engrenage ouvre les
+  **Réglages** (modèles de la comparaison, clés Météo-France et Windy).
 
 Comment la prévision est résumée :
 
@@ -63,8 +68,8 @@ Comment la prévision est résumée :
   durent (au moins 2 heures et 1 mm sur une journée), intensité selon le cumul, sinon le ciel moyen de la journée.
 - **Pas de grêle** : les codes « orage avec grêle » d'Open-Meteo ne sont fiables qu'en Europe centrale ; ils sont
   affichés comme des orages.
-- **En plaine** (aucun relief au-dessus de 1 500 m autour du lieu), la neige est comptée sur le lieu et non à 2 000 m,
-  et le verglas n'est cherché que jusqu'au plus haut point des environs.
+- **En plaine** (aucun relief au-dessus de 1 500 m autour du lieu), la neige est comptée sur le lieu et non à
+  2 000 m.
 
 Comment l'altitude est calculée :
 
@@ -73,13 +78,13 @@ Comment l'altitude est calculée :
   −0,65 °C par 100 m. Ressenti en altitude : formule du refroidissement éolien d'Environnement Canada.
 - **Limite pluie-neige** : 300 m sous l'iso 0 °C. **Neige à une altitude** : la pluie prévue sur le lieu, quand
   elle tombe au-dessus de la limite pluie-neige (1 mm d'eau ≈ 1 cm de neige fraîche).
-- **Verglas** : pluie verglaçante, ou routes mouillées par la pluie des 12 dernières heures quand la température
-  retombe sous 0,5 °C, sur le lieu ou jusqu'à 1 200 m au-dessus.
 - **Coupe du relief** : sommets nommés d'OpenStreetMap (API Overpass, sans clé) et altitudes du terrain
   (modèle Copernicus à 90 m, via l'API d'altitude d'Open-Meteo), téléchargées une seule fois par lieu.
 
-Thème clair et sombre, identité « Glacier » (voir `design/`), cache local (pas de nouvel appel pendant 30 min,
-affichage hors ligne).
+Thème clair et sombre, identité « Glacier » (voir `design/`) avec l'orange en couleur d'accent, cache local (pas de
+nouvel appel pendant 30 min, affichage hors ligne). Une connexion coupée en plein téléchargement (réseau mobile
+instable, erreur « SSL… BAD_DECRYPT ») est retentée deux fois ; si elle échoue encore, l'app affiche un message
+simple (« Connexion interrompue, touche ↻ pour réessayer ») au lieu de l'erreur brute.
 
 ## Radar Météo-France : la clé
 
@@ -128,9 +133,9 @@ Kotlin, Jetpack Compose, Gradle (wrapper inclus). Il faut un JDK 17+ et le SDK A
 Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 
 - `data/` : appels Open-Meteo et lecture des réponses (`OpenMeteoApi`), cache (`WeatherRepository`),
-  favoris (`PlacesStore`), position (`DeviceLocation`) ; météo en altitude, limite pluie-neige, neige, verglas et
-  fenêtres de beau temps (`Altitude`), alertes et notes des lieux (`Outlook`), coupe du relief (`Terrain`, avec
-  Overpass pour les sommets).
+  favoris (`PlacesStore`), position (`DeviceLocation`), nouvelles tentatives et messages d'erreur réseau
+  (`Http`) ; météo en altitude, limite pluie-neige et neige (`Altitude`), pictogramme du jour et moment de la pluie
+  (`Outlook`), coupe du relief (`Terrain`, avec Overpass pour les sommets).
 - `data/maps/` : couches des cartes (`MapLayers`) et relevés des stations (`Observations` : Météo-France,
   MétéoSuisse, METAR, répartition des pastilles selon le zoom).
 - `data/radar/` : API radar Météo-France et stockage des images (`MeteoFranceRadar`), lecture des fichiers
