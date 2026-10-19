@@ -64,7 +64,7 @@ import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.Predictability
 import io.github.pbailly.meteo.data.RainRange
-import io.github.pbailly.meteo.ui.theme.PlexMono
+import io.github.pbailly.meteo.ui.theme.AppMono
 import io.github.pbailly.meteo.ui.theme.RainChanceOnNavy
 import io.github.pbailly.meteo.ui.theme.SecondaryOnNavy
 import io.github.pbailly.meteo.ui.theme.uvColor
@@ -88,7 +88,7 @@ fun ForecastScreen(
 ) {
     Scaffold(
         topBar = {
-            NavyTopBar(
+            AppTopBar(
                 title = { SearchPill(place.name, onOpenPlaces) },
                 actions = {
                     IconButton(onClick = onToggleFavorite) {
@@ -130,6 +130,7 @@ fun ForecastScreen(
                 else -> LazyColumn(Modifier.fillMaxSize()) {
                     item(key = "status") { StatusBanner(forecast) }
                     item(key = "current") { CurrentBlock(data, place, forecast.fetchedAt, onOpenRadar, onOpenMeteograms) }
+                    item(key = "altitude") { AltitudeCard(data) }
                     item(key = "strip") { HourlyStrip(data, Modifier.padding(bottom = 12.dp)) }
                     item(key = "days") { DayList(data, state.multiModel.data, onOpenDay) }
                     item(key = "attribution") { Attribution() }
@@ -147,14 +148,14 @@ private fun SearchPill(name: String, onClick: () -> Unit) {
             .padding(end = 4.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .background(Color.White.copy(alpha = 0.12f))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Filled.Search, contentDescription = "Changer de lieu", tint = Color.White)
+        Icon(Icons.Filled.Search, contentDescription = "Changer de lieu", tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.width(8.dp))
-        Text(name, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+        Text(name, color = MaterialTheme.colorScheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
     }
 }
 
@@ -287,7 +288,7 @@ private fun DayRow(forecast: Forecast, multiModel: MultiModelForecast?, i: Int, 
             Text(
                 "%02d/%02d".format(date.dayOfMonth, date.monthValue),
                 color = SecondaryOnNavy,
-                fontFamily = PlexMono,
+                fontFamily = AppMono,
                 fontSize = 13.sp,
             )
         }
@@ -296,7 +297,7 @@ private fun DayRow(forecast: Forecast, multiModel: MultiModelForecast?, i: Int, 
             Text(
                 Fmt.percent(d.precipitationProbabilityMax[i]).replace(" ", ""),
                 color = RainChanceOnNavy,
-                fontFamily = PlexMono,
+                fontFamily = AppMono,
                 fontSize = 13.sp,
             )
         }
@@ -318,7 +319,7 @@ private fun DayRow(forecast: Forecast, multiModel: MultiModelForecast?, i: Int, 
                 Text(Fmt.kmh(d.windSpeedMax[i]), color = Color.White, fontSize = 14.sp)
             }
             val (rain, heavy) = rainText(d.precipitationSum[i], range)
-            IconText(Icons.Outlined.WaterDrop, rain, if (heavy) Color(0xFFFF6B5F) else Color.White)
+            IconText(Icons.Outlined.WaterDrop, rain, if (heavy) Color(0xFFFFDAD6) else Color.White)
             IconText(Icons.Outlined.WbSunny, Fmt.sunshine(d.sunshineDuration[i]), Color.White)
         }
     }

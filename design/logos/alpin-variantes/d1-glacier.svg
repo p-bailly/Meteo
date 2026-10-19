@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Météo, direction Glacier : sommet enneigé au-dessus de l'iso 0 °C, balise de secours">
+  <!-- Grille 108 × 108 de l'icône adaptative Android ; le sommet et la balise tiennent dans la zone sûre. -->
+  <rect width="108" height="108" fill="#1C6497"/>
+  <defs><clipPath id="neige"><rect width="108" height="57.94"/></clipPath></defs>
+  <path d="M22.08 81.46L43.92 49.54L52.32 59.62L64.08 39.46L85.92 81.46Z" fill="#9BCBE9"/>
+  <path d="M22.08 81.46L43.92 49.54L52.32 59.62L64.08 39.46L85.92 81.46Z" fill="#FFFFFF" clip-path="url(#neige)"/>
+  <path d="M22.08 57.94H26.28M29.22 57.94H33.42M36.36 57.94H40.56M43.5 57.94H47.7M50.64 57.94H54.84M57.78 57.94H61.98M64.92 57.94H69.12M72.06 57.94H76.26M79.2 57.94H83.4" stroke="#0F2133" stroke-width="1.71" stroke-linecap="round"/>
+  <circle cx="74" cy="37" r="5.88" fill="#C8202A" stroke="#FFFFFF" stroke-width="1.85"/>
+</svg>

@@ -72,12 +72,13 @@ import io.github.pbailly.meteo.data.maps.DwdTemperature
 import io.github.pbailly.meteo.data.maps.TileLayer
 import io.github.pbailly.meteo.data.maps.WindyWebcams
 import io.github.pbailly.meteo.data.radar.RainClass
-import io.github.pbailly.meteo.ui.NavyTopBar
+import io.github.pbailly.meteo.ui.AppTopBar
 import io.github.pbailly.meteo.ui.theme.HeaderBlue
 import io.github.pbailly.meteo.ui.theme.OnTemperature
-import io.github.pbailly.meteo.ui.theme.PlexMono
+import io.github.pbailly.meteo.ui.theme.AppMono
 import io.github.pbailly.meteo.ui.theme.RainChanceOnNavy
 import io.github.pbailly.meteo.ui.theme.SecondaryOnNavy
+import io.github.pbailly.meteo.ui.theme.SelectedOnCard
 import io.github.pbailly.meteo.ui.theme.temperatureColor
 import kotlinx.coroutines.delay
 import org.maplibre.android.geometry.LatLng
@@ -87,8 +88,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-/** Fond de la frise des heures, un ton au-dessus du marine de la barre. */
-private val TIMELINE_BLUE = Color(0xFF123F63)
+/** Fond de la frise des heures, un ton sous le bleu glacier des cartes. */
+private val TIMELINE_BLUE = Color(0xFF15527F)
 private const val REFRESH_MS = 2 * 60 * 1000L
 
 /**
@@ -148,7 +149,7 @@ fun RadarRoute(
         onCloseWebcam = layers::closeWebcam,
     )
 }
-private val SELECTED_BLUE = Color(0xFF1F6FAE)
+private val SELECTED_BLUE = SelectedOnCard
 private val clock = DateTimeFormatter.ofPattern("HH:mm")
 private val dayHour = DateTimeFormatter.ofPattern("EEE HH'h'", Locale.FRANCE)
 
@@ -174,7 +175,7 @@ fun RadarScreen(
 
     Scaffold(
         topBar = {
-            NavyTopBar(
+            AppTopBar(
                 title = { Text("Cartes", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
@@ -340,7 +341,7 @@ private fun TemperatureLegend(modifier: Modifier = Modifier) {
                 "$t°",
                 color = OnTemperature,
                 style = MaterialTheme.typography.labelMedium,
-                fontFamily = PlexMono,
+                fontFamily = AppMono,
                 modifier = Modifier.fillMaxWidth().background(temperatureColor(t.toDouble())).padding(horizontal = 6.dp, vertical = 1.dp),
             )
         }
@@ -457,7 +458,7 @@ private fun Timeline(
                             color = if (slot.isForecast && !active) RainChanceOnNavy else Color.White,
                             fontWeight = if (active) FontWeight.SemiBold else null,
                             fontStyle = if (slot.isForecast) FontStyle.Italic else null,
-                            fontFamily = PlexMono,
+                            fontFamily = AppMono,
                             style = MaterialTheme.typography.titleSmall,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))

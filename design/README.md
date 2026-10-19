@@ -1,8 +1,10 @@
 # Logos et directions artistiques
 
 Cinq propositions pour remplacer l'ancienne icône (soleil derrière un nuage sur bleu `#256ABF`).
-La direction **Isobare** est appliquée à l'app : icône, couleurs, polices IBM Plex, pictogrammes au trait et
-bande de fronts sous les barres du haut. Les quatre autres restent des pistes.
+La direction **Glacier** (variante D1 de la piste Alpin, `logos/alpin-variantes/d1-glacier.svg`) est appliquée à
+l'app : icône (sommet enneigé au-dessus de l'iso 0 °C, balise rouge), palette neige, glace, glacier, ardoise et nuit,
+polices Archivo et Martian Mono, pictogrammes au trait recolorés, barre du haut claire et bloc « Altitude ».
+Isobare, appliquée avant elle, et les autres directions restent des pistes.
 
 Les logos de `logos/` sont dessinés sur la grille de l'icône adaptative Android (108 × 108, motif
 contenu dans la zone sûre de 66). `logos/monochrome/` contient le calque monochrome utilisé par les

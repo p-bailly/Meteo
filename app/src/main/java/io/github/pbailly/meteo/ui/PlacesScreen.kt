@@ -66,7 +66,7 @@ fun PlacesScreen(
 
     Scaffold(
         topBar = {
-            NavyTopBar(
+            AppTopBar(
                 title = { Text("Lieux", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     if (onBack != null) {

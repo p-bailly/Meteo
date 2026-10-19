@@ -64,6 +64,14 @@ class HourlySeries(
     val pressure: DoubleArray,
     val isDay: BooleanArray,
     val uvIndex: DoubleArray,
+    /** Altitude de l'isotherme 0 °C, en mètres (NaN si le modèle ne la fournit pas). */
+    val freezingLevel: DoubleArray,
+    /** Température et altitude géopotentielle (m) du niveau 850 hPa, vers 1 500 m. */
+    val temperature850: DoubleArray,
+    val height850: DoubleArray,
+    /** Température et altitude géopotentielle (m) du niveau 700 hPa, vers 3 000 m. */
+    val temperature700: DoubleArray,
+    val height700: DoubleArray,
 ) {
     val size: Int get() = time.size
 }

@@ -32,6 +32,9 @@ object OpenMeteoApi {
         "precipitation", "snowfall", "precipitation_probability", "weather_code",
         "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high",
         "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "pressure_msl", "is_day", "uv_index",
+        // Bloc altitude : iso 0 °C et niveaux 850 hPa (≈ 1 500 m) et 700 hPa (≈ 3 000 m).
+        "freezing_level_height", "temperature_850hPa", "geopotential_height_850hPa",
+        "temperature_700hPa", "geopotential_height_700hPa",
     )
     private val DAILY = listOf(
         "weather_code", "temperature_2m_max", "temperature_2m_min",
@@ -119,6 +122,11 @@ object OpenMeteoApi {
             pressure = h.doubles("pressure_msl", n),
             isDay = h.ints("is_day", n).let { codes -> BooleanArray(n) { codes[it] != 0 } },
             uvIndex = h.doubles("uv_index", n),
+            freezingLevel = h.doubles("freezing_level_height", n),
+            temperature850 = h.doubles("temperature_850hPa", n),
+            height850 = h.doubles("geopotential_height_850hPa", n),
+            temperature700 = h.doubles("temperature_700hPa", n),
+            height700 = h.doubles("geopotential_height_700hPa", n),
         )
 
         val d = root.obj("daily")

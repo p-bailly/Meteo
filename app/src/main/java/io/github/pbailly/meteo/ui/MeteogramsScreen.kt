@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.pbailly.meteo.ui.theme.SecondaryOnNavy
+import io.github.pbailly.meteo.ui.theme.SelectedOnCard
 
 private val TABS = listOf("7 jours", "14 jours", "MultiModèle")
 
@@ -52,7 +53,7 @@ fun MeteogramsScreen(
     LaunchedEffect(Unit) { onMultiModelNeeded() }
     Scaffold(
         topBar = {
-            NavyTopBar(
+            AppTopBar(
                 title = { Text("Météogrammes", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
@@ -101,7 +102,7 @@ private fun SegmentedTabs(selected: Int, onSelect: (Int) -> Unit) {
                 modifier = Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
-                    .background(if (index == selected) Color(0xFF1F6FAE) else Color.Transparent)
+                    .background(if (index == selected) SelectedOnCard else Color.Transparent)
                     .clickable { onSelect(index) }
                     .padding(vertical = 10.dp),
             )

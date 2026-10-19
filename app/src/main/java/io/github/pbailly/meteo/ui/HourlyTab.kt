@@ -21,7 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Forecast
-import io.github.pbailly.meteo.ui.theme.PlexMono
+import io.github.pbailly.meteo.ui.theme.AppMono
 import io.github.pbailly.meteo.ui.theme.RainChanceOnNavy
 
 /** Au moins autant d'heures dans le bandeau, même tard le soir. */
@@ -58,7 +58,7 @@ fun HourlyStrip(forecast: Forecast, modifier: Modifier = Modifier) {
                     "%02d".format(h.time[i].hour),
                     color = Color.White,
                     style = MaterialTheme.typography.titleMedium,
-                    fontFamily = PlexMono,
+                    fontFamily = AppMono,
                 )
                 Spacer(Modifier.height(4.dp))
                 WeatherIcon(h.weatherCode[i], h.isDay[i], size = 42.dp, dark = true)
@@ -67,7 +67,7 @@ fun HourlyStrip(forecast: Forecast, modifier: Modifier = Modifier) {
                     Fmt.percent(h.precipitationProbability[i]).replace(" ", ""),
                     color = RainChanceOnNavy,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontFamily = PlexMono,
+                    fontFamily = AppMono,
                 )
                 Text(Fmt.temp(h.temperature[i]), color = Color.White, fontSize = 24.sp)
             }

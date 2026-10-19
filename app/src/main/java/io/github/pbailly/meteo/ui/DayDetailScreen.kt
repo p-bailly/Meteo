@@ -60,7 +60,7 @@ import io.github.pbailly.meteo.data.Moon
 import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.Predictability
-import io.github.pbailly.meteo.ui.theme.PlexMono
+import io.github.pbailly.meteo.ui.theme.AppMono
 import io.github.pbailly.meteo.ui.theme.RainChanceOnNavy
 import io.github.pbailly.meteo.ui.theme.SecondaryOnNavy
 import io.github.pbailly.meteo.ui.theme.uvColor
@@ -102,7 +102,7 @@ fun DayDetailScreen(
 
     Scaffold(
         topBar = {
-            NavyTopBar(
+            AppTopBar(
                 title = { Text(place.name, fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Retour") }
@@ -152,7 +152,7 @@ private fun DayPage(
     LazyColumn(Modifier.fillMaxSize()) {
         item(key = "header") {
             Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("%02d/%02d".format(date.dayOfMonth, date.monthValue), fontSize = 26.sp, fontFamily = PlexMono)
+                Text("%02d/%02d".format(date.dayOfMonth, date.monthValue), fontSize = 26.sp, fontFamily = AppMono)
                 Text(date.format(WEEKDAY), fontSize = 30.sp, fontWeight = FontWeight.Light)
                 val uv = d.uvIndexMax[day]
                 Text(
@@ -185,7 +185,7 @@ private fun DayPage(
                     Text(
                         "${s}h",
                         color = if (s == step) Color.White else SecondaryOnNavy,
-                        fontFamily = PlexMono,
+                        fontFamily = AppMono,
                         fontWeight = if (s == step) FontWeight.SemiBold else null,
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -267,7 +267,7 @@ private fun RiseSet(icon: ImageVector, up: Boolean, time: String) {
             modifier = Modifier.size(16.dp),
         )
         Spacer(Modifier.width(4.dp))
-        Text(time, color = Color.White, fontFamily = PlexMono, fontSize = 17.sp)
+        Text(time, color = Color.White, fontFamily = AppMono, fontSize = 17.sp)
     }
 }
 
@@ -276,7 +276,7 @@ private fun InfoLine(icon: ImageVector, text: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(6.dp))
-        Text(text, color = Color.White, fontFamily = PlexMono, fontSize = 17.sp)
+        Text(text, color = Color.White, fontFamily = AppMono, fontSize = 17.sp)
     }
 }
 
@@ -291,10 +291,10 @@ private fun HourRow(line: HourLine) {
             Text(
                 line.label,
                 color = Color.White,
-                fontFamily = PlexMono,
+                fontFamily = AppMono,
                 fontSize = 15.sp,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().background(Color(0xFF1D4A70)).padding(vertical = 2.dp),
+                modifier = Modifier.fillMaxWidth().background(NavyDivider).padding(vertical = 2.dp),
             )
             TemperatureBox(line.temperature, Modifier.fillMaxWidth().height(34.dp), fontSize = 19.sp)
         }
@@ -312,17 +312,17 @@ private fun HourRow(line: HourLine) {
                     drawWindArrow(center, line.windDirection, size.minDimension, Color.White, 1.6f * density)
                 }
                 Spacer(Modifier.width(6.dp))
-                Text("${line.windSpeed.roundToInt()}-${line.windGusts.roundToInt()}", color = Color.White, fontFamily = PlexMono, fontSize = 15.sp)
+                Text("${line.windSpeed.roundToInt()}-${line.windGusts.roundToInt()}", color = Color.White, fontFamily = AppMono, fontSize = 15.sp)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.WaterDrop, contentDescription = "Pluie", tint = Color.White, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(hourRain(line.precipitation), color = Color.White, fontFamily = PlexMono, fontSize = 15.sp)
+                Text(hourRain(line.precipitation), color = Color.White, fontFamily = AppMono, fontSize = 15.sp)
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Umbrella, contentDescription = "Probabilité de pluie", tint = RainChanceOnNavy, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(Fmt.percent(line.probability), color = RainChanceOnNavy, fontFamily = PlexMono, fontSize = 15.sp)
+                Text(Fmt.percent(line.probability), color = RainChanceOnNavy, fontFamily = AppMono, fontSize = 15.sp)
             }
         }
         PredictabilitySquare(line.predictability, size = 44.dp)

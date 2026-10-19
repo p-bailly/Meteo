@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.lerp
 /**
  * Fond des cases de température, comme sur Meteoblue : vert menthe vers 6°, vert franc vers 11°,
  * vert-jaune vers 16°, puis jaune, orange et rouge ; bleu puis violet sous zéro.
- * Le texte posé dessus reste en marine.
+ * Le texte posé dessus reste en nuit.
  */
 private val TEMPERATURE_STOPS = listOf(
     -15.0 to Color(0xFFB9A6F2),
@@ -22,7 +22,7 @@ private val TEMPERATURE_STOPS = listOf(
 )
 
 fun temperatureColor(celsius: Double): Color {
-    if (celsius.isNaN()) return Color(0xFFD3DBE2)
+    if (celsius.isNaN()) return Color(0xFFD3E1EC)
     val stops = TEMPERATURE_STOPS
     if (celsius <= stops.first().first) return stops.first().second
     if (celsius >= stops.last().first) return stops.last().second
@@ -33,7 +33,7 @@ fun temperatureColor(celsius: Double): Color {
 }
 
 /** Texte des cases de température. */
-val OnTemperature = Color(0xFF0C304E)
+val OnTemperature = Color(0xFF0F2133)
 
 /** Prévisibilité : vert (sûr), jaune, orange, rouge (incertain), comme les barres de Meteoblue. */
 fun predictabilityColor(percent: Int): Color = when {

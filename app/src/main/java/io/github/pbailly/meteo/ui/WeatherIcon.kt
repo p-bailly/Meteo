@@ -77,16 +77,16 @@ private fun iconSpec(code: Int): IconSpec = when (code) {
     else -> IconSpec(Sky.OVERCAST)
 }
 
-/** Couleurs des pictogrammes au trait de l'identité Isobare. */
+/** Couleurs des pictogrammes au trait de l'identité Glacier (« dark » : thème sombre ou carte glacier). */
 private class IconPalette(dark: Boolean) {
-    val sun = if (dark) Color(0xFFFFC21A) else Color(0xFFE39B00)
+    val sun = if (dark) Color(0xFFFFC93C) else Color(0xFFD99000)
     val moon = if (dark) Color(0xFFD5DBE5) else Color(0xFF6E86A0)
-    val cloud = if (dark) Color(0xFFF4F7FA) else Color(0xFF0C304E)
+    val cloud = if (dark) Color(0xFFFFFFFF) else Color(0xFF1C4A70)
     /** Voile des nuages chargés (couvert, fortes pluies, orage). */
-    val heavyFill = if (dark) Color(0x40A9C3DA) else Color(0x260C304E)
-    val rain = if (dark) Color(0xFF8CCBF8) else Color(0xFF2A78D6)
-    val snow = if (dark) Color(0xFFB7D3F6) else Color(0xFF2A78D6)
-    val fog = if (dark) Color(0xFFA9B8C6) else Color(0xFF6B7785)
+    val heavyFill = if (dark) Color(0x40FFFFFF) else Color(0x261C6497)
+    val rain = if (dark) Color(0xFFCDEBFF) else Color(0xFF1C6497)
+    val snow = if (dark) Color(0xFFE3F2FF) else Color(0xFF4FA3D9)
+    val fog = if (dark) Color(0xFFD6E8F5) else Color(0xFF66798C)
 }
 
 /** Épaisseur du trait sur la grille de 24 × 24. */

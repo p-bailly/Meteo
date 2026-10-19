@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Logo Isobare (design/logos/01-isobare.svg) : un M tracé comme un front météo, triangles bleus
-    (front froid) et demi-cercles rouges (front chaud) en alternance. Grille de l'icône adaptative.
+    Logo Glacier (design/logos/alpin-variantes/d1-glacier.svg) : sommet enneigé au-dessus de la ligne
+    de l'iso 0 °C (tirets), balise de secours rouge. Grille de l'icône adaptative.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -9,16 +9,23 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#3FA9F5"
-        android:pathData="M28,71L28,61L20,66ZM32.13,39.81L39.47,46.59L41.23,37.32ZM58.13,56.19L65.47,49.41L56.37,46.92ZM80,42L80,52L88,47Z" />
-    <path
-        android:fillColor="#FF5A4E"
-        android:pathData="M28,52A5,5 0,0 1,28,42ZM42.53,49.41A5,5 0,0 1,49.87,56.19ZM68.53,46.59A5,5 0,0 1,75.87,39.81ZM80,61A5,5 0,0 1,80,71Z" />
+        android:fillColor="#9BCBE9"
+        android:pathData="M22.08,81.46L43.92,49.54L52.32,59.62L64.08,39.46L85.92,81.46Z" />
+    <group>
+        <clip-path android:pathData="M0,0H108V57.94H0Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M22.08,81.46L43.92,49.54L52.32,59.62L64.08,39.46L85.92,81.46Z" />
+    </group>
     <path
         android:fillColor="#00000000"
-        android:strokeColor="#F4F7FA"
-        android:strokeWidth="4"
+        android:strokeColor="#0F2133"
+        android:strokeWidth="1.71"
         android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M28,76V36L54,60L80,36V76" />
+        android:pathData="M22.08,57.94H26.28M29.22,57.94H33.42M36.36,57.94H40.56M43.5,57.94H47.7M50.64,57.94H54.84M57.78,57.94H61.98M64.92,57.94H69.12M72.06,57.94H76.26M79.2,57.94H83.4" />
+    <path
+        android:fillColor="#C8202A"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.85"
+        android:pathData="M68.12,37A5.88,5.88 0,1 1,79.88,37A5.88,5.88 0,1 1,68.12,37Z" />
 </vector>
