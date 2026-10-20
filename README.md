@@ -37,24 +37,36 @@ la carte) :
   sapins, alpages), en haute montagne (jusqu'à 3 500 m : forêt, roche, neige), en très haute montagne (aiguilles,
   glaciers en toute saison) ou **au sommet** (le relief en dessous, la croix au premier plan) ; la limite des arbres et
   la neige du mois descendent vers le Grand Nord, et les saisons s'inversent dans l'hémisphère sud. Puis **ce qui
-  entoure le lieu**, d'après OpenStreetMap : un lac, la mer, une rivière (et son pont), une île (la mer des deux côtés,
-  parfois un phare), une forêt toute proche ; et le lieu habité : grande ville (immeubles, tour, parfois une grue,
+  entoure le lieu**, d'après OpenStreetMap : un lac, la mer, une rivière (et son pont), une île (la mer des deux côtés),
+  un phare seulement là où il y en a un vrai, un port (quai et bateaux amarrés), une forêt toute proche, des vignes, un
+  verger, un château ou des ruines sur une butte, une abbaye, des éoliennes qui tournent avec le vent, la voie ferrée
+  et son train qui passe ; la lavande en fleur en Provence l'été, les tournesols du Sud-Ouest ; et le lieu habité : grande ville (immeubles, tour, parfois une grue,
   fenêtres allumées la nuit), petite ville, village (clocher comtois ou à flèche), hameau, ferme isolée, chalet, ou
-  refuge au-dessus des arbres. Enfin **le temps**, chaque ciel en trois versions et plus ou moins fort selon la
-  prévision : soleil, lune dans sa vraie phase et étoiles (ou la Grande Ourse, ou la Voie lactée), éclaircies, ciel
+  refuge au-dessus des arbres. Le relief est en **perspective** (le près s'étale et grandit, le loin se resserre), et une
+  **deuxième chaîne**, vue dans une autre direction, se dessine pâle derrière lui (le Massif central depuis Valence).
+  Enfin **le temps**, chaque ciel en trois versions et plus ou moins fort selon la
+  prévision : le **soleil et la lune à leur vraie place** (à gauche, au milieu ou à droite selon la direction où l'on
+  regarde, plus ou moins haut selon l'heure ; la lune couchée ne se dessine pas), la lune dans sa vraie phase et étoiles (ou la Grande Ourse, ou la Voie lactée), éclaircies, ciel
   couvert, les nuages à leur hauteur d'après la prévision (les nuages bas coiffent les sommets, ou font une mer de
   nuages sous le sommet ; les hauts ne sont qu'un voile ou des cirrus), brouillard (ou brouillard de vallée), bruine, pluie faible à forte (en traits,
   chassée par le vent, ou en gouttes et flaques), pluie verglaçante, averses, neige en petits ou gros flocons ou en
-  grains, orage (un ou deux éclairs, ou un cumulonimbus). Et ce que l'heure y ajoute : la lumière de l'aube, de l'heure
-  dorée (le soleil bas passe derrière le relief) et du crépuscule ; le vent qui couche les arbres et la fumée et tend la
+  grains, orage (un ou deux éclairs, ou un cumulonimbus), grêle (les grêlons rebondissent). Et ce que l'heure y ajoute : la lumière de l'aube, de l'heure
+  dorée (le soleil bas passe derrière le relief) et du crépuscule, les fenêtres qui s'allument peu à peu au crépuscule
+  et les réverbères ; la neige sur les montagnes d'après l'isotherme 0 °C de la prévision ; la canicule (soleil rouge,
+  air qui tremble au-delà de 32 °C) et le grand froid (givre dans les coins sous −10 °C) ; les aurores boréales quand
+  l'activité magnétique (indice Kp de la NOAA) les descend jusqu'au lieu ; les pluies d'étoiles filantes à leurs dates
+  (Perséides, Géminides…) ; les arbres en fleurs en avril, les feuilles mortes qui s'envolent à l'automne ; les
+  guirlandes et le sapin illuminé en décembre ; le vent qui couche les arbres et la fumée et tend la
   manche à air ; la neige au sol (toits blancs, bonhomme de neige) ; les lacs gelés après des jours sans dégel ; le ciel
   jauni par le sable du Sahara ou voilé par la pollution (qualité de l'air d'Open-Meteo) ; des vaches à l'alpage l'été,
   des chamois dans les rochers, des mouettes au bord de la mer ; le télésiège et les pistes d'une station de ski ; la
   tour Eiffel, Fourvière, Notre-Dame de la Garde, la cathédrale de Strasbourg, le jet d'eau de Genève ou l'Empire State
   Building. Parfois une
-  petite surprise selon le temps ou certains jours de fête — et toucher le dessin en montre une autre version. La pluie
-  et la neige tombent, les nuages glissent (on peut l'arrêter dans les Réglages, où l'on choisit aussi un dessin
-  discret, normal ou coloré). Toutes les combinaisons : `design/dessins/coloriages.pdf` ;
+  petite surprise selon le temps ou certains jours de fête — et toucher le dessin en montre une autre version ; un
+  **appui long** l'ouvre en grand, en carte postale (« Bons baisers de… », la date, un timbre). La pluie et la neige
+  tombent, les nuages glissent, la fumée monte, les éoliennes tournent, le train passe, les bateaux dansent au port, les
+  oiseaux et l'avion volent, les aurores ondulent (on peut l'arrêter dans les Réglages, où l'on choisit aussi un dessin
+  discret, normal ou coloré). Les combinaisons d'avant ces derniers ajouts : `design/dessins/coloriages.pdf` ;
   de la mi-octobre à la mi-mars, une pastille **Neige & altitude** dans l'en-tête, à côté de l'étoile (une montagne et
   l'iso 0 °C actuel), qui ouvre la page du même nom ; vent, rafales, humidité, pression (et sa tendance),
   indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
@@ -115,7 +127,9 @@ l'app, aux couleurs Glacier (clair ou sombre comme les Réglages) ; les toucher 
   cumul de pluie s'il y a la place), de 3 à 7 jours selon la largeur ; en 4 × 3, une ligne des prochaines heures ;
 - **Prochaines heures** (4 × 2) : la phrase qui compte (« Pluie vers 15h · 2,4 mm », « Neige jusqu'à 18h »,
   « Pas de pluie d'ici 24 h ») puis le graphique des 24 prochaines heures (12 en étroit) : pictogrammes,
-  courbe de température et barres de pluie.
+  courbe de température et barres de pluie ;
+- **Dessin** (4 × 2, redimensionnable) : le dessin aux crayons d'Aujourd'hui (le relief et les environs gardés par
+  l'app, le temps de l'heure), avec le lieu et la température.
 
 Ils se mettent à jour toutes les 30 minutes (le minimum d'Android) et à chaque téléchargement dans l'app ; ils
 réutilisent son cache, donc n'ajoutent un appel à Open-Meteo que si l'app n'a pas été ouverte entre-temps. Une heure
@@ -155,7 +169,15 @@ Comment l'altitude est calculée :
   qu'elle est peuplée (Paris sur 8 km, 50 000 habitants sur 2 km, un village sur 700 m) : grande ville à partir de
   50 000 habitants, petite ville à partir de 2 000, village à partir de 150, sinon hameau. Forêt à moins de 1,5 km,
   rivière à moins de 1 km, lac à moins de 2 km, côte à moins de 3 km ; île si le lieu est sur une île de moins de 350 km
-  (la Corse, pas la Grande-Bretagne) ; station de ski si des remontées mécaniques ou des pistes sont à moins de 3 km.
+  (la Corse, pas la Grande-Bretagne) ; station de ski si des remontées mécaniques ou des pistes sont à moins de 3 km ;
+  vignes et vergers à moins de 1,5 km, château et abbaye à moins de 3 km, ruines à moins de 1,5 km, éoliennes à moins
+  de 8 km, voie ferrée à moins de 1,5 km, port à moins de 2 km, phare à moins de 5 km. La deuxième chaîne : le point
+  qui domine le lieu à au moins 60° de la coupe (300 m plus haut au moins), un appel de plus à l'API d'altitude.
+- **Ciel vrai**, pour le dessin : position du soleil et de la lune calculée pour le lieu et l'heure (formules
+  astronomiques simplifiées, au degré près) ; aurores visibles à 66° de latitude géomagnétique par temps calme, et
+  2,3° plus bas par point d'indice Kp (vers 45° pour Kp 9) ; indice Kp de la NOAA (sans clé), gardé trois heures.
+  Neige sur les montagnes : 300 m sous l'isotherme 0 °C (le plus bas des 24 prochaines heures, à 600 m au plus de
+  celle du mois ; celui de l'heure quand il tombe quelque chose).
 - **Air et neige au sol**, pour le dessin : sable du Sahara à partir de 80 µg/m³ de poussières, air pollué à partir de
   l'indice européen 60 (ou 35 µg/m³ de particules fines), d'après l'API de qualité de l'air d'Open-Meteo (gardée une
   heure) ; neige au sol à partir de 3 cm prévus ; lac gelé quand aujourd'hui et demain restent sous 0 °C après une nuit
@@ -235,10 +257,10 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
   `AltitudeScreen`, `radar/RadarScreen`, `PlacesScreen`), choix d'un lieu sur la carte (`MapPickScreen`), comparaison des lieux (`CompareScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
   (`MeteogramsScreen`, `DaysTab`, `MeteogramTab`, `MultiModelTab`), réglages (`SettingsScreen`), pictogrammes
   dessinés au trait (`WeatherIcon`), dessin au crayon d'Aujourd'hui (`WeatherSketch`, son décor et ses surprises dans `SketchScene` et
-  `SketchDecor`), outils de graphique
+  `SketchDecor`, sa carte postale dans `SketchPostcard`), outils de graphique
   (`ChartKit`, dont la jauge de confiance), carte MapLibre
   (`radar/RadarMap`).
-- `widget/` : widgets de l'écran d'accueil avec Jetpack Glance (`NowWidget`, `ForecastWidget`, `HoursWidget`),
+- `widget/` : widgets de l'écran d'accueil avec Jetpack Glance (`NowWidget`, `ForecastWidget`, `HoursWidget`, `SketchWidget`),
   chargement et couleurs (`WidgetData`), pictogrammes et graphique dessinés en images (`WidgetDrawing`).
 - `ui/theme/` : couleurs (`Theme`) et polices Archivo et Martian Mono (`Type`, fichiers dans `res/font/`).
 

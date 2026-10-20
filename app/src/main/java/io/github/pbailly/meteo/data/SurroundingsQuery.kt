@@ -31,6 +31,13 @@ object SurroundingsQuery {
     const val LAKE_M = 2000
     const val COAST_M = 3000
     const val SKI_M = 3000
+    const val CROPS_M = 1500
+    const val HERITAGE_M = 3000
+    const val RUINS_M = 1500
+    const val TURBINES_M = 8000
+    const val RAILWAY_M = 1500
+    const val HARBOUR_M = 2000
+    const val LIGHTHOUSE_M = 5000
 
     /** Une île plus grande que ça (Grande-Bretagne, Irlande) ne se dessine pas comme une île. */
     private const val MAX_ISLAND_KM = 350.0
@@ -51,7 +58,17 @@ object SurroundingsQuery {
             "(area.a[\"landuse\"=\"forest\"];area.a[\"natural\"=\"wood\"];);out count;" +
             "(way[\"place\"~\"^(island|islet)$\"](pivot.a);relation[\"place\"~\"^(island|islet)$\"](pivot.a););out tags bb;" +
             "(way[\"piste:type\"=\"downhill\"]${around(SKI_M)};way[\"landuse\"=\"winter_sports\"]${around(SKI_M)};" +
-            "way[\"aerialway\"~\"^(chair_lift|gondola|cable_car|mixed_lift|drag_lift|t-bar|j-bar|platter)$\"]${around(SKI_M)};);out count;"
+            "way[\"aerialway\"~\"^(chair_lift|gondola|cable_car|mixed_lift|drag_lift|t-bar|j-bar|platter)$\"]${around(SKI_M)};);out count;" +
+            // Puis le paysage et le patrimoine : vignes, vergers, château, ruines, abbaye, éoliennes, train, port, phare.
+            "way[\"landuse\"=\"vineyard\"]${around(CROPS_M)};out count;" +
+            "way[\"landuse\"=\"orchard\"]${around(CROPS_M)};out count;" +
+            "(node[\"historic\"=\"castle\"]${around(HERITAGE_M)};way[\"historic\"=\"castle\"]${around(HERITAGE_M)};);out count;" +
+            "(node[\"historic\"=\"ruins\"]${around(RUINS_M)};way[\"historic\"=\"ruins\"]${around(RUINS_M)};);out count;" +
+            "(nwr[\"amenity\"=\"monastery\"]${around(HERITAGE_M)};nwr[\"historic\"=\"monastery\"]${around(HERITAGE_M)};);out count;" +
+            "node[\"generator:source\"=\"wind\"]${around(TURBINES_M)};out count;" +
+            "way[\"railway\"=\"rail\"]${around(RAILWAY_M)};out count;" +
+            "(nwr[\"harbour\"=\"yes\"]${around(HARBOUR_M)};nwr[\"leisure\"=\"marina\"]${around(HARBOUR_M)};way[\"landuse\"=\"harbour\"]${around(HARBOUR_M)};);out count;" +
+            "nwr[\"man_made\"=\"lighthouse\"]${around(LIGHTHOUSE_M)};out count;"
         return "$server?data=" + URLEncoder.encode(query, "UTF-8")
     }
 
@@ -96,6 +113,15 @@ object SurroundingsQuery {
             coast = count(3),
             island = island,
             ski = count(5),
+            vineyard = count(6),
+            orchard = count(7),
+            castle = count(8),
+            ruins = count(9),
+            abbey = count(10),
+            windTurbines = count(11),
+            railway = count(12),
+            harbour = count(13),
+            lighthouse = count(14),
         )
     }
 
@@ -164,7 +190,7 @@ class SurroundingsRepository(
     private val httpGet: (String) -> String,
     private val overpassGet: (String) -> String = httpGet,
 ) {
-    private fun file(place: Place) = File(cacheDir, "surroundings2_${place.id}.json")
+    private fun file(place: Place) = File(cacheDir, "surroundings3_${place.id}.json")
 
     /**
      * Les environs déjà gardés, et s'il faut encore demander à OpenStreetMap : oui pour un repli (seulement la taille de
@@ -218,6 +244,15 @@ class SurroundingsRepository(
         put("coast", s.coast)
         put("island", s.island)
         put("ski", s.ski)
+        put("vineyard", s.vineyard)
+        put("orchard", s.orchard)
+        put("castle", s.castle)
+        put("ruins", s.ruins)
+        put("abbey", s.abbey)
+        put("windTurbines", s.windTurbines)
+        put("railway", s.railway)
+        put("harbour", s.harbour)
+        put("lighthouse", s.lighthouse)
         s.population?.let { put("population", it) }
     }.toString()
 
@@ -234,6 +269,15 @@ class SurroundingsRepository(
             island = flag("island"),
             ski = flag("ski"),
             population = o["population"]?.jsonPrimitive?.longOrNull,
+            vineyard = flag("vineyard"),
+            orchard = flag("orchard"),
+            castle = flag("castle"),
+            ruins = flag("ruins"),
+            abbey = flag("abbey"),
+            windTurbines = flag("windTurbines"),
+            railway = flag("railway"),
+            harbour = flag("harbour"),
+            lighthouse = flag("lighthouse"),
         ) to flag("partial")
     }
 

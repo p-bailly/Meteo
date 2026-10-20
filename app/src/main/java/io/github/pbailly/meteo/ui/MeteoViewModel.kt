@@ -14,6 +14,7 @@ import io.github.pbailly.meteo.data.PlacesStore
 import io.github.pbailly.meteo.data.SettingsStore
 import io.github.pbailly.meteo.data.AirQuality
 import io.github.pbailly.meteo.data.AirQualityRepository
+import io.github.pbailly.meteo.data.SpaceWeatherRepository
 import io.github.pbailly.meteo.data.Surroundings
 import io.github.pbailly.meteo.data.slowHttpGet
 import io.github.pbailly.meteo.data.SurroundingsRepository
@@ -75,6 +76,8 @@ data class MeteoUiState(
     val surroundings: Remote<Surroundings> = Remote(),
     /** Qualité de l'air (sable du Sahara, pollution), pour le ciel du dessin. */
     val airQuality: Remote<AirQuality> = Remote(),
+    /** Activité magnétique (indice Kp), pour les aurores du dessin. */
+    val kp: Double? = null,
     /** Prévision courte de chaque favori, par identifiant de lieu. */
     val summaries: Remote<Map<String, Forecast>> = Remote(),
     /** Lieux consultés, du plus récent au plus ancien (favoris compris). */
@@ -95,6 +98,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private val terrainRepository = TerrainRepository(File(app.filesDir, "terrain"), repository.httpGet, ::slowHttpGet)
     private val surroundingsRepository = SurroundingsRepository(File(app.filesDir, "terrain"), repository.httpGet, ::slowHttpGet)
     private val airRepository = AirQualityRepository(File(app.cacheDir, "air"), repository.httpGet)
+    private val spaceWeather = SpaceWeatherRepository(File(app.cacheDir, "air"), repository.httpGet)
     private val store = PlacesStore(app)
     private val settings = SettingsStore(app)
     private val placeNames = PlaceNames(app, repository.httpGet)
@@ -374,6 +378,8 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private fun loadAir(place: Place) {
         airJob?.cancel()
         airJob = viewModelScope.launch {
+            // L'indice des aurores vaut pour toute la Terre ; sans lui, simplement pas d'aurore.
+            launch { runLoading { spaceWeather.kp() }.getOrNull()?.let { kp -> _state.update { it.copy(kp = kp) } } }
             val result = runLoading { airRepository.of(place) }
             _state.update { state ->
                 if (state.place?.id != place.id) return@update state

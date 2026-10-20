@@ -91,6 +91,27 @@ private fun settlementHalfWidth(scene: SketchScene): Float? {
     }
 }
 
+/**
+ * Ce que le paysage fixe laisse à la couche animée, en pixels : le haut des cheminées qui fument, le moyeu et la
+ * longueur des pales des éoliennes, la hauteur de la voie ferrée, le voilier, les bateaux du port. Rempli en dessinant
+ * le paysage ([landscape]), lu à chaque image ([animated]).
+ */
+internal class SketchAnchors {
+    val chimneys = mutableListOf<Offset>()
+    val rotors = mutableListOf<Pair<Offset, Float>>()
+    var track: Float? = null
+    var sail: Offset? = null
+    val moorings = mutableListOf<Offset>()
+
+    fun clear() {
+        chimneys.clear()
+        rotors.clear()
+        track = null
+        sail = null
+        moorings.clear()
+    }
+}
+
 /** Où poser les choses : le lieu habité près du lieu, l'objet du premier plan ailleurs, jamais sur l'eau. */
 internal class Layout(val settlement: Float?, val half: Float, val foreground: Float)
 
@@ -144,6 +165,8 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
     val lean = scene.lean
     // Neige au sol : les toits aussi sont blancs.
     pencil.snowyRoofs = t.snowline <= 0f
+    val anchors = scene.anchors
+    anchors.clear()
     // Étages en couleur, du bas vers le haut : prés (ou champs), forêt, alpages, roche, glaciers et neige, selon le
     // relief et l'altitude ; sur toute la largeur (le relief reste bas sous le texte des côtés), avec des bords
     // irréguliers comme un coloriage.
@@ -176,6 +199,8 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
         add(Float.MAX_VALUE to Crayon.ROCK)
     }
     clipPath(colored) {
+        // Au loin, derrière le relief, l'autre chaîne : pâle et bleutée, enneigée en haut.
+        if (t.backdrop.isNotEmpty()) backdrop(pencil, t, w, h, land, snowY)
         if (!allSnow) {
             var bottom = h
             for ((top, color) in layers) {
@@ -222,8 +247,16 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
     val settled = layout.settlement?.let { (it - layout.half - 0.03f)..(it + layout.half + 0.03f) }
     // En plaine, le lointain est plat : les arbres peuvent y pousser aussi.
     fun free(x: Float) = !t.isWater(x, 0.02f) && (x < t.farX - 0.02f || relief == Relief.PLAIN) && (settled == null || x !in settled)
-    if (Decor.FIELDS in scene.decor && !t.sea) fields(pencil, t, w, h, month, rnd)
+    val crops = scene.decor.any { it == Decor.VINES || it == Decor.LAVENDER || it == Decor.SUNFLOWERS }
+    if ((Decor.FIELDS in scene.decor || crops) && !t.sea) fields(pencil, scene, w, h, month, rnd)
     if (t.river) river(pencil, w, h, rnd)
+    // La voie ferrée au pied du relief (au-dessus de la rivière quand il y en a une) ; le train passe dans la couche animée.
+    if (Decor.TRAIN in scene.decor) {
+        val trackY = h * (if (t.river) FOOT - 0.004f else FOOT + 0.004f)
+        railway(pencil, t, w, trackY)
+        anchors.track = trackY
+    }
+    if (Decor.HARBOUR in scene.decor) harbour(pencil, scene, w, h)
     if (Decor.FOREST in scene.decor) forest(pencil, scene, w, h, month, rnd, ::free)
     if (Decor.FIRS in scene.decor) {
         // Des sapins sur les pentes, sous la limite des arbres et hors de la neige.
@@ -241,9 +274,15 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
             tree(pencil, Offset(w * x, y(t.heightAt(x)) + 2f * u), (14f + rnd.nextFloat() * 6f) * u, month, lean)
         }
     }
+    if (Decor.ORCHARD in scene.decor) orchard(pencil, t, w, h, month, rnd, ::free)
+    // Les éoliennes sur les hauteurs, le château ou les ruines sur une butte, l'abbaye au fond du vallon.
+    val taken = mutableListOf<ClosedFloatingPointRange<Float>>()
+    settled?.let { taken += it }
+    if (Decor.TURBINES in scene.decor) turbines(pencil, t, w, h, anchors, taken)
+    heritage(pencil, scene, w, h, taken)
     layout.settlement?.let { x ->
         val at = { p: Float -> Offset(w * p, y(t.heightAt(p)) + 1f * u) }
-        val lit = !isDay
+        val lit = scene.lit
         val half = layout.half
         val chimney = when {
             Decor.CITY in scene.decor -> city(pencil, at, x, half, w, rnd, lit, scene.landmark, settlementSize(scene))
@@ -257,7 +296,7 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
                 for (k in 0 until houses) {
                     val side = if (k % 2 == 0) 1f else -1f
                     val p = at(x + side * (0.065f + 0.035f * (k / 2)) * (half / 0.08f).coerceAtMost(1.3f))
-                    val chimney = house(pencil, p, (13f + (k % 3)) * u, chimney = k == 0, lit = lit)
+                    val chimney = house(pencil, p, (13f + (k % 3)) * u, chimney = k == 0, lit = rnd.nextFloat() < lit * 1.3f)
                     if (k == 0) smoking = chimney
                 }
                 smoking
@@ -266,16 +305,26 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
                 chalet(pencil, at(x - 0.025f), 15f * u)
                 chalet(pencil, at(x + 0.03f), 17f * u)
             } else {
-                house(pencil, at(x - 0.025f), 13f * u, chimney = false, lit = lit)
-                house(pencil, at(x + 0.025f), 14f * u, chimney = true, lit = lit)
+                house(pencil, at(x - 0.025f), 13f * u, chimney = false, lit = rnd.nextFloat() < lit * 1.3f)
+                house(pencil, at(x + 0.025f), 14f * u, chimney = true, lit = rnd.nextFloat() < lit * 1.3f)
             }
             Decor.FARM in scene.decor -> farm(pencil, at(x), 20f * u, month)
             Decor.CHALET in scene.decor -> chalet(pencil, at(x), 18f * u)
             Decor.REFUGE in scene.decor -> refuge(pencil, at(x), 14f * u)
             else -> null
         }
-        if (Surprise.SMOKE in scene.surprises && chimney != null) smoke(pencil, chimney, lean)
+        if (Surprise.SMOKE in scene.surprises && chimney != null) anchors.chimneys += chimney
         if (t.river && Decor.CITY !in scene.decor) bridge(pencil, Offset(w * x, h * RIVER), 10f * u)
+        // Décembre : le sapin illuminé sur la place et une guirlande à travers le village.
+        if (Decor.GARLANDS in scene.decor) {
+            val side = if (Decor.VILLAGE in scene.decor || Decor.TOWN in scene.decor) 0.035f else half * 0.45f
+            christmasTree(pencil, at(x + side) + Offset(0f, 1f * u), 17f * u, lit > 0f)
+            garland(pencil, at(x - half * 0.85f) + Offset(0f, -9f * u), at(x + half * 0.85f) + Offset(0f, -9f * u), lit > 0f)
+        }
+        // Les réverbères aux deux bouts, allumés dès le coucher du soleil.
+        if (Decor.LAMPS in scene.decor) {
+            listOf(x - half - 0.012f, x + half + 0.012f).filter { !t.isWater(it, 0.01f) }.forEach { lamp(pencil, at(it), lit > 0f) }
+        }
     }
     if (Decor.SKI in scene.decor) skiArea(pencil, t, w, h, lean)
     // Les bêtes, là où le relief et la saison les mettent.
@@ -290,11 +339,6 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
             val lift = t.heightAt(x)
             x < t.farX && lift > t.treeline + 0.01f && lift > 0.06f
         }.shuffled(rnd).take(2).forEach { x -> chamois(pencil, Offset(w * x, y(t.heightAt(x)) + 0.5f * u), x > 0.6f) }
-    }
-    if (Decor.GULLS in scene.decor) {
-        listOf(Triple(0.63f, 0.72f, 7f), Triple(0.71f, 0.67f, 6f), Triple(0.55f, 0.78f, 5f)).forEach { (x, yy, size) ->
-            gull(pencil, Offset(w * x, h * yy), size * u)
-        }
     }
     // La manche à air, tendue par le vent.
     if (Decor.WINDSOCK in scene.decor) {
@@ -320,16 +364,16 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
             pencil.line(top + Offset(-3.5f * u * s, -8f * u * s), top + Offset(3.5f * u * s, -8f * u * s), width = 1f * s)
         }
     }
-    // Sur la mer ou le plus grand lac : un voilier, ou le monstre du Loch Ness.
+    // Sur la mer ou le plus grand lac : un voilier (qui navigue dans la couche animée), ou le monstre du Loch Ness.
     if (t.sea) {
         val x = if (Decor.LIGHTHOUSE in scene.decor) 0.60f else 0.70f
-        if (Surprise.SAILBOAT in scene.surprises) sailboat(pencil, Offset(w * x, h * SEA + 4f * u))
+        if (Surprise.SAILBOAT in scene.surprises) anchors.sail = Offset(w * x, h * SEA + 4f * u)
     } else {
         t.water.maxByOrNull { it.endInclusive - it.start }?.let { run ->
             val mid = (run.start + run.endInclusive) / 2
             val x = mid.coerceIn(0.40f, 0.80f)
             val surface = y(t.heightAt(mid))
-            if (Surprise.SAILBOAT in scene.surprises) sailboat(pencil, Offset(w * x, surface + 4f * u))
+            if (Surprise.SAILBOAT in scene.surprises) anchors.sail = Offset(w * x, surface + 4f * u)
             if (Surprise.NESSIE in scene.surprises) nessie(pencil, Offset(w * x - 8f * u, surface + 6f * u))
         }
     }
@@ -390,35 +434,49 @@ private fun DrawScope.skater(pencil: Pencil, ice: Offset) {
 
 /**
  * Plaine : des parcelles au premier plan, chacune sa culture selon la saison (pousses, colza en fleur, blé mûr, terre
- * retournée), en sillons qui fuient un peu vers le fond.
+ * retournée), en sillons qui fuient un peu vers le fond. Parmi elles, les cultures du lieu : des rangs de vigne, de
+ * lavande en fleur, de tournesols. Hors de la plaine, seulement ces cultures-là, au milieu du premier plan.
  */
-private fun DrawScope.fields(pencil: Pencil, t: SketchTerrain, w: Float, h: Float, month: Int, rnd: Random) {
+private fun DrawScope.fields(pencil: Pencil, scene: SketchScene, w: Float, h: Float, month: Int, rnd: Random) {
+    val t = scene.terrain
+    val plain = Decor.FIELDS in scene.decor
     val crops = when (month) {
         4, 5 -> listOf(Crayon.MEADOW, Crayon.YELLOW, Crayon.MEADOW, Crayon.EARTH)
         6, 7, 8 -> listOf(Crayon.WHEAT, Crayon.MEADOW, Crayon.WHEAT, Crayon.EARTH)
         9, 10 -> listOf(Crayon.EARTH, Crayon.MEADOW, Crayon.WHEAT, Crayon.EARTH)
         else -> listOf(Crayon.EARTH, Crayon.MEADOW, Crayon.EARTH, Crayon.MEADOW)
     }.shuffled(rnd)
+    val special = listOf(Decor.VINES, Decor.LAVENDER, Decor.SUNFLOWERS).filter { it in scene.decor }
     val top = h * 0.943f
     val bottom = h * 0.99f
-    var x = 0.02f
+    val end = if (plain) 0.98f else 0.80f
+    var x = if (plain) 0.02f else 0.36f
     var k = 0
-    while (x < 0.98f) {
+    while (x < end) {
         val width = 0.07f + rnd.nextFloat() * 0.06f
-        val x1 = minOf(x + width, 0.98f)
-        if (!t.isWater(x) && !t.isWater(x1)) {
+        val x1 = minOf(x + width, end)
+        // Une parcelle sur deux porte la culture du lieu ; hors de la plaine, les autres restent en herbe.
+        val kind = if (special.isNotEmpty() && k % 2 == 0) special[(k / 2) % special.size] else null
+        if (!t.isWater(x) && !t.isWater(x1) && (plain || kind != null)) {
             // Les limites des parcelles penchent vers le centre, comme vues un peu de haut.
             val lean = (0.55f - x) * 0.04f
             val lean1 = (0.55f - x1) * 0.04f
             val parcel = polygon(
                 listOf(Offset(w * (x + lean), top), Offset(w * (x1 + lean1), top), Offset(w * (x1 - lean1), bottom), Offset(w * (x - lean), bottom)),
             )
-            val ink = pencil.ink(crops[k % crops.size])
             within(parcel) {
-                var y = top + 1.5f * density
-                while (y < bottom) {
-                    ink.line(Offset(w * (x - 0.03f), y), Offset(w * (x1 + 0.03f), y + 0.6f * density), width = 0.9f, passes = 1, wobble = 0.3f)
-                    y += (2.4f + (y - top) / (bottom - top) * 1.6f) * density
+                when (kind) {
+                    Decor.VINES -> vineRows(pencil, w * (x - 0.03f), w * (x1 + 0.03f), top, bottom, month)
+                    Decor.LAVENDER -> plantRows(pencil, w * (x - 0.03f), w * (x1 + 0.03f), top, bottom, Crayon.VIOLET, null)
+                    Decor.SUNFLOWERS -> plantRows(pencil, w * (x - 0.03f), w * (x1 + 0.03f), top, bottom, Crayon.YELLOW, Crayon.WOOD)
+                    else -> {
+                        val ink = pencil.ink(crops[k % crops.size])
+                        var y = top + 1.5f * density
+                        while (y < bottom) {
+                            ink.line(Offset(w * (x - 0.03f), y), Offset(w * (x1 + 0.03f), y + 0.6f * density), width = 0.9f, passes = 1, wobble = 0.3f)
+                            y += (2.4f + (y - top) / (bottom - top) * 1.6f) * density
+                        }
+                    }
                 }
             }
             // Une haie entre deux parcelles.
@@ -432,6 +490,63 @@ private fun DrawScope.fields(pencil: Pencil, t: SketchTerrain, w: Float, h: Floa
         }
         x = x1
         k++
+    }
+}
+
+/**
+ * Rangs de vigne : les piquets et le fil, les ceps en petites touffes, verts l'été, rouges et dorés aux vendanges,
+ * nus l'hiver ; plus serrés vers le fond.
+ */
+private fun DrawScope.vineRows(pencil: Pencil, x0: Float, x1: Float, top: Float, bottom: Float, month: Int) {
+    val u = density
+    val leaves = when (month) {
+        9, 10 -> listOf(Crayon.AUTUMN, Crayon.RED)
+        11, 12, 1, 2, 3 -> emptyList()
+        else -> listOf(Crayon.GREEN, Crayon.MEADOW)
+    }
+    val wood = pencil.ink(Crayon.WOOD)
+    var y = top + 2.5f * u
+    var row = 0
+    while (y < bottom) {
+        val gap = (2.6f + (y - top) / (bottom - top) * 1.8f) * u
+        wood.line(Offset(x0, y), Offset(x1, y + 0.4f * u), width = 0.6f, passes = 1, wobble = 0.2f)
+        var x = x0 + (row % 2) * gap / 2
+        while (x < x1) {
+            if (leaves.isEmpty()) {
+                wood.line(Offset(x, y), Offset(x, y - 2f * u), width = 0.7f, passes = 1, wobble = 0.1f)
+            } else {
+                pencil.ink(leaves[((x / gap).toInt() + row) % leaves.size]).dot(Offset(x, y - 1f * u), 1.2f)
+            }
+            x += gap
+        }
+        y += gap * 1.1f
+        row++
+    }
+}
+
+/** Rangs de fleurs : la lavande en touffes violettes, ou les tournesols jaunes à cœur brun ([heart]). */
+private fun DrawScope.plantRows(pencil: Pencil, x0: Float, x1: Float, top: Float, bottom: Float, color: androidx.compose.ui.graphics.Color, heart: androidx.compose.ui.graphics.Color?) {
+    val u = density
+    val ink = pencil.ink(color)
+    val green = pencil.ink(Crayon.MEADOW)
+    var y = top + 2f * u
+    var row = 0
+    while (y < bottom) {
+        val gap = (2.8f + (y - top) / (bottom - top) * 1.6f) * u
+        var x = x0 + (row % 2) * gap / 2
+        while (x < x1) {
+            if (heart == null) {
+                green.line(Offset(x, y + 0.8f * u), Offset(x, y - 0.4f * u), width = 0.6f, passes = 1, wobble = 0.1f)
+                ink.dot(Offset(x - 0.5f * u, y - 0.8f * u), 0.9f)
+                ink.dot(Offset(x + 0.5f * u, y - 1.1f * u), 0.9f)
+            } else {
+                ink.dot(Offset(x, y - 0.6f * u), 1.3f)
+                pencil.ink(heart).dot(Offset(x, y - 0.6f * u), 0.5f)
+            }
+            x += gap
+        }
+        y += gap * 0.9f
+        row++
     }
 }
 
@@ -589,7 +704,7 @@ private fun DrawScope.spireChurch(pencil: Pencil, ground: Offset, scale: Float) 
 }
 
 /** Une maison de ville à étages, toit de tuiles, fenêtres en rangs (allumées la nuit). */
-private fun DrawScope.townHouse(pencil: Pencil, ground: Offset, width: Float, floors: Int, lit: Boolean, rnd: Random): Offset {
+private fun DrawScope.townHouse(pencil: Pencil, ground: Offset, width: Float, floors: Int, lit: Float, rnd: Random): Offset {
     val u = density
     val x = ground.x
     val g = ground.y
@@ -604,15 +719,22 @@ private fun DrawScope.townHouse(pencil: Pencil, ground: Offset, width: Float, fl
     return Offset(x + width * 0.25f, g - wall - width * 0.3f)
 }
 
-/** Des rangées de fenêtres dans [facade] : petits carrés au crayon le jour, points jaunes la nuit (pas toutes). */
-private fun DrawScope.windows(pencil: Pencil, facade: Rect, rows: Int, columns: Int, lit: Boolean, rnd: Random) {
+/**
+ * Des rangées de fenêtres dans [facade] : petits carrés au crayon le jour ; à la tombée du jour, une part [lit] d'entre
+ * elles s'allume en jaune, de plus en plus le soir (la nuit, les autres ne se voient plus).
+ */
+private fun DrawScope.windows(pencil: Pencil, facade: Rect, rows: Int, columns: Int, lit: Float, rnd: Random) {
     val u = density
     val yellow = pencil.ink(Crayon.YELLOW)
     for (r in 0 until rows) for (c in 0 until columns) {
         val cx = facade.left + facade.width * (c + 0.5f) / columns
         val cy = facade.top + facade.height * (r + 0.5f) / rows
-        if (lit) {
-            if (rnd.nextFloat() < 0.6f) drawRect(yellow.color.copy(alpha = (yellow.color.alpha * 1.4f).coerceAtMost(1f)), Offset(cx - 1f * u, cy - 1.2f * u), Size(2f * u, 2.4f * u))
+        if (lit > 0f) {
+            if (rnd.nextFloat() < lit) {
+                drawRect(yellow.color.copy(alpha = (yellow.color.alpha * 1.4f).coerceAtMost(1f)), Offset(cx - 1f * u, cy - 1.2f * u), Size(2f * u, 2.4f * u))
+            } else if (lit < 0.5f) {
+                pencil.outline(rect(cx - 0.9f * u, cy - 1.2f * u, cx + 0.9f * u, cy + 1.2f * u), width = 0.6f, passes = 1)
+            }
         } else {
             pencil.outline(rect(cx - 0.9f * u, cy - 1.2f * u, cx + 0.9f * u, cy + 1.2f * u), width = 0.6f, passes = 1)
         }
@@ -620,7 +742,7 @@ private fun DrawScope.windows(pencil: Pencil, facade: Rect, rows: Int, columns: 
 }
 
 /** Petite ville : l'église et son clocher au milieu, des maisons à étages autour, plus basses vers les bords. */
-private fun DrawScope.town(pencil: Pencil, at: (Float) -> Offset, x: Float, half: Float, rnd: Random, lit: Boolean, size: Float = 0.5f): Offset? {
+private fun DrawScope.town(pencil: Pencil, at: (Float) -> Offset, x: Float, half: Float, rnd: Random, lit: Float, size: Float = 0.5f): Offset? {
     val u = density
     var chimney: Offset? = null
     // Du bord vers le milieu : les maisons du milieu, plus hautes, passent devant celles des bords. Plus la ville est
@@ -651,7 +773,7 @@ private fun DrawScope.city(
     half: Float,
     w: Float,
     rnd: Random,
-    lit: Boolean,
+    lit: Float,
     landmark: Landmark? = null,
     size: Float = 0.5f,
 ): Offset? {
@@ -782,6 +904,19 @@ private fun DrawScope.tree(pencil: Pencil, base: Offset, height: Float, month: I
     wood.line(base, crownC + Offset(0f, r * 0.6f), width = 1.4f)
     pencil.outline(crown, width = 1f)
     pencil.ink(if (month in 10..11) Crayon.AUTUMN else Crayon.MEADOW).hatch(crown, crown.getBounds(), spacing = 2.4f, width = 0.7f)
+    // Au printemps, les arbres en fleurs : des pétales roses et blancs plein la couronne.
+    if (month == 4) blossom(pencil, crownC, r)
+}
+
+/** Les fleurs du printemps dans une couronne de rayon [r] : des points roses, et quelques blancs (des cerisiers). */
+private fun DrawScope.blossom(pencil: Pencil, c: Offset, r: Float) {
+    val pink = pencil.ink(Crayon.PINK)
+    for (k in 0 until 9) {
+        val a = k * 2.4
+        val d = r * (0.25f + 0.6f * ((k * 37) % 10) / 10f)
+        val p = c + Offset((d * cos(a)).toFloat(), (d * sin(a) * 0.8).toFloat())
+        if (k % 3 == 2) pencil.scope.drawCircle(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f), 1.1f * density, p) else pink.dot(p, 1.1f)
+    }
 }
 
 private fun DrawScope.church(pencil: Pencil, ground: Offset) {
@@ -863,13 +998,16 @@ private fun DrawScope.chalet(pencil: Pencil, ground: Offset, width: Float): Offs
     return Offset(x + width * 0.26f, g - wall - width * 0.38f)
 }
 
-/** La fumée de la cheminée : elle monte en volutes, ou part à l'horizontale quand le vent souffle ([lean]). */
-private fun DrawScope.smoke(pencil: Pencil, from: Offset, lean: Float = 0f) {
+/**
+ * La fumée de la cheminée : elle monte en volutes (qui s'élèvent au fil de l'animation, [phase]), ou part à
+ * l'horizontale quand le vent souffle ([lean]).
+ */
+private fun DrawScope.smoke(pencil: Pencil, from: Offset, lean: Float = 0f, phase: Float = 0f) {
     val u = density
     val side = if (lean < 0) -1f else 1f
     val wind = kotlin.math.abs(lean)
     val points = (0..18).map { i ->
-        Offset(from.x + side * i * (0.9f + 2.2f * wind) * u + (sin(i * 0.8) * 2.6 * (1 - wind) * u).toFloat(), from.y - i * (1.5f - 1.1f * wind) * u)
+        Offset(from.x + side * i * (0.9f + 2.2f * wind) * u + (sin(i * 0.8 - 2 * PI * phase * 6) * 2.6 * (1 - wind * 0.7) * u).toFloat(), from.y - i * (1.5f - 1.1f * wind) * u)
     }
     pencil.stroke(points, width = 0.8f, passes = 1)
 }
@@ -912,10 +1050,7 @@ internal fun DrawScope.surprises(pencil: Pencil, scene: SketchScene, w: Float, h
     // Au bord de la mer, les objets du premier plan sont sur le rivage.
     val ground = Offset(w * layoutOf(scene).foreground, h * if (scene.terrain.sea) SEA else GROUND)
     for (surprise in scene.surprises) when (surprise) {
-        Surprise.BIRDS -> birds(pencil, w, sky)
-        Surprise.PLANE -> plane(pencil, Offset(w * 0.87f, sky * 0.42f), trail = w * 0.14f)
         Surprise.PARAGLIDER -> paraglider(pencil, Offset(w * 0.81f, sky * 0.43f))
-        Surprise.BALLOON -> balloon(pencil, Offset(w * 0.43f, sky * 0.48f))
         Surprise.SHOOTING_STAR -> shootingStar(pencil, Offset(w * 0.75f, sky * 0.53f), Offset(w * 0.88f, sky * 0.41f))
         Surprise.UFO -> ufo(pencil, Offset(w * 0.81f, sky * 0.46f), 24f * density, beamTo = null)
         Surprise.ABDUCTION -> {
@@ -934,8 +1069,9 @@ internal fun DrawScope.surprises(pencil: Pencil, scene: SketchScene, w: Float, h
         Surprise.EGGS -> eggs(pencil, ground)
         Surprise.BLACK_CAT -> cat(pencil, ground)
         Surprise.LILY -> lily(pencil, ground)
-        // Dessinés avec le paysage ou le ciel.
-        Surprise.SUMMIT_CROSS, Surprise.SAILBOAT, Surprise.NESSIE, Surprise.SMOKE, Surprise.RAINBOW -> Unit
+        // Dessinés avec le paysage ou le ciel, ou dans la couche animée.
+        Surprise.SUMMIT_CROSS, Surprise.SAILBOAT, Surprise.NESSIE, Surprise.SMOKE, Surprise.RAINBOW, Surprise.BIRDS, Surprise.PLANE,
+        Surprise.BALLOON, Surprise.AURORA, Surprise.METEORS, Surprise.HEAT, Surprise.FROST, Surprise.LEAVES -> Unit
     }
 }
 
@@ -1145,7 +1281,7 @@ private fun DrawScope.strasbourgCathedral(pencil: Pencil, ground: Offset) {
 }
 
 /** L'Empire State Building : une tour à gradins, sa flèche, et ses fenêtres (allumées la nuit). */
-private fun DrawScope.empireState(pencil: Pencil, ground: Offset, height: Float, lit: Boolean) {
+private fun DrawScope.empireState(pencil: Pencil, ground: Offset, height: Float, lit: Float) {
     val u = density
     val x = ground.x
     val g = ground.y
@@ -1182,18 +1318,13 @@ private fun DrawScope.jetDeau(pencil: Pencil, ground: Offset, height: Float) {
 
 // --- Dans le ciel ---
 
-private fun DrawScope.bird(pencil: Pencil, c: Offset, s: Float) {
+/** Un oiseau en V ; [flap] de -1 à 1 : les ailes vers le haut ou vers le bas. */
+private fun DrawScope.bird(pencil: Pencil, c: Offset, s: Float, flap: Float = 1f) {
+    val tip = -0.3f * s * flap
     pencil.stroke(
-        listOf(c + Offset(-s, -0.3f * s), c + Offset(-0.5f * s, -0.6f * s), c, c + Offset(0.5f * s, -0.6f * s), c + Offset(s, -0.3f * s)),
+        listOf(c + Offset(-s, tip), c + Offset(-0.5f * s, -0.6f * s * (0.4f + 0.6f * flap)), c, c + Offset(0.5f * s, -0.6f * s * (0.4f + 0.6f * flap)), c + Offset(s, tip)),
         width = 1f,
     )
-}
-
-private fun DrawScope.birds(pencil: Pencil, w: Float, h: Float) {
-    val u = density
-    listOf(Triple(0.77f, 0.45f, 5.5f), Triple(0.815f, 0.42f, 4.5f), Triple(0.845f, 0.49f, 4f), Triple(0.79f, 0.53f, 3.5f)).forEach { (x, y, s) ->
-        bird(pencil, Offset(w * x, h * y), s * u)
-    }
 }
 
 private fun DrawScope.plane(pencil: Pencil, at: Offset, trail: Float) {
@@ -1600,5 +1731,407 @@ private fun DrawScope.lily(pencil: Pencil, ground: Offset) {
         }
         pencil.erase(shape)
         pencil.outline(shape, width = 0.8f, passes = 1)
+    }
+}
+
+// --- L'autre chaîne, les cultures, le patrimoine, les éoliennes, le train, le port, Noël, les réverbères ---
+
+/**
+ * La deuxième chaîne de montagnes, dans une autre direction : derrière le relief, pâle et bleutée comme tout ce qui
+ * est loin ; son trait seulement là où elle dépasse.
+ */
+private fun DrawScope.backdrop(pencil: Pencil, t: SketchTerrain, w: Float, h: Float, land: Path, snowY: Float) {
+    val line = listOf(Offset(0f, h * FOOT)) + t.backdrop.map { (x, lift) -> Offset(w * x, h * (FOOT - lift)) } + listOf(Offset(w, h * FOOT))
+    val behind = Path().apply { op(below(line), land, PathOperation.Difference) }
+    val far = pencil.ink(Crayon.FAR)
+    far.hatch(behind, Rect(0f, 0f, w, h), spacing = 7f, width = 0.6f)
+    // Les sommets lointains blanchis l'hiver, quand la neige descend bas.
+    if (snowY > h * (FOOT - 0.06f)) pencil.ink(Crayon.SNOW).hatch(behind, Rect(0f, 0f, w, h * (FOOT - 0.06f)), spacing = 7f, width = 0.6f, rising = false)
+    clipPath(Path().apply { op(rect(0f, 0f, w, h), land, PathOperation.Difference) }) {
+        far.stroke(line.drop(1).dropLast(1), width = 0.9f, passes = 1, shake = 0.3f)
+    }
+}
+
+/** La voie ferrée : deux rails et leurs traverses sur le ballast, interrompue par l'eau. */
+private fun DrawScope.railway(pencil: Pencil, t: SketchTerrain, w: Float, y: Float) {
+    val u = density
+    val wood = pencil.ink(Crayon.WOOD)
+    var x = 0.02f
+    while (x < 0.98f) {
+        if (t.isWater(x, 0.005f)) {
+            x += 0.005f
+            continue
+        }
+        val start = x
+        while (x < 0.98f && !t.isWater(x, 0.005f)) x += 0.005f
+        pencil.erase(rect(w * start, y - 1.4f * u, w * x, y + 1.6f * u))
+        var s = w * start + 1.5f * u
+        while (s < w * x - 1f * u) {
+            wood.line(Offset(s - 0.5f * u, y + 1.5f * u), Offset(s + 0.5f * u, y - 1.3f * u), width = 0.6f, passes = 1, wobble = 0.05f)
+            s += 3.4f * u
+        }
+        pencil.line(Offset(w * start, y - 0.6f * u), Offset(w * x, y - 0.6f * u), width = 0.7f, passes = 1, wobble = 0.15f)
+        pencil.line(Offset(w * start, y + 0.9f * u), Offset(w * x, y + 0.9f * u), width = 0.7f, passes = 1, wobble = 0.15f)
+    }
+}
+
+/** Le port : un quai de pierre et ses bornes au bord de la mer (ou du lac) ; les bateaux amarrés bougent avec l'eau. */
+private fun DrawScope.harbour(pencil: Pencil, scene: SketchScene, w: Float, h: Float) {
+    val t = scene.terrain
+    val u = density
+    val x0: Float
+    val x1: Float
+    val surface: Float
+    if (t.sea) {
+        x0 = 0.36f
+        x1 = 0.46f
+        surface = h * SEA
+    } else {
+        val run = t.water.maxByOrNull { it.endInclusive - it.start } ?: return
+        x0 = maxOf(run.start, 0.30f)
+        x1 = minOf(x0 + 0.08f, run.endInclusive - 0.05f)
+        surface = h * (FOOT - t.heightAt((run.start + run.endInclusive) / 2))
+    }
+    if (x1 - x0 < 0.03f) return
+    val quay = rect(w * x0, surface - 2.5f * u, w * x1, surface + 4f * u)
+    pencil.erase(quay)
+    pencil.outline(quay, width = 0.9f)
+    pencil.ink(Crayon.ROCK).hatch(quay, quay.getBounds(), spacing = 1.6f, width = 0.6f)
+    listOf(0.2f, 0.55f, 0.85f).forEach { f -> pencil.dot(Offset(w * (x0 + (x1 - x0) * f), surface - 3.4f * u), 1f) }
+    listOf(0.028f, 0.062f).map { x1 + it }.filter { t.sea || t.isWater(it, -0.01f) }.forEach { x -> scene.anchors.moorings += Offset(w * x, surface + 3.5f * u) }
+}
+
+/** Un petit bateau amarré : la coque et son mât, la voile roulée. */
+private fun DrawScope.boat(pencil: Pencil, at: Offset, color: androidx.compose.ui.graphics.Color) {
+    val u = density
+    val hull = polygon(listOf(Offset(at.x - 6f * u, at.y - 2.5f * u), Offset(at.x + 6f * u, at.y - 2.5f * u), Offset(at.x + 4f * u, at.y + 0.5f * u), Offset(at.x - 4f * u, at.y + 0.5f * u)))
+    pencil.erase(hull)
+    pencil.outline(hull, width = 0.9f)
+    pencil.ink(color).hatch(hull, hull.getBounds(), spacing = 1.4f, width = 0.6f)
+    pencil.ink(Crayon.WOOD).line(Offset(at.x, at.y - 2.5f * u), Offset(at.x, at.y - 16f * u), width = 0.8f, passes = 1)
+    pencil.line(Offset(at.x, at.y - 5f * u), Offset(at.x + 5f * u, at.y - 4.5f * u), width = 1.1f, passes = 1)
+}
+
+/** Un verger : une rangée de petits arbres fruitiers au pied du relief, en fleurs au printemps, chargés de fruits l'été. */
+private fun DrawScope.orchard(pencil: Pencil, t: SketchTerrain, w: Float, h: Float, month: Int, rnd: Random, free: (Float) -> Boolean) {
+    val u = density
+    val step = 0.024f
+    val start = (0..28).map { 0.40f + it * 0.01f }.firstOrNull { x0 -> (0..4).all { k -> val x = x0 + k * step; free(x) && t.heightAt(x) < 0.08f } } ?: return
+    val wood = pencil.ink(Crayon.WOOD)
+    for (k in 0..4) {
+        val x = start + k * step
+        val base = Offset(w * x, h * (FOOT - t.heightAt(x)) + 3f * u)
+        val c = base + Offset(0f, -7f * u)
+        wood.line(base, c + Offset(0f, 2f * u), width = 1f, passes = 1)
+        if (month == 12 || month in 1..2) {
+            listOf(-1f, 1f).forEach { side -> wood.line(c + Offset(0f, 2f * u), c + Offset(side * 3.5f * u, -2f * u), width = 0.7f, passes = 1) }
+            continue
+        }
+        val crown = oval(c, 4.2f * u, 3.6f * u)
+        pencil.erase(crown)
+        pencil.outline(crown, width = 0.8f, passes = 1)
+        pencil.ink(if (month in 10..11) Crayon.AUTUMN else Crayon.MEADOW).hatch(crown, crown.getBounds(), spacing = 1.8f, width = 0.6f)
+        when (month) {
+            4 -> blossom(pencil, c, 4f * u)
+            in 7..9 -> repeat(3) { pencil.ink(Crayon.RED).dot(c + Offset((rnd.nextFloat() - 0.5f) * 5f * u, (rnd.nextFloat() - 0.5f) * 4f * u), 0.9f) }
+        }
+    }
+}
+
+/**
+ * Les éoliennes des environs, sur les hauteurs : deux ou trois mâts blancs ; leurs pales tournent avec le vent dans la
+ * couche animée ([SketchAnchors.rotors]). Plus petites au loin.
+ */
+private fun DrawScope.turbines(pencil: Pencil, t: SketchTerrain, w: Float, h: Float, anchors: SketchAnchors, taken: MutableList<ClosedFloatingPointRange<Float>>) {
+    val u = density
+    val spots = (0..34).map { 0.42f + it * 0.01f }.filter { x -> !t.isWater(x, 0.01f) && taken.none { x in it } }.sortedByDescending { t.heightAt(it) }
+    val chosen = mutableListOf<Float>()
+    for (x in spots) {
+        if (chosen.size == 3) break
+        if (chosen.all { abs(it - x) >= 0.06f }) chosen += x
+    }
+    chosen.sorted().forEach { x ->
+        val far = x > t.farX
+        val size = (if (far) 20f else 28f) * u
+        val base = Offset(w * x, h * (FOOT - t.heightAt(x)) + 1f * u)
+        val hub = base + Offset(0f, -size)
+        val mast = polygon(listOf(base + Offset(-1.1f * u, 0f), hub + Offset(-0.5f * u, 0f), hub + Offset(0.5f * u, 0f), base + Offset(1.1f * u, 0f)))
+        pencil.erase(mast)
+        (if (far) pencil.ink(Crayon.FAR) else pencil).outline(mast, width = 0.7f, passes = 1)
+        pencil.outline(rect(hub.x - 1.2f * u, hub.y - 1f * u, hub.x + 2.4f * u, hub.y + 1f * u), width = 0.7f, passes = 1)
+        anchors.rotors += hub to size * 0.42f
+        taken += (x - 0.025f)..(x + 0.025f)
+    }
+}
+
+/** Le rotor d'une éolienne : trois pales fines autour du moyeu, tournées de [angle] degrés. */
+private fun DrawScope.rotor(pencil: Pencil, hub: Offset, length: Float, angle: Float) {
+    val u = density
+    for (k in 0 until 3) {
+        val a = Math.toRadians((angle + k * 120).toDouble())
+        val dir = Offset(cos(a).toFloat(), sin(a).toFloat())
+        val side = Offset(-dir.y, dir.x)
+        val blade = polygon(listOf(hub + side * (0.9f * u), hub + dir * (length * 0.25f) + side * (1.3f * u), hub + dir * length, hub - side * (0.4f * u)))
+        pencil.erase(blade)
+        pencil.outline(blade, width = 0.6f, passes = 1)
+    }
+    pencil.dot(hub, 1.1f)
+}
+
+/** Le château (ou des ruines) sur une hauteur, l'abbaye au fond du vallon, là où il reste de la place. */
+private fun DrawScope.heritage(pencil: Pencil, scene: SketchScene, w: Float, h: Float, taken: MutableList<ClosedFloatingPointRange<Float>>) {
+    val t = scene.terrain
+    val u = density
+    // En plaine, le lointain est plat : le château peut y être aussi.
+    fun open(x: Float) = !t.isWater(x, 0.03f) && taken.none { x in it } && (x < t.farX || t.relief == Relief.PLAIN) && t.heightAt(x) < t.snowline - 0.005f
+    fun ground(x: Float) = Offset(w * x, h * (FOOT - t.heightAt(x)) + 1f * u)
+    val xs = (0..30).map { 0.40f + it * 0.01f }
+    if (Decor.CASTLE in scene.decor || Decor.RUINS in scene.decor) {
+        xs.filter { x -> open(x - 0.025f) && open(x) && open(x + 0.025f) }.maxByOrNull { t.heightAt(it) }?.let { x ->
+            if (Decor.CASTLE in scene.decor) castle(pencil, ground(x), 1f) else ruins(pencil, ground(x))
+            taken += (x - 0.04f)..(x + 0.04f)
+        }
+    }
+    if (Decor.ABBEY in scene.decor) {
+        xs.filter { x -> open(x - 0.03f) && open(x) && open(x + 0.03f) }.minByOrNull { t.heightAt(it) + abs(it - 0.55f) * 0.05f }?.let { x ->
+            abbey(pencil, ground(x))
+            taken += (x - 0.045f)..(x + 0.045f)
+        }
+    }
+}
+
+/** Un château fort : le donjon crénelé entre deux tours rondes coiffées d'ardoise, la porte en arc. */
+private fun DrawScope.castle(pencil: Pencil, ground: Offset, scale: Float) {
+    val u = density * scale
+    val x = ground.x
+    val g = ground.y
+    val keep = rect(x - 6f * u, g - 17f * u, x + 6f * u, g)
+    val merlons = (0..3).fold(Path()) { p, k -> p.union(rect(x - 6f * u + k * 3.4f * u, g - 19.5f * u, x - 4f * u + k * 3.4f * u, g - 17f * u)) }
+    val walls = rect(x - 14f * u, g - 9f * u, x + 14f * u, g)
+    val towers = listOf(-13f, 13f).map { dx -> rect(x + (dx - 3f) * u, g - 15f * u, x + (dx + 3f) * u, g) }
+    val roofs = listOf(-13f, 13f).map { dx -> polygon(listOf(Offset(x + (dx - 3.8f) * u, g - 15f * u), Offset(x + dx * u, g - 23f * u), Offset(x + (dx + 3.8f) * u, g - 15f * u))) }
+    val all = (towers + roofs).fold(Path().apply { addPath(walls) }.union(keep).union(merlons)) { p, s -> p.union(s) }
+    pencil.erase(all)
+    val stone = pencil.ink(Crayon.ROCK)
+    pencil.outline(walls, width = 0.9f)
+    stone.hatch(walls, walls.getBounds(), spacing = 2.2f, width = 0.6f)
+    pencil.outline(keep, width = 1f)
+    pencil.outline(merlons, width = 0.7f, passes = 1)
+    stone.hatch(keep, keep.getBounds(), spacing = 2.6f, width = 0.6f)
+    towers.forEach { pencil.outline(it, width = 0.9f) }
+    roofs.forEach {
+        pencil.outline(it, width = 0.9f)
+        pencil.roofInk(Crayon.FAR).hatch(it, it.getBounds(), spacing = 1.5f, width = 0.6f)
+    }
+    // La porte, une meurtrière, et le drapeau sur le donjon.
+    pencil.stroke(listOf(Offset(x - 2f * u, g), Offset(x - 2f * u, g - 4f * u), Offset(x, g - 6f * u), Offset(x + 2f * u, g - 4f * u), Offset(x + 2f * u, g)), width = 0.8f, passes = 1)
+    pencil.line(Offset(x, g - 13f * u), Offset(x, g - 10f * u), width = 0.7f, passes = 1)
+    pencil.line(Offset(x + 4f * u, g - 19.5f * u), Offset(x + 4f * u, g - 26f * u), width = 0.7f, passes = 1)
+    val flag = polygon(listOf(Offset(x + 4f * u, g - 26f * u), Offset(x + 9f * u, g - 24.8f * u), Offset(x + 4f * u, g - 23.5f * u)))
+    pencil.ink(Crayon.RED).hatch(flag, flag.getBounds(), spacing = 1f, width = 0.6f)
+}
+
+/** Des ruines : un pan de mur au sommet déchiqueté, une fenêtre en arc, du lierre. */
+private fun DrawScope.ruins(pencil: Pencil, ground: Offset) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val wall = polygon(
+        listOf(
+            Offset(x - 13f * u, g), Offset(x - 13f * u, g - 9f * u), Offset(x - 9f * u, g - 13f * u), Offset(x - 6f * u, g - 11f * u),
+            Offset(x - 4f * u, g - 20f * u), Offset(x + 1f * u, g - 21f * u), Offset(x + 2f * u, g - 15f * u), Offset(x + 6f * u, g - 12f * u),
+            Offset(x + 8f * u, g - 6f * u), Offset(x + 12f * u, g - 4f * u), Offset(x + 13f * u, g),
+        ),
+    )
+    pencil.erase(wall)
+    pencil.outline(wall, width = 1f)
+    pencil.ink(Crayon.ROCK).hatch(wall, wall.getBounds(), spacing = 2.4f, width = 0.6f)
+    val window = Path().apply {
+        moveTo(x - 3f * u, g - 6f * u)
+        lineTo(x - 3f * u, g - 11f * u)
+        quadraticTo(x - 1f * u, g - 15f * u, x + 1f * u, g - 11f * u)
+        lineTo(x + 1f * u, g - 6f * u)
+        close()
+    }
+    pencil.erase(window)
+    pencil.outline(window, width = 0.7f, passes = 1)
+    listOf(-10f to -3f, -8f to -6f, 5f to -3f, 9f to -2f, -11f to -7f).forEach { (dx, dy) -> pencil.ink(Crayon.FOREST).dot(Offset(x + dx * u, g + dy * u), 1.2f) }
+}
+
+/** Une abbaye : la longue église et son clocher carré, le cloître en arcades devant. */
+private fun DrawScope.abbey(pencil: Pencil, ground: Offset) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val nave = rect(x - 14f * u, g - 10f * u, x + 8f * u, g)
+    val roof = polygon(listOf(Offset(x - 15f * u, g - 10f * u), Offset(x - 10f * u, g - 15f * u), Offset(x + 8f * u, g - 15f * u), Offset(x + 9f * u, g - 10f * u)))
+    val tower = rect(x + 8f * u, g - 21f * u, x + 14f * u, g)
+    val cap = polygon(listOf(Offset(x + 7.5f * u, g - 21f * u), Offset(x + 11f * u, g - 26f * u), Offset(x + 14.5f * u, g - 21f * u)))
+    pencil.erase(Path().apply { addPath(nave) }.union(roof).union(tower).union(cap))
+    pencil.outline(nave, width = 0.9f)
+    pencil.ink(Crayon.WHEAT).hatch(nave, nave.getBounds(), spacing = 2.6f, width = 0.5f)
+    pencil.outline(roof, width = 0.9f)
+    pencil.roofInk(Crayon.ROOF).hatch(roof, roof.getBounds(), spacing = 1.8f, width = 0.6f)
+    pencil.outline(tower, width = 1f)
+    pencil.outline(cap, width = 0.9f)
+    pencil.roofInk(Crayon.ROOF).hatch(cap, cap.getBounds(), spacing = 1.5f, width = 0.6f)
+    pencil.outline(oval(Offset(x + 11f * u, g - 16f * u), 1.4f * u, 1.4f * u), width = 0.6f, passes = 1)
+    pencil.line(Offset(x + 11f * u, g - 26f * u), Offset(x + 11f * u, g - 29f * u), width = 0.7f, passes = 1)
+    // Les arcades du cloître.
+    for (k in 0 until 5) {
+        val ax = x - 13f * u + k * 4f * u
+        pencil.stroke(listOf(Offset(ax, g), Offset(ax, g - 3.5f * u), Offset(ax + 1.5f * u, g - 5.2f * u), Offset(ax + 3f * u, g - 3.5f * u), Offset(ax + 3f * u, g)), width = 0.6f, passes = 1)
+    }
+}
+
+/** Le sapin de Noël : boules de couleur, étoile au sommet ; allumé le soir ([lit]), ses lumières brillent. */
+private fun DrawScope.christmasTree(pencil: Pencil, base: Offset, height: Float, lit: Boolean) {
+    fir(pencil, base, height)
+    val u = density
+    val colors = listOf(Crayon.RED, Crayon.YELLOW, Crayon.BLUE, Crayon.PINK)
+    listOf(0.42f to -0.05f, 0.55f to 0.12f, 0.68f to -0.18f, 0.74f to 0.2f, 0.84f to -0.05f, 0.6f to -0.1f).forEachIndexed { k, (dy, dx) ->
+        val p = base + Offset(dx * height, -height + dy * height)
+        val ink = pencil.ink(colors[k % colors.size])
+        if (lit) ink.hatch(oval(p, 2.2f * u, 2.2f * u), Rect(p, 2.2f * u), spacing = 0.9f, width = 0.5f)
+        ink.dot(p, if (lit) 1.2f else 0.9f)
+    }
+    val top = base + Offset(0f, -height - 1.5f * u)
+    val star = pencil.ink(Crayon.YELLOW)
+    for (k in 0 until 5) {
+        val a = -PI / 2 + k * 2 * PI / 5
+        star.line(top, top + Offset((3f * u * cos(a)).toFloat(), (3f * u * sin(a)).toFloat()), width = 1f, passes = 1, wobble = 0.05f)
+    }
+}
+
+/** Une guirlande qui pend entre deux points : des ampoules de couleur, qui brillent le soir. */
+private fun DrawScope.garland(pencil: Pencil, from: Offset, to: Offset, lit: Boolean) {
+    val u = density
+    val n = ((to.x - from.x) / (4f * u)).toInt().coerceAtLeast(4)
+    val points = (0..n).map { k ->
+        val f = k / n.toFloat()
+        // Elle pend en festons, d'une maison à l'autre.
+        val sag = abs(sin(f * PI * 3)).toFloat() * 3f * u
+        from + (to - from) * f + Offset(0f, sag)
+    }
+    pencil.stroke(points, width = 0.5f, passes = 1)
+    val colors = listOf(Crayon.RED, Crayon.YELLOW, Crayon.GREEN, Crayon.BLUE)
+    points.forEachIndexed { k, p -> pencil.ink(colors[k % colors.size]).dot(p + Offset(0f, 0.8f * u), if (lit) 1.1f else 0.7f) }
+}
+
+/** Un réverbère : le mât, la crosse et la lanterne, et sa lumière le soir. */
+private fun DrawScope.lamp(pencil: Pencil, ground: Offset, lit: Boolean) {
+    val u = density
+    val top = ground + Offset(0f, -13f * u)
+    pencil.line(ground, top, width = 0.8f, passes = 1)
+    pencil.stroke(listOf(top, top + Offset(1.5f * u, -1.5f * u), top + Offset(3.5f * u, -1f * u)), width = 0.7f, passes = 1)
+    val lantern = top + Offset(3.5f * u, 0.5f * u)
+    if (lit) {
+        val glow = pencil.ink(Crayon.YELLOW)
+        glow.hatch(oval(lantern, 4.5f * u, 4.5f * u), Rect(lantern, 4.5f * u), spacing = 1.4f, width = 0.5f)
+        glow.dot(lantern, 1.4f)
+    } else {
+        pencil.dot(lantern, 1f)
+    }
+}
+
+// --- La couche animée ---
+
+/**
+ * Ce qui bouge dans le paysage et le ciel, à chaque image ([phase] de 0 à 1) : la fumée qui monte, le voilier qui
+ * navigue, les bateaux qui dansent au port, les éoliennes, le train, les mouettes, les oiseaux, l'avion, le ballon, les
+ * feuilles mortes. Toujours des tours entiers : l'animation boucle sans à-coup.
+ */
+internal fun DrawScope.animated(pencil: Pencil, scene: SketchScene, w: Float, h: Float, sky: Float, phase: Float) {
+    val a = scene.anchors
+    val u = density
+    val lean = scene.lean
+    val turn = 2 * PI * phase
+    // Plus il y a de vent, plus les pales tournent vite (des tours entiers par cycle).
+    val turns = (3 + scene.conditions.windKmh / 6).toInt().coerceAtMost(12)
+    a.rotors.forEachIndexed { k, (hub, length) -> rotor(pencil, hub, length, phase * 120f * turns + k * 40f) }
+    a.chimneys.forEach { smoke(pencil, it, lean, phase) }
+    a.moorings.forEachIndexed { k, m -> boat(pencil, m + Offset(0f, (sin(turn * 3 + k * 1.7) * 0.8 * u).toFloat()), if (k % 2 == 0) Crayon.BLUE else Crayon.RED) }
+    a.sail?.let { sailboat(pencil, it + Offset((w * 0.025f * sin(turn)).toFloat(), (sin(turn * 4) * 0.6 * u).toFloat())) }
+    a.track?.let { train(pencil, scene.terrain, w, it, phase, scene.lit) }
+    if (Decor.GULLS in scene.decor) {
+        listOf(Triple(0.63f, 0.72f, 7f), Triple(0.71f, 0.67f, 6f), Triple(0.55f, 0.78f, 5f)).forEachIndexed { k, (x, y, size) ->
+            val glide = turn + k * 2.1
+            gull(pencil, Offset(w * x + (w * 0.02f * sin(glide)).toFloat(), h * y + (2.5f * u * cos(glide * 2)).toFloat()), size * u)
+        }
+    }
+    for (surprise in scene.surprises) when (surprise) {
+        Surprise.BIRDS -> flyingBirds(pencil, w, sky, phase)
+        // L'avion traverse le ciel libre vers la droite, sa traînée derrière lui, une fois par cycle.
+        Surprise.PLANE -> plane(pencil, Offset(w * (0.56f + 0.32f * phase), sky * (0.45f - 0.04f * phase)), trail = w * (0.06f + 0.10f * phase))
+        Surprise.BALLOON -> balloon(pencil, Offset(w * 0.43f + (w * 0.012f * sin(turn)).toFloat(), sky * 0.48f + (3f * u * sin(turn * 2)).toFloat()))
+        Surprise.LEAVES -> leaves(pencil, w, h, phase, lean)
+        else -> Unit
+    }
+}
+
+/** Les oiseaux tournent en rond dans le ciel, en battant des ailes. */
+private fun DrawScope.flyingBirds(pencil: Pencil, w: Float, h: Float, phase: Float) {
+    val u = density
+    listOf(Triple(0.77f, 0.45f, 5.5f), Triple(0.815f, 0.42f, 4.5f), Triple(0.845f, 0.49f, 4f), Triple(0.79f, 0.53f, 3.5f)).forEachIndexed { k, (x, y, s) ->
+        val a = 2 * PI * (phase * 2 + k * 0.08)
+        val c = Offset(w * (x - 0.05f) + (w * 0.05f * cos(a)).toFloat(), h * y + (h * 0.025f * sin(a)).toFloat())
+        val flap = sin(2 * PI * (phase * 30 + k * 0.25)).toFloat()
+        bird(pencil, c, s * u, flap)
+    }
+}
+
+/** Le train régional : la motrice et ses voitures, fenêtres allumées le soir ; il traverse la vallée une fois par cycle. */
+private fun DrawScope.train(pencil: Pencil, t: SketchTerrain, w: Float, track: Float, phase: Float, lit: Float) {
+    val u = density
+    val car = 15f * u
+    val gap = 1.5f * u
+    val cars = 4
+    val length = cars * (car + gap)
+    // Sur une image fixe (phase 0), le train est au milieu de la vallée.
+    val head = -length + (w + 2 * length) * ((phase + 0.5f) % 1f)
+    for (c in 0 until cars) {
+        val x1 = head - c * (car + gap)
+        val x0 = x1 - car
+        if (x1 < 0f || x0 > w || t.isWater(x0 / w) || t.isWater(x1 / w)) continue
+        val top = track - 7.5f * u
+        val body = if (c == 0) {
+            polygon(listOf(Offset(x0, track - 1.2f * u), Offset(x0, top), Offset(x1 - 4f * u, top), Offset(x1, track - 3.5f * u), Offset(x1, track - 1.2f * u)))
+        } else {
+            rect(x0, top, x1, track - 1.2f * u)
+        }
+        pencil.erase(body)
+        pencil.outline(body, width = 0.8f, passes = 1)
+        // La livrée : le bas rouge, une bande grise.
+        pencil.ink(Crayon.RED).hatch(body, Rect(x0, track - 3.6f * u, x1, track - 1.2f * u), spacing = 1.1f, width = 0.6f)
+        val yellow = pencil.ink(Crayon.YELLOW)
+        var wx = x0 + 2f * u
+        var k = 0
+        while (wx < x1 - (if (c == 0) 5f else 2.5f) * u) {
+            val window = rect(wx, top + 1.5f * u, wx + 2f * u, top + 3.5f * u)
+            if (lit > 0f && (k + c) % 3 != 2) drawRect(yellow.color.copy(alpha = (yellow.color.alpha * 1.4f).coerceAtMost(1f)), Offset(wx, top + 1.5f * u), Size(2f * u, 2f * u)) else pencil.outline(window, width = 0.5f, passes = 1)
+            wx += 3.4f * u
+            k++
+        }
+        listOf(x0 + 3f * u, x1 - 3f * u).forEach { pencil.dot(Offset(it, track - 0.6f * u), 1f) }
+    }
+}
+
+/** Les feuilles mortes, orange et rousses, emportées par le vent de l'automne. */
+private fun DrawScope.leaves(pencil: Pencil, w: Float, h: Float, phase: Float, lean: Float) {
+    val u = density
+    val side = if (lean < 0) -1f else 1f
+    val colors = listOf(Crayon.AUTUMN, Crayon.ORANGE, Crayon.WOOD)
+    for (k in 0 until 7) {
+        val f = (phase * (1 + k % 2) + k / 7f) % 1f
+        val x = 0.42f + 0.36f * (if (side > 0) f else 1 - f)
+        val y = 0.70f + 0.20f * ((k * 0.37f) % 1f) + 0.03f * sin(2 * PI * (f * 2 + k * 0.3)).toFloat()
+        val c = Offset(w * x, h * y)
+        val a = 2 * PI * (phase * (3 + k % 3) + k * 0.2)
+        val dir = Offset(cos(a).toFloat(), sin(a).toFloat()) * (2.6f * u)
+        val normal = Offset(-dir.y, dir.x) * 0.45f
+        val leaf = polygon(listOf(c - dir, c + normal, c + dir, c - normal))
+        pencil.erase(leaf)
+        pencil.ink(colors[k % colors.size]).outline(leaf, width = 0.8f, passes = 1)
+        pencil.ink(colors[k % colors.size]).hatch(leaf, leaf.getBounds(), spacing = 0.9f, width = 0.5f)
     }
 }

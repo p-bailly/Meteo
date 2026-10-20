@@ -103,7 +103,7 @@ class WidgetColors(
 object Widgets {
     /** Un widget qui n'arrive pas à se mettre à jour ne doit jamais fermer l'appli. */
     suspend fun updateAll(context: Context) {
-        listOf(NowWidget(), ForecastWidget(), HoursWidget()).forEach { widget ->
+        listOf(NowWidget(), ForecastWidget(), HoursWidget(), SketchWidget()).forEach { widget ->
             try {
                 widget.updateAll(context)
             } catch (e: CancellationException) {

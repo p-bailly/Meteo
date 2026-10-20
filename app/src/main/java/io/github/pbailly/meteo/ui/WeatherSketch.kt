@@ -15,7 +15,10 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import io.github.pbailly.meteo.data.Surroundings
 import io.github.pbailly.meteo.data.TerrainProfile
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
@@ -33,7 +36,7 @@ import kotlin.random.Random
  * Sahara ou la pollution. Des bêtes selon le lieu, parfois une petite surprise, et certains jours de fête une autre.
  * Traits doublés, un peu tremblés, et hachures, en couleurs plus ou moins douces ([style] : 0 discret, 1 normal,
  * 2 coloré) pour ne pas gêner la lecture. Avec [motion], la pluie et la neige tombent et les nuages glissent. Toucher
- * le dessin en montre une autre version.
+ * le dessin en montre une autre version ; un appui long l'ouvre en grand ([onLongPress]).
  */
 @Composable
 fun WeatherSketch(
@@ -49,6 +52,8 @@ fun WeatherSketch(
     style: Int = 1,
     motion: Boolean = true,
     modifier: Modifier = Modifier,
+    /** Appui long sur le dessin (la carte postale en grand). */
+    onLongPress: (() -> Unit)? = null,
 ) {
     val dark = LocalChartColors.current.darkTheme
     val strength = sketchStrength(style)
@@ -58,10 +63,10 @@ fun WeatherSketch(
     val snowing = SketchSky.of(code) == SketchSky.SNOW || conditions.snowOnGround
     // Les saisons de l'hémisphère sud sont à l'envers.
     val month = SketchScenes.seasonMonth(time.monthValue, latitude)
-    val relief = remember(terrain, surroundings, month, snowing, latitude) { SketchTerrains.from(terrain, month, snowing, latitude, surroundings) }
+    val relief = remember(terrain, surroundings, month, snowing, latitude, conditions) { SketchTerrains.from(terrain, month, snowing, latitude, surroundings, conditions) }
     val landmark = remember(latitude, longitude) { Landmark.near(latitude, longitude) }
     val scene = remember(code, isDay, time, placeSeed, relief, surroundings, conditions, landmark, taps.intValue) {
-        SketchScenes.scene(code, isDay, time, placeSeed, relief, taps.intValue, surroundings, conditions, landmark)
+        SketchScenes.scene(code, isDay, time, placeSeed, relief, taps.intValue, surroundings, conditions, landmark, latitude, longitude)
     }
     val moonAge = remember(time) { SketchScenes.moonAge(time) }
     // L'animation : une phase de 0 à 1 en 20 secondes, mise à jour une quinzaine de fois par seconde (assez pour la
@@ -81,7 +86,7 @@ fun WeatherSketch(
         modifier
             // Calque à part : les nuages et les objets du premier plan effacent ce qui passe derrière eux.
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-            .pointerInput(taps) { detectTapGestures { taps.intValue++ } }
+            .pointerInput(taps, onLongPress) { detectTapGestures(onLongPress = onLongPress?.let { { _ -> it() } }) { taps.intValue++ } }
             .drawWithCache {
                 // Le paysage et le ciel fixes, dessinés une fois ; à chaque image, seulement ce qui bouge par-dessus.
                 // Toujours le même trait pour la même scène : pas de scintillement.
@@ -97,4 +102,38 @@ fun WeatherSketch(
                 }
             },
     )
+}
+
+/**
+ * Le même dessin, en image fixe de [widthPx] × [heightPx] pixels (le widget de l'écran d'accueil) : le relief et les
+ * environs gardés sur le téléphone, la prévision de l'heure, le style des Réglages.
+ */
+fun sketchImage(
+    code: Int,
+    isDay: Boolean,
+    time: LocalDateTime,
+    latitude: Double,
+    longitude: Double,
+    placeSeed: Int,
+    terrain: TerrainProfile?,
+    surroundings: Surroundings?,
+    conditions: SketchConditions,
+    style: Int,
+    dark: Boolean,
+    widthPx: Int,
+    heightPx: Int,
+    density: Float,
+): ImageBitmap {
+    val strength = sketchStrength(style)
+    val snowing = SketchSky.of(code) == SketchSky.SNOW || conditions.snowOnGround
+    val month = SketchScenes.seasonMonth(time.monthValue, latitude)
+    val relief = SketchTerrains.from(terrain, month, snowing, latitude, surroundings, conditions)
+    val scene = SketchScenes.scene(code, isDay, time, placeSeed, relief, 0, surroundings, conditions, Landmark.near(latitude, longitude), latitude, longitude)
+    val image = ImageBitmap(widthPx.coerceAtLeast(1), heightPx.coerceAtLeast(1))
+    val size = Size(image.width.toFloat(), image.height.toFloat())
+    CanvasDrawScope().draw(Density(density), LayoutDirection.Ltr, Canvas(image), size) {
+        val pencil = Pencil(this, sketchGraphite(dark, strength), Random(scene.seed * 31 + code), dark, strength)
+        drawScene(pencil, scene, isDay, SketchScenes.moonAge(time), southern = latitude < 0, month = month)
+    }
+    return image
 }

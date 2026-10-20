@@ -180,9 +180,10 @@ class SketchSceneTest {
         // En pleine campagne : une ferme et ses champs ; en montagne, un chalet ou une ferme.
         assertTrue(decors("paris", Surroundings(Settlement.NONE)).all { Decor.FARM in it && Decor.FIELDS in it })
         assertTrue(decors("chamonix", Surroundings(Settlement.NONE)).all { Decor.CHALET in it })
-        // Au bord de la mer, parfois un phare ; jamais loin de l'eau.
-        assertTrue(decors("nice", Surroundings(Settlement.TOWN, coast = true)).any { Decor.LIGHTHOUSE in it })
-        assertTrue(decors("morteau", Surroundings(Settlement.TOWN)).none { Decor.LIGHTHOUSE in it })
+        // Au bord de la mer, le phare seulement là où il y en a un vrai ; jamais loin de l'eau.
+        assertTrue(decors("nice", Surroundings(Settlement.TOWN, coast = true, lighthouse = true)).all { Decor.LIGHTHOUSE in it })
+        assertTrue(decors("nice", Surroundings(Settlement.TOWN, coast = true)).none { Decor.LIGHTHOUSE in it })
+        assertTrue(decors("morteau", Surroundings(Settlement.TOWN, lighthouse = true)).none { Decor.LIGHTHOUSE in it })
     }
 
     @Test
