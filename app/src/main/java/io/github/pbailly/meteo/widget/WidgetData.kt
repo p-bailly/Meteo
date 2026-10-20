@@ -2,6 +2,7 @@ package io.github.pbailly.meteo.widget
 
 import android.content.Context
 import android.content.res.Configuration
+import android.util.Log
 import androidx.compose.ui.graphics.Color
 import androidx.glance.appwidget.updateAll
 import io.github.pbailly.meteo.data.Forecast
@@ -100,9 +101,16 @@ class WidgetColors(
 
 /** Mise à jour de tous les widgets : après un nouveau téléchargement dans l'app, un changement de lieu ou de thème. */
 object Widgets {
+    /** Un widget qui n'arrive pas à se mettre à jour ne doit jamais fermer l'appli. */
     suspend fun updateAll(context: Context) {
-        NowWidget().updateAll(context)
-        ForecastWidget().updateAll(context)
-        HoursWidget().updateAll(context)
+        listOf(NowWidget(), ForecastWidget(), HoursWidget()).forEach { widget ->
+            try {
+                widget.updateAll(context)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w("Widgets", "Mise à jour impossible : ${widget.javaClass.simpleName}", e)
+            }
+        }
     }
 }
