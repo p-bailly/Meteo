@@ -52,7 +52,7 @@ class SketchSceneTest {
         assertTrue(SketchScenes.scene(0, true, time, placeSeed = 42, variant = 1).seed != a.seed)
         // Au fil des jours, le décor change (village, sapins…), sans sortir de ce que le relief permet.
         val decors = (0L until 60L).map { SketchScenes.scene(0, true, time.plusDays(it), placeSeed = 42).decor }.toSet()
-        assertTrue(decors.size >= 3)
+        assertTrue(decors.size >= 2)
     }
 
     private val profiles = Json.parseToJsonElement(javaClass.getResourceAsStream("/terrain/profiles.json")!!.readBytes().decodeToString()).jsonObject
@@ -212,6 +212,53 @@ class SketchSceneTest {
         // Seulement des nuages hauts : un voile.
         assertTrue(SketchScenes.scene(3, true, time, 1, paris, conditions = SketchConditions(clouds = SketchClouds(0.05f, 0.1f, 0.9f))).highVeil)
         assertFalse(SketchScenes.scene(3, true, time, 1, paris, conditions = SketchConditions(clouds = mid)).highVeil)
+    }
+
+    @Test
+    fun `no village is made up where there is none`() {
+        val days = (0L until 120L).map { LocalDateTime.of(2026, 6, 1, 14, 0).plusDays(it) }
+        val homes = setOf(Decor.VILLAGE, Decor.TOWN, Decor.CITY, Decor.HAMLET, Decor.FARM, Decor.CHALET)
+        // Sans les environs (OpenStreetMap injoignable), le dessin n'invente pas de village.
+        for (name in listOf("paris", "morteau", "chamonix", "valence")) {
+            val t = SketchTerrains.from(profile(name), 6, snowing = false)
+            assertTrue(name, days.none { d -> SketchScenes.scene(0, true, d, 3, t).decor.any { it in homes } })
+        }
+        // Au sommet, ni village ni ferme.
+        val summit = SketchTerrains.from(summitProfile(), 7, snowing = false)
+        assertTrue(days.none { d -> SketchScenes.scene(0, true, d, 3, summit, around = Surroundings(Settlement.NONE)).decor.any { it in homes } })
+    }
+
+    @Test
+    fun `a point at sea is drawn on the water`() {
+        // En pleine mer : l'altitude est partout à 0 m.
+        val sea = TerrainProfile(DoubleArray(100) { 0.0 }, 30.0, 18, emptyList(), emptyList())
+        val t = SketchTerrains.from(sea, 7, snowing = false, around = Surroundings(Settlement.NONE, coast = true))
+        assertTrue(t.onWater && t.sea)
+        assertTrue(t.isWater(t.placeX))
+        val days = (0L until 60L).map { LocalDateTime.of(2026, 7, 1, 14, 0).plusDays(it) }
+        days.forEach { d ->
+            val scene = SketchScenes.scene(0, true, d, 3, t, around = Surroundings(Settlement.VILLAGE, coast = true))
+            assertTrue(scene.decor.none { it in setOf(Decor.VILLAGE, Decor.FARM, Decor.FIELDS, Decor.TREES, Decor.WINDSOCK) })
+            assertTrue(Surprise.SAILBOAT in scene.surprises)
+        }
+        // Sur la terre ferme, au bord de la mer : pas sur l'eau.
+        assertFalse(SketchTerrains.from(profile("nice"), 7, snowing = false).onWater)
+    }
+
+    @Test
+    fun `real summit and open sea are drawn as they are`() {
+        // Sur le Mont Blanc, la coupe regarde vers les Grandes Jorasses : on est au sommet, rien de bâti autour.
+        val montBlanc = SketchTerrains.from(profile("montblanc"), 7, snowing = false, latitude = 45.83)
+        assertEquals(Relief.SUMMIT, montBlanc.relief)
+        val days = (0L until 60L).map { LocalDateTime.of(2026, 7, 1, 14, 0).plusDays(it) }
+        val homes = setOf(Decor.VILLAGE, Decor.TOWN, Decor.CITY, Decor.HAMLET, Decor.FARM, Decor.CHALET, Decor.FIELDS)
+        assertTrue(days.none { d -> SketchScenes.scene(0, true, d, 3, montBlanc).decor.any { it in homes } })
+        assertTrue(days.none { d -> SketchScenes.scene(0, true, d, 3, montBlanc, around = Surroundings(Settlement.NONE)).decor.any { it in homes } })
+        // En pleine mer, au large de la Bretagne : de l'eau partout, un voilier, pas de village.
+        val ocean = SketchTerrains.from(profile("ocean"), 7, snowing = false, latitude = 47.0)
+        assertTrue(ocean.onWater && ocean.sea)
+        assertTrue(days.none { d -> SketchScenes.scene(0, true, d, 3, ocean).decor.any { it in homes } })
+        assertTrue(days.all { d -> Surprise.SAILBOAT in SketchScenes.scene(0, true, d, 3, ocean).surprises })
     }
 
     @Test

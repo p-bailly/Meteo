@@ -88,8 +88,10 @@ private fun layoutOf(scene: SketchScene): Layout {
         // la ville se resserre.
         for (shrink in listOf(1f, 0.75f, 0.55f)) {
             half = full * shrink
+            // Les immeubles d'une ville montent haut : ils restent à gauche du texte de droite (le ciel, les extrêmes).
+            val right = if (Decor.CITY in scene.decor || Decor.TOWN in scene.decor) 0.62f else 0.74f
             val candidates = (listOf(0.06f, 0.09f, 0.12f, 0.15f, 0.03f, 0f, 0.18f).map { t.placeX + it } + listOf(0.47f, 0.55f))
-                .map { it.coerceIn(0.33f + half, 0.74f - half) }
+                .map { it.coerceIn(0.33f + half, maxOf(0.33f + half, right - half)) }
                 .filter { x -> span(x).all(::dry) }
             settlement = candidates.firstOrNull { x -> Decor.REFUGE in scene.decor || t.heightAt(x) < 0.09f && bumpiness(x) < 0.06f }
                 ?: candidates.minByOrNull { t.heightAt(it) + bumpiness(it) }
@@ -863,26 +865,27 @@ private fun DrawScope.nessie(pencil: Pencil, water: Offset) {
     pencil.ink(Crayon.WATER).line(Offset(water.x - 20f * u, water.y + 1f * u), Offset(water.x + 22f * u, water.y + 1f * u), width = 0.8f, passes = 1)
 }
 
-internal fun DrawScope.surprises(pencil: Pencil, scene: SketchScene, w: Float, h: Float) {
+/** Les surprises : dans le ciel, placées par rapport au texte ([sky], la hauteur du cadre du ciel) ; au sol, en bas. */
+internal fun DrawScope.surprises(pencil: Pencil, scene: SketchScene, w: Float, h: Float, sky: Float = h) {
     // Au bord de la mer, les objets du premier plan sont sur le rivage.
     val ground = Offset(w * layoutOf(scene).foreground, h * if (scene.terrain.sea) SEA else GROUND)
     for (surprise in scene.surprises) when (surprise) {
-        Surprise.BIRDS -> birds(pencil, w, h)
-        Surprise.PLANE -> plane(pencil, Offset(w * 0.87f, h * 0.42f), trail = w * 0.14f)
-        Surprise.PARAGLIDER -> paraglider(pencil, Offset(w * 0.81f, h * 0.43f))
-        Surprise.BALLOON -> balloon(pencil, Offset(w * 0.43f, h * 0.48f))
-        Surprise.SHOOTING_STAR -> shootingStar(pencil, Offset(w * 0.75f, h * 0.53f), Offset(w * 0.88f, h * 0.41f))
-        Surprise.UFO -> ufo(pencil, Offset(w * 0.81f, h * 0.46f), 24f * density, beamTo = null)
+        Surprise.BIRDS -> birds(pencil, w, sky)
+        Surprise.PLANE -> plane(pencil, Offset(w * 0.87f, sky * 0.42f), trail = w * 0.14f)
+        Surprise.PARAGLIDER -> paraglider(pencil, Offset(w * 0.81f, sky * 0.43f))
+        Surprise.BALLOON -> balloon(pencil, Offset(w * 0.43f, sky * 0.48f))
+        Surprise.SHOOTING_STAR -> shootingStar(pencil, Offset(w * 0.75f, sky * 0.53f), Offset(w * 0.88f, sky * 0.41f))
+        Surprise.UFO -> ufo(pencil, Offset(w * 0.81f, sky * 0.46f), 24f * density, beamTo = null)
         Surprise.ABDUCTION -> {
-            ufo(pencil, Offset(w * 0.81f, h * 0.42f), 30f * density, beamTo = h * 0.95f)
-            sheep(pencil, Offset(w * 0.81f, h * 0.51f))
+            ufo(pencil, Offset(w * 0.81f, sky * 0.42f), 30f * density, beamTo = h * 0.95f)
+            sheep(pencil, Offset(w * 0.81f, sky * 0.51f))
         }
-        Surprise.SLEIGH -> sleigh(pencil, Offset(w * 0.80f, h * 0.46f))
-        Surprise.FIREWORKS -> fireworks(pencil, w, h)
-        Surprise.BATS -> listOf(0.78f to 0.43f, 0.44f to 0.48f, 0.87f to 0.50f).forEach { (x, y) -> bat(pencil, Offset(w * x, h * y)) }
-        Surprise.HEART -> heart(pencil, Offset(w * 0.79f, h * 0.48f), 12f * density)
-        Surprise.FISH -> fish(pencil, Offset(w * 0.80f, h * 0.46f))
-        Surprise.NOTES -> notes(pencil, w, h)
+        Surprise.SLEIGH -> sleigh(pencil, Offset(w * 0.80f, sky * 0.46f))
+        Surprise.FIREWORKS -> fireworks(pencil, w, sky)
+        Surprise.BATS -> listOf(0.78f to 0.43f, 0.44f to 0.48f, 0.87f to 0.50f).forEach { (x, y) -> bat(pencil, Offset(w * x, sky * y)) }
+        Surprise.HEART -> heart(pencil, Offset(w * 0.79f, sky * 0.48f), 12f * density)
+        Surprise.FISH -> fish(pencil, Offset(w * 0.80f, sky * 0.46f))
+        Surprise.NOTES -> notes(pencil, w, sky)
         Surprise.SNOWMAN -> snowman(pencil, ground)
         Surprise.UMBRELLA -> umbrella(pencil, ground)
         Surprise.PUMPKIN -> pumpkin(pencil, ground)

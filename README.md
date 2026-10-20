@@ -25,7 +25,11 @@ la carte) :
   (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel en toutes
   lettres (sans pictogramme), les extrêmes du jour (maxi en orange, mini en bleu) et leur **écart aux normales** de
   saison (« +2° vs normales », moyennes 1991-2020) ; en fond, un **dessin aux crayons de couleur** du lieu tel qu'il
-  est, puis du temps qu'il fait, qui descend sous le texte pour qu'on voie bien le village, la rivière ou les champs. D'abord **où l'on est**, d'après la coupe du terrain vers le sommet qui domine le lieu :
+  est, puis du temps qu'il fait : le ciel se place entre les écritures, le relief, le village, la rivière ou les champs
+  dans la bande libre sous le texte, sans monter derrière le ciel en toutes lettres ni les extrêmes. Rien n'est inventé :
+  sur un sommet (le Mont Blanc), la coupe regarde vers un autre sommet et le relief est en dessous ; en mer ou au milieu
+  d'un lac, de l'eau, un voilier et des mouettes ; et tant que les environs ne sont pas connus (OpenStreetMap lent ou
+  injoignable), pas de village au hasard, seulement ce que le relief fait pousser. D'abord **où l'on est**, d'après la coupe du terrain vers le sommet qui domine le lieu :
   en plaine (champs en parcelles selon la saison, haies), en basse montagne (sommets sous 1 200 m : croupes de feuillus,
   vertes, rousses à l'automne, nues l'hiver), en moyenne montagne (jusqu'à 2 500 m, ou un lieu déjà à 700 m : prés,
   sapins, alpages), en haute montagne (jusqu'à 3 500 m : forêt, roche, neige), en très haute montagne (aiguilles,
@@ -140,7 +144,7 @@ Comment l'altitude est calculée :
 - **Limite pluie-neige** : 300 m sous l'iso 0 °C. **Neige à une altitude** : la pluie prévue sur le lieu, quand
   elle tombe au-dessus de la limite pluie-neige (1 mm d'eau ≈ 1 cm de neige fraîche).
 - **Environs du lieu**, pour le dessin d'Aujourd'hui : une seule requête Overpass (OpenStreetMap), gardée sur le
-  téléphone. Le lieu habité est le plus grand qui couvre le lieu, une ville s'étendant d'autant plus loin de son centre
+  téléphone ; elle prend souvent 15 à 25 s, l'appli l'attend jusqu'à une minute, sur quatre serveurs tour à tour. Le lieu habité est le plus grand qui couvre le lieu, une ville s'étendant d'autant plus loin de son centre
   qu'elle est peuplée (Paris sur 8 km, 50 000 habitants sur 2 km, un village sur 700 m) : grande ville à partir de
   50 000 habitants, petite ville à partir de 2 000, village à partir de 150, sinon hameau. Forêt à moins de 1,5 km,
   rivière à moins de 1 km, lac à moins de 2 km, côte à moins de 3 km ; île si le lieu est sur une île de moins de 350 km

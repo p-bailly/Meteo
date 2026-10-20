@@ -31,7 +31,7 @@ import kotlin.random.Random
 
 /** Taille du haut d'Aujourd'hui sur un téléphone courant, en dp, et finesse des images. */
 private const val WIDTH_DP = 411
-private const val HEIGHT_DP = 259
+private const val HEIGHT_DP = 287
 private const val DENSITY = 2.5f
 
 private class Spot(
@@ -120,6 +120,10 @@ private fun spots(p: Map<String, TerrainProfile>): Map<String, Spot> {
         Spot("corse", "Île : petite ville au bord de la mer", p["nice"], 42.7, at(Settlement.TOWN, coast = true, island = true)),
         Spot("ile", "Île : village de pêcheurs", p["tromso"], 47.3, at(Settlement.VILLAGE, coast = true, island = true)),
         Spot("sans", "Morteau : avant de connaître ses environs", p["morteau"], 47.06, null),
+        Spot("montblanc", "Mont Blanc : au sommet, 4 808 m", p["montblanc"], 45.83, at(Settlement.NONE)),
+        Spot("montblanc-hl", "Mont Blanc, sans OpenStreetMap", p["montblanc"], 45.83, null),
+        Spot("ocean", "En mer : au large de la Bretagne", p["ocean"], 47.0, at(Settlement.NONE, coast = false)),
+        Spot("ocean-hl", "En mer, sans OpenStreetMap", p["ocean"], 47.0, null),
         Spot("defaut", "Hors ligne : sans coupe du relief", null, 46.0, null),
     ).associateBy { it.name }
 }
@@ -281,6 +285,10 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
     add(section, "Dessin coloré, thème sombre", "annecy", 0, nightTime, sky = 2, style = 2)
 
     section = "14. Thème sombre et cas limites"
+    add(section, s.getValue("montblanc").label + " · été", "montblanc", 0, summer, sky = 0, temperature = -6)
+    add(section, s.getValue("montblanc-hl").label + " (pas de village inventé)", "montblanc-hl", 2, autumn, sky = 1, temperature = -12)
+    add(section, s.getValue("ocean").label, "ocean", 1, summer, sky = 0, temperature = 19)
+    add(section, s.getValue("ocean-hl").label + " (pas de village inventé)", "ocean-hl", 3, autumn, sky = 1, temperature = 15)
     add(section, "Thème sombre, de jour : Annecy", "annecy", 2, summer, isDay = true, sky = 2, dark = true)
     add(section, "Thème sombre, de jour : Chamonix sous la neige", "chamonix", 73, winter, isDay = true, sky = 0, dark = true)
     add(section, s.getValue("sans").label, "sans", 0, summer, sky = 0)

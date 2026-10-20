@@ -18,7 +18,7 @@ ACCENT = HexColor("#E8711C")
 MARGIN = 36
 GAP = 14
 COLUMNS = 2
-IMAGE_RATIO = 259 / 411
+IMAGE_RATIO = 287 / 411
 
 
 def main(source: str, target: str) -> None:
