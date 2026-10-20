@@ -112,7 +112,7 @@ fun TodayScreen(
                         Box {
                             f.current?.let {
                                 WeatherSketch(
-                                    it.weatherCode, it.isDay, it.time, place.latitude, place.id.hashCode(), state.terrain.data,
+                                    it.weatherCode, it.isDay, it.time, place.latitude, place.id.hashCode(), state.terrain.data, state.surroundings.data,
                                     Modifier.matchParentSize().statusBarsPadding(),
                                 )
                             }

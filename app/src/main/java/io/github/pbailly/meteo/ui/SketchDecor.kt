@@ -2,6 +2,7 @@ package io.github.pbailly.meteo.ui
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -10,6 +11,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 /*
@@ -19,9 +21,11 @@ import kotlin.random.Random
  */
 
 /** Pied du relief, sol du premier plan, et rivage quand le lieu est au bord de la mer. */
-private const val FOOT = 0.93f
+internal const val FOOT = 0.93f
 private const val GROUND = 0.975f
 private const val SEA = 0.935f
+/** Milieu de la rivière, entre le pied du relief et le premier plan. */
+private const val RIVER = 0.952f
 
 private fun polygon(points: List<Offset>) = Path().apply {
     moveTo(points.first().x, points.first().y)
@@ -30,6 +34,8 @@ private fun polygon(points: List<Offset>) = Path().apply {
 }
 
 private fun oval(center: Offset, rx: Float, ry: Float) = Path().apply { addOval(Rect(center.x - rx, center.y - ry, center.x + rx, center.y + ry)) }
+
+private fun rect(left: Float, top: Float, right: Float, bottom: Float) = Path().apply { addRect(Rect(left, top, right, bottom)) }
 
 private fun Path.union(other: Path) = apply { op(this, other, PathOperation.Union) }
 
@@ -42,33 +48,67 @@ private fun DrawScope.below(line: List<Offset>) = Path().apply {
     close()
 }
 
-/** Où poser les choses : le village près du lieu, l'objet du premier plan ailleurs, jamais sur l'eau. */
-private class Layout(val village: Float?, val foreground: Float)
+/** Demi-largeur du lieu habité dessiné, en fraction de la largeur. */
+private fun settlementHalfWidth(decor: Set<Decor>): Float? = when {
+    Decor.CITY in decor -> 0.13f
+    Decor.TOWN in decor -> 0.10f
+    Decor.VILLAGE in decor -> 0.075f
+    Decor.HAMLET in decor -> 0.05f
+    Decor.FARM in decor -> 0.04f
+    Decor.CHALET in decor || Decor.REFUGE in decor -> 0.025f
+    else -> null
+}
+
+/** Où poser les choses : le lieu habité près du lieu, l'objet du premier plan ailleurs, jamais sur l'eau. */
+private class Layout(val settlement: Float?, val half: Float, val foreground: Float)
 
 private fun layoutOf(scene: SketchScene): Layout {
     val t = scene.terrain
-    fun dry(x: Float) = !t.isWater(x, 0.03f)
-    val village = if (Decor.VILLAGE in scene.decor || Decor.CHALET in scene.decor) {
-        // Au fond de la vallée, juste à côté du lieu.
-        (listOf(0.06f, 0.09f, 0.12f, 0.15f).map { t.placeX + it } + listOf(t.placeX - 0.03f, 0.40f))
-            .map { it.coerceIn(0.40f, 0.70f) }
-            .firstOrNull { x -> dry(x) && dry(x - 0.07f) && dry(x + 0.07f) && t.heightAt(x) < 0.09f }
-    } else {
-        null
+    fun dry(x: Float) = !t.isWater(x, 0.02f)
+    val full = settlementHalfWidth(scene.decor) ?: 0f
+    var half = full
+    fun span(x: Float) = (0..8).map { x - half + 2 * half * it / 8 }
+    fun bumpiness(x: Float) = span(x).map { t.heightAt(it) }.let { it.max() - it.min() }
+    var settlement: Float? = null
+    if (Decor.REFUGE in scene.decor && t.relief == Relief.SUMMIT) {
+        // Le refuge, juste sous le sommet.
+        settlement = t.placeX + 0.06f
+    } else if (full > 0f) {
+        // Au fond de la vallée, juste à côté du lieu ; le refuge, lui, est sur la pente. Entre un lac et la montagne,
+        // la ville se resserre.
+        for (shrink in listOf(1f, 0.75f, 0.55f)) {
+            half = full * shrink
+            val candidates = (listOf(0.06f, 0.09f, 0.12f, 0.15f, 0.03f, 0f, 0.18f).map { t.placeX + it } + listOf(0.47f, 0.55f))
+                .map { it.coerceIn(0.33f + half, 0.74f - half) }
+                .filter { x -> span(x).all(::dry) }
+            settlement = candidates.firstOrNull { x -> Decor.REFUGE in scene.decor || t.heightAt(x) < 0.09f && bumpiness(x) < 0.06f }
+                ?: candidates.minByOrNull { t.heightAt(it) + bumpiness(it) }
+            if (settlement != null) break
+        }
     }
-    val foreground = listOf(0.57f, 0.50f, 0.63f, 0.44f).firstOrNull { x -> dry(x) && (village == null || abs(x - village) > 0.11f) }
-        ?: 0.57f
-    return Layout(village, foreground)
+    val placed = settlement
+    val foreground = listOf(0.57f, 0.50f, 0.63f, 0.44f, 0.68f)
+        .firstOrNull { x -> dry(x) && (placed == null || abs(x - placed) > half + 0.04f) } ?: 0.57f
+    return Layout(placed, half, foreground)
 }
 
-internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h: Float, month: Int) {
+/** Feuillus : verts l'été, roux à l'automne, bruns et nus l'hiver. */
+private fun leaves(month: Int) = when (month) {
+    10, 11 -> Crayon.AUTUMN
+    12, 1, 2, 3 -> Crayon.WOOD
+    else -> Crayon.GREEN
+}
+
+internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h: Float, month: Int, isDay: Boolean = true) {
     val t = scene.terrain
+    val relief = t.relief
     val rnd = Random(scene.seed)
     val u = density
     val ridge = t.ridge.map { (x, lift) -> Offset(w * x, h * (FOOT - lift)) }
     val land = below(ridge)
-    // Étages en couleur : prés ou forêts en bas, roche au-dessus de la limite des arbres, neige en haut ; seulement au
-    // milieu, pas sous le texte des côtés, avec des bords irréguliers comme un coloriage.
+    // Étages en couleur, du bas vers le haut : prés (ou champs), forêt, alpages, roche, glaciers et neige, selon le
+    // relief et l'altitude ; seulement au milieu, pas sous le texte des côtés, avec des bords irréguliers comme un
+    // coloriage.
     val area = Rect(w * 0.26f, 0f, w * 0.75f, h)
     val step = 5f * u
     val rows = (0..(h / step).toInt() + 1).map { it * step }
@@ -76,133 +116,492 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
         rows.map { y -> Offset(area.right + (rnd.nextFloat() - 0.5f) * 8f * u, y) } +
             rows.reversed().map { y -> Offset(area.left + (rnd.nextFloat() - 0.5f) * 8f * u, y) },
     )
-    val snowY = h * (FOOT - t.snowline)
-    val treeY = h * (FOOT - t.treeline)
-    val mountains = t.relief == Relief.MOUNTAINS || t.relief == Relief.HIGH_MOUNTAINS
+    fun y(lift: Float) = h * (FOOT - lift)
+    val snowY = y(t.snowline)
     // Quand il neige au lieu même, tout est blanc.
     val allSnow = t.snowline <= 0f
     val farX = w * t.farX
+    val layers = buildList {
+        when (relief) {
+            Relief.PLAIN -> add(Float.MAX_VALUE to Crayon.MEADOW)
+            // Basse montagne : prés au fond, croupes couvertes de feuillus.
+            Relief.LOW -> {
+                add(0.03f to Crayon.MEADOW)
+                add(t.treeline to leaves(month))
+            }
+            else -> {
+                if (relief != Relief.VERY_HIGH) add(0.02f to Crayon.MEADOW)
+                add(t.treeline to Crayon.FOREST)
+            }
+        }
+        add(t.rockline to Crayon.MEADOW)
+        add(Float.MAX_VALUE to Crayon.ROCK)
+    }
     clipPath(colored) {
-        val lowTop = maxOf(snowY, treeY)
-        if (!allSnow && lowTop < h) {
-            pencil.ink(if (mountains) Crayon.FOREST else Crayon.MEADOW)
-                .hatch(land, Rect(area.left, lowTop.coerceAtLeast(0f), minOf(area.right, farX), h), spacing = if (mountains) 5f else 6.5f)
+        if (!allSnow) {
+            var bottom = h
+            for ((top, color) in layers) {
+                val yTop = maxOf(y(top), snowY, 0f)
+                if (yTop < bottom) {
+                    val spacing = when (color) {
+                        Crayon.MEADOW -> 6.5f
+                        Crayon.ROCK -> if (relief == Relief.VERY_HIGH) 4.5f else 5.5f
+                        else -> 5f
+                    }
+                    pencil.ink(color).hatch(land, Rect(area.left, yTop, minOf(area.right, farX), bottom), spacing = spacing)
+                    bottom = yTop
+                }
+                if (bottom <= maxOf(snowY, 0f)) break
+            }
+            // Au loin, le relief bleuit (perspective aérienne).
+            if (farX < area.right) pencil.ink(Crayon.FAR).hatch(land, Rect(farX, snowY.coerceAtLeast(0f), area.right, h), spacing = 5f)
         }
-        if (!allSnow && treeY > snowY && treeY > 0f) {
-            pencil.ink(Crayon.ROCK).hatch(land, Rect(area.left, snowY.coerceAtLeast(0f), minOf(area.right, farX), treeY), spacing = 5.5f)
-        }
-        // Au loin, le relief bleuit (perspective aérienne).
-        if (!allSnow && farX < area.right) pencil.ink(Crayon.FAR).hatch(land, Rect(farX, snowY.coerceAtLeast(0f), area.right, h), spacing = 5f)
         val snowBottom = if (allSnow) h else snowY.coerceAtMost(h)
-        if (snowBottom > 0f) pencil.ink(Crayon.SNOW).hatch(land, Rect(area.left, 0f, area.right, snowBottom), spacing = 11f, width = 0.6f)
+        if (snowBottom > 0f) pencil.ink(Crayon.SNOW).hatch(land, Rect(area.left, 0f, area.right, snowBottom), spacing = 6f, width = 0.7f)
+        // Les glaciers, en toute saison : hachures croisées bleu glacier.
+        val glacierY = y(t.glacierline)
+        if (glacierY > 0f) pencil.ink(Crayon.SNOW).hatch(land, Rect(area.left, 0f, area.right, glacierY), spacing = 4f, width = 0.6f, rising = false)
     }
-    pencil.stroke(ridge, width = 1.3f, shake = 0.35f)
+    pencil.stroke(ridge, width = if (relief >= Relief.HIGH) 1.4f else 1.3f, shake = 0.35f)
 
-    // Lacs et mer : on efface le relief sous la surface, puis des rides.
-    t.water.forEach { run ->
-        val x0 = w * run.start
-        val x1 = w * run.endInclusive
-        val surface = h * (FOOT - t.heightAt((run.start + run.endInclusive) / 2))
-        pencil.erase(Path().apply { addRect(Rect(x0, surface, x1, h)) })
-        pencil.line(Offset(x0, surface), Offset(x1, surface), width = 1f)
-        val ink = pencil.ink(Crayon.WATER)
-        var y = surface + 2.5f * u
-        while (y < h) {
-            var x = x0 + rnd.nextFloat() * 6f * u
-            while (x < x1 - 4f * u) {
-                val len = minOf((5f + rnd.nextFloat() * 10f) * u, x1 - x)
-                ink.line(Offset(x, y), Offset(x + len, y), width = 0.8f, passes = 1, wobble = 0.3f)
-                x += len + (4f + rnd.nextFloat() * 9f) * u
-            }
-            y += 3f * u
+    // Lacs : on efface le relief sous la surface, puis des rides.
+    t.water.forEach { run -> water(pencil, w * run.start, w * run.endInclusive, y(t.heightAt((run.start + run.endInclusive) / 2)), rnd) }
+    // L'île : la mer des deux côtés, là où la terre s'enfonce sous l'eau.
+    if (t.island) {
+        var x = 0.26f
+        while (x < 0.76f) {
+            if (t.heightAt(x) > 0f) { x += 0.005f; continue }
+            val start = x
+            while (x < 0.76f && t.heightAt(x) <= 0f) x += 0.005f
+            water(pencil, w * start, w * x, h * FOOT, rnd)
         }
     }
-
     // Au bord de la mer : la mer au premier plan, devant le relief.
-    if (t.sea) {
-        val shore = h * SEA
-        pencil.erase(Path().apply { addRect(Rect(w * 0.27f, shore, w * 0.93f, h)) })
-        pencil.line(Offset(w * 0.27f, shore), Offset(w * 0.93f, shore), width = 1f)
-        val ink = pencil.ink(Crayon.WATER)
-        var y = shore + 2.5f * u
-        while (y < h) {
-            var x = w * 0.28f + rnd.nextFloat() * 6f * u
-            while (x < w * 0.92f) {
-                val len = (5f + rnd.nextFloat() * 10f) * u
-                ink.line(Offset(x, y), Offset(x + len, y), width = 0.8f, passes = 1, wobble = 0.3f)
-                x += len + (4f + rnd.nextFloat() * 9f) * u
-            }
-            y += 3f * u
-        }
-    }
+    if (t.sea) water(pencil, w * 0.27f, w * 0.93f, h * SEA, rnd)
 
     val layout = layoutOf(scene)
-    if (Decor.FIELDS in scene.decor && !t.sea) fields(pencil, t, w, h, month)
+    val settled = layout.settlement?.let { (it - layout.half - 0.03f)..(it + layout.half + 0.03f) }
+    // En plaine, le lointain est plat : les arbres peuvent y pousser aussi.
+    fun free(x: Float) = !t.isWater(x, 0.02f) && (x < t.farX - 0.02f || relief == Relief.PLAIN) && (settled == null || x !in settled)
+    if (Decor.FIELDS in scene.decor && !t.sea) fields(pencil, t, w, h, month, rnd)
+    if (t.river) river(pencil, w, h, rnd)
+    if (Decor.FOREST in scene.decor) forest(pencil, scene, w, h, month, rnd, ::free)
     if (Decor.FIRS in scene.decor) {
         // Des sapins sur les pentes, sous la limite des arbres et hors de la neige.
         val spots = (0..12).map { 0.42f + it * 0.028f }.filter { x ->
             val lift = t.heightAt(x)
-            !t.isWater(x, 0.02f) && x < t.farX - 0.02f && lift > 0.01f && lift < minOf(t.treeline, t.snowline) - 0.01f &&
-                (layout.village == null || abs(x - layout.village) > 0.08f)
+            free(x) && lift > 0.01f && lift < minOf(t.treeline, t.snowline) - 0.01f
         }.shuffled(rnd).take(6).sorted()
         spots.forEach { x ->
             val px = x + (rnd.nextFloat() - 0.5f) * 0.01f
-            fir(pencil, Offset(w * px, h * (FOOT - t.heightAt(px)) + 2f * u), (12f + rnd.nextFloat() * 9f) * u)
+            fir(pencil, Offset(w * px, y(t.heightAt(px)) + 2f * u), (12f + rnd.nextFloat() * 9f) * u)
         }
     }
     if (Decor.TREES in scene.decor) {
-        listOf(0.47f, 0.555f, 0.65f).filter { !t.isWater(it, 0.02f) }.forEach { x ->
-            tree(pencil, Offset(w * x, h * (FOOT - t.heightAt(x)) + 2f * u), (14f + rnd.nextFloat() * 6f) * u, month)
+        listOf(0.47f, 0.555f, 0.65f).filter(::free).forEach { x ->
+            tree(pencil, Offset(w * x, y(t.heightAt(x)) + 2f * u), (14f + rnd.nextFloat() * 6f) * u, month)
         }
     }
-    layout.village?.let { x ->
-        val at = { p: Float -> Offset(w * p, h * (FOOT - t.heightAt(p)) + 1f * u) }
-        val chimney = if (Decor.CHALET in scene.decor) {
-            chalet(pencil, at(x), 18f * u)
-        } else {
-            church(pencil, at(x))
-            house(pencil, at(x - 0.07f), 13f * u, chimney = false)
-            house(pencil, at(x + 0.075f), 15f * u, chimney = true)
+    layout.settlement?.let { x ->
+        val at = { p: Float -> Offset(w * p, y(t.heightAt(p)) + 1f * u) }
+        val lit = !isDay
+        val half = layout.half
+        val chimney = when {
+            Decor.CITY in scene.decor -> city(pencil, at, x, half, w, rnd, lit)
+            Decor.TOWN in scene.decor -> town(pencil, at, x, half, rnd, lit)
+            Decor.VILLAGE in scene.decor -> {
+                // Clocher comtois en montagne (et parfois ailleurs), sinon une flèche d'ardoise.
+                if (relief.mountains || rnd.nextFloat() < 0.35f) church(pencil, at(x)) else spireChurch(pencil, at(x), 1f)
+                house(pencil, at(x - 0.07f), 13f * u, chimney = false, lit = lit)
+                house(pencil, at(x + 0.075f), 15f * u, chimney = true, lit = lit)
+            }
+            Decor.HAMLET in scene.decor -> if (relief.mountains) {
+                chalet(pencil, at(x - 0.025f), 15f * u)
+                chalet(pencil, at(x + 0.03f), 17f * u)
+            } else {
+                house(pencil, at(x - 0.025f), 13f * u, chimney = false, lit = lit)
+                house(pencil, at(x + 0.025f), 14f * u, chimney = true, lit = lit)
+            }
+            Decor.FARM in scene.decor -> farm(pencil, at(x), 20f * u, month)
+            Decor.CHALET in scene.decor -> chalet(pencil, at(x), 18f * u)
+            Decor.REFUGE in scene.decor -> refuge(pencil, at(x), 14f * u)
+            else -> null
         }
         if (Surprise.SMOKE in scene.surprises && chimney != null) smoke(pencil, chimney)
+        if (t.river && Decor.CITY !in scene.decor) bridge(pencil, Offset(w * x, h * RIVER), 10f * u)
+    }
+    if (Decor.LIGHTHOUSE in scene.decor) {
+        // Le phare au bout de l'île, ou sur la jetée.
+        val x = if (t.island) (0..32).map { 0.76f - it * 0.005f }.firstOrNull { t.heightAt(it) > 0.002f }?.minus(0.01f) ?: 0.70f else 0.72f
+        lighthouse(pencil, Offset(w * x, if (t.sea && !t.island) h * SEA else y(t.heightAt(x))), 26f * u, beam = !isDay)
     }
     if (Surprise.SUMMIT_CROSS in scene.surprises) {
-        val top = ridge.filter { it.x in w * 0.36f..w * 0.84f }.minByOrNull { it.y }
+        // Au sommet, la croix est sur le lieu même ; ailleurs, sur le plus haut de la crête.
+        val top = if (relief == Relief.SUMMIT) {
+            Offset(w * t.placeX, y(t.heightAt(t.placeX)))
+        } else {
+            ridge.filter { it.x in w * 0.36f..w * 0.84f }.minByOrNull { it.y }
+        }
         if (top != null) {
-            pencil.line(top, top + Offset(0f, -11f * u), width = 1f)
-            pencil.line(top + Offset(-3.5f * u, -8f * u), top + Offset(3.5f * u, -8f * u), width = 1f)
+            val s = if (relief == Relief.SUMMIT) 1.6f else 1f
+            pencil.line(top, top + Offset(0f, -11f * u * s), width = 1f * s)
+            pencil.line(top + Offset(-3.5f * u * s, -8f * u * s), top + Offset(3.5f * u * s, -8f * u * s), width = 1f * s)
         }
     }
     // Sur la mer ou le plus grand lac : un voilier, ou le monstre du Loch Ness.
     if (t.sea) {
-        if (Surprise.SAILBOAT in scene.surprises) sailboat(pencil, Offset(w * 0.70f, h * SEA + 4f * u))
+        val x = if (Decor.LIGHTHOUSE in scene.decor) 0.60f else 0.70f
+        if (Surprise.SAILBOAT in scene.surprises) sailboat(pencil, Offset(w * x, h * SEA + 4f * u))
     } else {
         t.water.maxByOrNull { it.endInclusive - it.start }?.let { run ->
             val mid = (run.start + run.endInclusive) / 2
             val x = mid.coerceIn(0.40f, 0.80f)
-            val surface = h * (FOOT - t.heightAt(mid))
+            val surface = y(t.heightAt(mid))
             if (Surprise.SAILBOAT in scene.surprises) sailboat(pencil, Offset(w * x, surface + 4f * u))
             if (Surprise.NESSIE in scene.surprises) nessie(pencil, Offset(w * x - 8f * u, surface + 6f * u))
         }
     }
 }
 
-/** Plaine : sillons au premier plan, couleur de la saison (pousses, blé mûr, terre retournée). */
-private fun DrawScope.fields(pencil: Pencil, t: SketchTerrain, w: Float, h: Float, month: Int) {
-    val ink = pencil.ink(
-        when (month) {
-            in 3..5 -> Crayon.MEADOW
-            in 6..8 -> Crayon.WHEAT
-            else -> Crayon.EARTH
-        },
+/** De l'eau de [x0] à [x1] sous la surface [surface] : on efface le paysage, on trace la rive, puis des rides bleues. */
+private fun DrawScope.water(pencil: Pencil, x0: Float, x1: Float, surface: Float, rnd: Random) {
+    val u = density
+    val h = size.height
+    if (x1 - x0 < 2f * u) return
+    pencil.erase(rect(x0, surface, x1, h))
+    pencil.line(Offset(x0, surface), Offset(x1, surface), width = 1f)
+    val ink = pencil.ink(Crayon.WATER)
+    var y = surface + 2.5f * u
+    while (y < h) {
+        var x = x0 + rnd.nextFloat() * 6f * u
+        while (x < x1 - 4f * u) {
+            val len = minOf((5f + rnd.nextFloat() * 10f) * u, x1 - x)
+            ink.line(Offset(x, y), Offset(x + len, y), width = 0.8f, passes = 1, wobble = 0.3f)
+            x += len + (4f + rnd.nextFloat() * 9f) * u
+        }
+        y += 3f * u
+    }
+}
+
+/**
+ * Plaine : des parcelles au premier plan, chacune sa culture selon la saison (pousses, colza en fleur, blé mûr, terre
+ * retournée), en sillons qui fuient un peu vers le fond.
+ */
+private fun DrawScope.fields(pencil: Pencil, t: SketchTerrain, w: Float, h: Float, month: Int, rnd: Random) {
+    val crops = when (month) {
+        4, 5 -> listOf(Crayon.MEADOW, Crayon.YELLOW, Crayon.MEADOW, Crayon.EARTH)
+        6, 7, 8 -> listOf(Crayon.WHEAT, Crayon.MEADOW, Crayon.WHEAT, Crayon.EARTH)
+        9, 10 -> listOf(Crayon.EARTH, Crayon.MEADOW, Crayon.WHEAT, Crayon.EARTH)
+        else -> listOf(Crayon.EARTH, Crayon.MEADOW, Crayon.EARTH, Crayon.MEADOW)
+    }.shuffled(rnd)
+    val top = h * 0.943f
+    val bottom = h * 0.99f
+    var x = 0.31f
+    var k = 0
+    while (x < 0.80f) {
+        val width = 0.07f + rnd.nextFloat() * 0.06f
+        val x1 = minOf(x + width, 0.80f)
+        if (!t.isWater(x) && !t.isWater(x1)) {
+            // Les limites des parcelles penchent vers le centre, comme vues un peu de haut.
+            val lean = (0.55f - x) * 0.04f
+            val lean1 = (0.55f - x1) * 0.04f
+            val parcel = polygon(
+                listOf(Offset(w * (x + lean), top), Offset(w * (x1 + lean1), top), Offset(w * (x1 - lean1), bottom), Offset(w * (x - lean), bottom)),
+            )
+            val ink = pencil.ink(crops[k % crops.size])
+            within(parcel) {
+                var y = top + 1.5f * density
+                while (y < bottom) {
+                    ink.line(Offset(w * (x - 0.03f), y), Offset(w * (x1 + 0.03f), y + 0.6f * density), width = 0.9f, passes = 1, wobble = 0.3f)
+                    y += (2.4f + (y - top) / (bottom - top) * 1.6f) * density
+                }
+            }
+            // Une haie entre deux parcelles.
+            if (k % 2 == 1) {
+                pencil.ink(Crayon.FOREST).stroke(
+                    (0..4).map { i -> Offset(w * (x + lean) - i * 0.4f * density, top + (bottom - top) * i / 4 + if (i % 2 == 0) -1f * density else 0f) },
+                    width = 1.3f,
+                    passes = 1,
+                )
+            }
+        }
+        x = x1
+        k++
+    }
+}
+
+/** Dessine [block] limité à [shape]. */
+private inline fun DrawScope.within(shape: Path, crossinline block: DrawScope.() -> Unit) = clipPath(shape) { block() }
+
+/** La rivière : un ruban qui serpente au pied du relief, plus large au milieu, ses rives et ses rides. */
+private fun DrawScope.river(pencil: Pencil, w: Float, h: Float, rnd: Random) {
+    val u = density
+    val x0 = 0.28f
+    val x1 = 0.77f
+    val phase = rnd.nextFloat() * 6f
+    val xs = (0..48).map { x0 + (x1 - x0) * it / 48 }
+    fun center(x: Float) = h * RIVER + (sin(x * 24.0 + phase) * 2.4 * u).toFloat()
+    fun half(x: Float) = sqrt(sin(PI * (x - x0) / (x1 - x0)).toFloat().coerceAtLeast(0f)) * 3.4f * u
+    val upper = xs.map { Offset(w * it, center(it) - half(it)) }
+    val lower = xs.map { Offset(w * it, center(it) + half(it)) }
+    pencil.erase(polygon(upper + lower.reversed()))
+    pencil.stroke(upper, width = 0.9f, passes = 1)
+    pencil.stroke(lower, width = 0.9f, passes = 1)
+    val ink = pencil.ink(Crayon.WATER)
+    var x = x0 + 0.03f
+    while (x < x1 - 0.04f) {
+        val len = 0.012f + rnd.nextFloat() * 0.02f
+        ink.line(Offset(w * x, center(x)), Offset(w * (x + len), center(x + len)), width = 1f, passes = 1, wobble = 0.2f)
+        x += len + 0.01f + rnd.nextFloat() * 0.015f
+    }
+}
+
+/** Un pont de pierre en arc, par-dessus la rivière. */
+private fun DrawScope.bridge(pencil: Pencil, at: Offset, half: Float) {
+    val u = density
+    val deck = at.y - 4.5f * u
+    val shape = Path().apply {
+        moveTo(at.x - half, deck)
+        lineTo(at.x + half, deck)
+        lineTo(at.x + half, at.y + 3.5f * u)
+        lineTo(at.x + half * 0.7f, at.y + 3.5f * u)
+        quadraticTo(at.x, at.y - 6f * u, at.x - half * 0.7f, at.y + 3.5f * u)
+        lineTo(at.x - half, at.y + 3.5f * u)
+        close()
+    }
+    pencil.erase(shape)
+    pencil.outline(shape, width = 0.9f)
+    pencil.ink(Crayon.ROCK).hatch(shape, shape.getBounds(), spacing = 1.8f, width = 0.6f)
+    pencil.line(Offset(at.x - half - 1f * u, deck - 2f * u), Offset(at.x + half + 1f * u, deck - 2f * u), width = 0.7f, passes = 1)
+}
+
+/**
+ * Une forêt tout près : des arbres serrés sur la pente, les plus petits derrière. Des sapins en montagne, des feuillus
+ * en plaine, un peu des deux en basse montagne.
+ */
+private fun DrawScope.forest(pencil: Pencil, scene: SketchScene, w: Float, h: Float, month: Int, rnd: Random, free: (Float) -> Boolean) {
+    val t = scene.terrain
+    val u = density
+    val width = 0.17f
+    val start = (0..30).map { 0.36f + it * 0.01f }.filter { it + width < 0.76f }.maxByOrNull { x0 ->
+        (0..10).count { free(x0 + width * it / 10) } * 10 - abs(x0 - t.placeX)
+    } ?: return
+    val trees = (0..13).mapNotNull { k ->
+        val x = start + width * k / 13 + (rnd.nextFloat() - 0.5f) * 0.01f
+        val lift = t.heightAt(x)
+        if (!free(x) || lift > minOf(t.treeline, t.snowline) - 0.005f) return@mapNotNull null
+        // Deux rangs : l'un un peu plus haut sur la pente (et plus petit), l'autre devant.
+        val back = k % 2 == 0
+        Triple(x, h * (FOOT - lift) + (if (back) -1f else 3f) * u, (if (back) 11f else 15f) + rnd.nextFloat() * 5f)
+    }.sortedBy { it.second }
+    trees.forEach { (x, base, size) ->
+        val conifer = when (t.relief) {
+            Relief.PLAIN -> rnd.nextFloat() < 0.15f
+            Relief.LOW -> rnd.nextFloat() < 0.4f
+            else -> rnd.nextFloat() < 0.9f
+        }
+        if (conifer) fir(pencil, Offset(w * x, base), size * u) else tree(pencil, Offset(w * x, base), size * u, month)
+    }
+}
+
+/** Ferme : un long logis sous un grand toit, la grange au bois sombre et sa porte, une botte de foin l'été. */
+private fun DrawScope.farm(pencil: Pencil, ground: Offset, width: Float, month: Int): Offset {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val wall = width * 0.42f
+    val home = rect(x - width * 0.55f, g - wall, x + width * 0.05f, g)
+    val barn = rect(x + width * 0.05f, g - wall * 1.1f, x + width * 0.6f, g)
+    val roof = polygon(
+        listOf(Offset(x - width * 0.62f, g - wall), Offset(x - width * 0.25f, g - wall - width * 0.3f), Offset(x + width * 0.3f, g - wall * 1.1f - width * 0.32f), Offset(x + width * 0.67f, g - wall * 1.1f)),
     )
-    for (k in 0..3) {
-        val y = h * (0.945f + 0.013f * k)
-        val points = (0..10).map { i ->
-            val x = 0.33f + 0.53f * i / 10
-            Offset(w * x, y + (sin(i * 0.9 + k) * 0.8 * density).toFloat())
-        }.filter { !t.isWater(it.x / w) }
-        if (points.size > 1) ink.stroke(points, width = 0.9f, passes = 1)
+    val stack = rect(x - width * 0.42f, g - wall - width * 0.34f, x - width * 0.33f, g - wall - width * 0.1f)
+    pencil.erase(Path().apply { addPath(home) }.union(barn).union(roof).union(stack))
+    pencil.outline(home, width = 1f)
+    pencil.outline(barn, width = 1f)
+    pencil.ink(Crayon.WOOD).hatch(barn, barn.getBounds(), spacing = 2.2f, width = 0.6f)
+    pencil.outline(stack, width = 0.9f, passes = 1)
+    pencil.outline(roof, width = 1f)
+    pencil.ink(Crayon.ROOF).hatch(roof, roof.getBounds(), spacing = 2f, width = 0.7f)
+    // La porte de la grange, en arc, et une fenêtre au logis.
+    pencil.stroke(listOf(Offset(x + width * 0.22f, g), Offset(x + width * 0.22f, g - wall * 0.6f), Offset(x + width * 0.33f, g - wall * 0.8f), Offset(x + width * 0.44f, g - wall * 0.6f), Offset(x + width * 0.44f, g)), width = 0.8f, passes = 1)
+    pencil.outline(rect(x - width * 0.32f, g - wall * 0.7f, x - width * 0.2f, g - wall * 0.35f), width = 0.7f, passes = 1)
+    if (month in 6..9) {
+        val bale = oval(Offset(x + width * 0.85f, g - 3.5f * u), 4.5f * u, 3.5f * u)
+        pencil.erase(bale)
+        pencil.outline(bale, width = 0.9f)
+        pencil.ink(Crayon.WHEAT).hatch(bale, bale.getBounds(), spacing = 1.6f, width = 0.6f)
+    }
+    return Offset(x - width * 0.375f, g - wall - width * 0.37f)
+}
+
+/** Refuge de montagne : murs de pierre, toit bas, une petite fenêtre et le drapeau rouge. */
+private fun DrawScope.refuge(pencil: Pencil, ground: Offset, width: Float): Offset {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val wall = width * 0.5f
+    val walls = rect(x - width / 2, g - wall, x + width / 2, g)
+    val roof = polygon(listOf(Offset(x - width / 2 - 2f * u, g - wall), Offset(x - width * 0.1f, g - wall - width * 0.32f), Offset(x + width / 2 + 2f * u, g - wall - width * 0.12f)))
+    pencil.erase(Path().apply { addPath(walls) }.union(roof))
+    pencil.outline(walls, width = 1f)
+    pencil.ink(Crayon.ROCK).hatch(walls, walls.getBounds(), spacing = 1.8f, width = 0.6f)
+    pencil.outline(roof, width = 1f)
+    pencil.hatch(roof, roof.getBounds(), spacing = 2.2f, width = 0.6f)
+    pencil.erase(rect(x - 1.8f * u, g - wall * 0.75f, x + 1.8f * u, g - wall * 0.35f))
+    pencil.outline(rect(x - 1.8f * u, g - wall * 0.75f, x + 1.8f * u, g - wall * 0.35f), width = 0.7f, passes = 1)
+    val pole = Offset(x + width / 2 + 4f * u, g)
+    pencil.line(pole, pole + Offset(0f, -width * 1.3f), width = 0.8f, passes = 1)
+    val flag = polygon(listOf(pole + Offset(0f, -width * 1.3f), pole + Offset(6f * u, -width * 1.3f + 2f * u), pole + Offset(0f, -width * 1.3f + 4f * u)))
+    pencil.ink(Crayon.RED).outline(flag, width = 0.8f, passes = 1)
+    pencil.ink(Crayon.RED).hatch(flag, flag.getBounds(), spacing = 1.2f, width = 0.6f)
+    return Offset(x - width * 0.3f, g - wall - width * 0.25f)
+}
+
+/** Église à flèche d'ardoise, la plus courante en plaine. [scale] l'agrandit pour une petite ville. */
+private fun DrawScope.spireChurch(pencil: Pencil, ground: Offset, scale: Float) {
+    val u = density * scale
+    val x = ground.x
+    val g = ground.y
+    val t = g - 20f * u
+    val tower = rect(x - 4f * u, t, x + 4f * u, g)
+    val spire = polygon(listOf(Offset(x - 5f * u, t), Offset(x, t - 17f * u), Offset(x + 5f * u, t)))
+    val nave = polygon(
+        listOf(Offset(x + 4f * u, g), Offset(x + 22f * u, g), Offset(x + 22f * u, g - 10f * u), Offset(x + 13f * u, g - 17f * u), Offset(x + 4f * u, g - 10f * u)),
+    )
+    val roof = polygon(listOf(Offset(x + 22f * u, g - 10f * u), Offset(x + 13f * u, g - 17f * u), Offset(x + 4f * u, g - 10f * u)))
+    pencil.erase(Path().apply { addPath(tower) }.union(spire).union(nave))
+    pencil.outline(nave, width = 1f)
+    pencil.ink(Crayon.ROOF).hatch(roof, roof.getBounds(), spacing = 2.2f, width = 0.7f)
+    pencil.outline(tower, width = 1.1f)
+    pencil.outline(spire, width = 1f)
+    pencil.ink(Crayon.FAR).hatch(spire, spire.getBounds(), spacing = 1.8f, width = 0.7f)
+    pencil.line(Offset(x, t - 17f * u), Offset(x, t - 22f * u), width = 0.9f)
+    pencil.line(Offset(x - 2f * u, t - 20f * u), Offset(x + 2f * u, t - 20f * u), width = 0.8f, passes = 1)
+    pencil.outline(oval(Offset(x, t + 5f * u), 2f * u, 2f * u), width = 0.7f, passes = 1)
+    // Le vitrail de la nef.
+    pencil.stroke(listOf(Offset(x + 11.5f * u, g - 3f * u), Offset(x + 11.5f * u, g - 7f * u), Offset(x + 13f * u, g - 9f * u), Offset(x + 14.5f * u, g - 7f * u), Offset(x + 14.5f * u, g - 3f * u)), width = 0.7f, passes = 1)
+}
+
+/** Une maison de ville à étages, toit de tuiles, fenêtres en rangs (allumées la nuit). */
+private fun DrawScope.townHouse(pencil: Pencil, ground: Offset, width: Float, floors: Int, lit: Boolean, rnd: Random): Offset {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val wall = floors * 6.5f * u + 2f * u
+    val walls = rect(x - width / 2, g - wall, x + width / 2, g)
+    val roof = polygon(listOf(Offset(x - width / 2 - 1.5f * u, g - wall), Offset(x, g - wall - width * 0.42f), Offset(x + width / 2 + 1.5f * u, g - wall)))
+    pencil.erase(Path().apply { addPath(walls) }.union(roof))
+    pencil.outline(walls, width = 1f)
+    pencil.outline(roof, width = 1f)
+    pencil.ink(if (rnd.nextFloat() < 0.75f) Crayon.ROOF else Crayon.FAR).hatch(roof, roof.getBounds(), spacing = 2f, width = 0.7f)
+    windows(pencil, Rect(x - width / 2, g - wall, x + width / 2, g - 4f * u), floors, if (width > 12f * u) 3 else 2, lit, rnd)
+    return Offset(x + width * 0.25f, g - wall - width * 0.3f)
+}
+
+/** Des rangées de fenêtres dans [facade] : petits carrés au crayon le jour, points jaunes la nuit (pas toutes). */
+private fun DrawScope.windows(pencil: Pencil, facade: Rect, rows: Int, columns: Int, lit: Boolean, rnd: Random) {
+    val u = density
+    val yellow = pencil.ink(Crayon.YELLOW)
+    for (r in 0 until rows) for (c in 0 until columns) {
+        val cx = facade.left + facade.width * (c + 0.5f) / columns
+        val cy = facade.top + facade.height * (r + 0.5f) / rows
+        if (lit) {
+            if (rnd.nextFloat() < 0.6f) drawRect(yellow.color.copy(alpha = (yellow.color.alpha * 1.4f).coerceAtMost(1f)), Offset(cx - 1f * u, cy - 1.2f * u), Size(2f * u, 2.4f * u))
+        } else {
+            pencil.outline(rect(cx - 0.9f * u, cy - 1.2f * u, cx + 0.9f * u, cy + 1.2f * u), width = 0.6f, passes = 1)
+        }
+    }
+}
+
+/** Petite ville : l'église et son clocher au milieu, des maisons à étages autour, plus basses vers les bords. */
+private fun DrawScope.town(pencil: Pencil, at: (Float) -> Offset, x: Float, half: Float, rnd: Random, lit: Boolean): Offset? {
+    val u = density
+    var chimney: Offset? = null
+    // Du bord vers le milieu : les maisons du milieu, plus hautes, passent devant celles des bords.
+    val slots = listOf(-0.95f to 1, 0.95f to 1, -0.65f to 2, 0.7f to 2, -0.35f to 3, 0.4f to 3)
+    slots.forEach { (k, floors) ->
+        val p = townHouse(pencil, at(x + half * k), (11f + rnd.nextFloat() * 4f) * u, floors, lit, rnd)
+        if (k > 0 && floors == 2) chimney = p
+    }
+    spireChurch(pencil, at(x - 0.03f), 1.1f)
+    return chimney
+}
+
+/**
+ * Grande ville : des immeubles serrés, plus hauts vers le centre, toits plats et rangées de fenêtres, une tour, et
+ * parfois une grue ou une cathédrale.
+ */
+private fun DrawScope.city(pencil: Pencil, at: (Float) -> Offset, x: Float, half: Float, w: Float, rnd: Random, lit: Boolean): Offset? {
+    val u = density
+    val n = (2 * half / 0.0325f).toInt().coerceAtLeast(4)
+    val slot = 2 * half / n
+    val crane = rnd.nextFloat() < 0.4f
+    val cathedral = rnd.nextInt(n)
+    val tallest = (2 until n - 1).random(rnd)
+    // Les plus hauts derrière : on dessine d'abord les tours du centre, puis les plus basses devant.
+    val buildings = (0 until n).map { i ->
+        val edge = 1 - abs(i - (n - 1) / 2f) / (n / 2f)
+        val height = if (i == tallest) 44f else 12f + 22f * edge + rnd.nextFloat() * 8f
+        Triple(i, height, (slot * w * (0.8f + rnd.nextFloat() * 0.25f)))
+    }.sortedByDescending { it.second }
+    buildings.forEach { (i, height, width) ->
+        val base = at(x - half + (i + 0.5f) * slot)
+        if (i == cathedral && i != tallest) {
+            spireChurch(pencil, base + Offset(-6f * u, 0f), 1.2f)
+            return@forEach
+        }
+        val top = base.y - height * u
+        val shape = rect(base.x - width / 2, top, base.x + width / 2, base.y)
+        pencil.erase(shape)
+        pencil.outline(shape, width = 1f)
+        // Le côté à l'ombre, et une couleur de façade.
+        pencil.ink(listOf(Crayon.FAR, Crayon.ROCK, Crayon.EARTH)[i % 3]).hatch(shape, Rect(base.x + width * 0.15f, top, base.x + width / 2, base.y), spacing = 2.2f, width = 0.6f)
+        windows(pencil, Rect(base.x - width / 2, top + 2f * u, base.x + width / 2, base.y - 3f * u), ((height - 5f) / 5.5f).toInt().coerceAtLeast(1), 2, lit, rnd)
+        if (i == tallest) {
+            // L'antenne de la tour, avec son feu rouge.
+            pencil.line(Offset(base.x, top), Offset(base.x, top - 9f * u), width = 0.8f, passes = 1)
+            pencil.ink(Crayon.RED).dot(Offset(base.x, top - 9.5f * u), 1.1f)
+        }
+    }
+    if (crane) {
+        val foot = at(x + half * 0.55f)
+        val top = foot + Offset(0f, -50f * u)
+        val yellow = pencil.ink(Crayon.YELLOW)
+        yellow.line(foot, top, width = 1.4f)
+        yellow.line(top + Offset(-8f * u, 2f * u), top + Offset(22f * u, 2f * u), width = 1.2f)
+        yellow.line(top, top + Offset(14f * u, 2f * u), width = 0.7f)
+        pencil.line(top + Offset(16f * u, 2f * u), top + Offset(16f * u, 14f * u), width = 0.5f, passes = 1)
+        pencil.outline(rect(top.x - 8f * u, top.y + 2f * u, top.x - 5f * u, top.y + 5f * u), width = 0.7f, passes = 1)
+    }
+    return null
+}
+
+/** Phare : une tour blanche à bandes rouges, sa lanterne, et ses faisceaux la nuit. */
+private fun DrawScope.lighthouse(pencil: Pencil, ground: Offset, height: Float, beam: Boolean) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val top = g - height
+    val tower = polygon(listOf(Offset(x - 4.5f * u, g), Offset(x - 2.8f * u, top), Offset(x + 2.8f * u, top), Offset(x + 4.5f * u, g)))
+    val lantern = rect(x - 3.2f * u, top - 5f * u, x + 3.2f * u, top)
+    val cap = polygon(listOf(Offset(x - 3.8f * u, top - 5f * u), Offset(x, top - 9f * u), Offset(x + 3.8f * u, top - 5f * u)))
+    pencil.erase(Path().apply { addPath(tower) }.union(lantern).union(cap))
+    pencil.outline(tower, width = 1f)
+    val red = pencil.ink(Crayon.RED)
+    listOf(0.15f, 0.55f).forEach { k ->
+        val band = rect(x - 5f * u, top + height * k, x + 5f * u, top + height * (k + 0.2f))
+        band.op(band, tower, PathOperation.Intersect)
+        red.hatch(band, band.getBounds(), spacing = 1.4f, width = 0.7f)
+    }
+    pencil.outline(lantern, width = 0.9f, passes = 1)
+    pencil.outline(cap, width = 0.9f)
+    red.hatch(cap, cap.getBounds(), spacing = 1.4f, width = 0.6f)
+    val yellow = pencil.ink(Crayon.YELLOW)
+    yellow.dot(Offset(x, top - 2.5f * u), 1.6f)
+    if (beam) listOf(-1f, 1f).forEach { side ->
+        yellow.line(Offset(x + side * 4f * u, top - 3.5f * u), Offset(x + side * 30f * u, top - 7f * u), width = 0.8f, passes = 1)
+        yellow.line(Offset(x + side * 4f * u, top - 1.5f * u), Offset(x + side * 30f * u, top + 1f * u), width = 0.8f, passes = 1)
     }
 }
 
@@ -280,8 +679,8 @@ private fun DrawScope.church(pencil: Pencil, ground: Offset) {
     pencil.stroke(listOf(Offset(x - 15f * u, g), Offset(x - 15f * u, g - 5f * u), Offset(x - 13.2f * u, g - 7f * u), Offset(x - 11.4f * u, g - 5f * u), Offset(x - 11.4f * u, g)), width = 0.8f, passes = 1)
 }
 
-/** Maison : murs, toit de tuiles, une fenêtre ; renvoie le haut de la cheminée s'il y en a une. */
-private fun DrawScope.house(pencil: Pencil, ground: Offset, width: Float, chimney: Boolean): Offset? {
+/** Maison : murs, toit de tuiles, une fenêtre (allumée la nuit) ; renvoie le haut de la cheminée s'il y en a une. */
+private fun DrawScope.house(pencil: Pencil, ground: Offset, width: Float, chimney: Boolean, lit: Boolean = false): Offset? {
     val u = density
     val x = ground.x
     val g = ground.y
@@ -295,7 +694,9 @@ private fun DrawScope.house(pencil: Pencil, ground: Offset, width: Float, chimne
     stack?.let { pencil.outline(it, width = 0.9f, passes = 1) }
     pencil.outline(roof, width = 1f)
     pencil.ink(Crayon.ROOF).hatch(roof, roof.getBounds(), spacing = 2f, width = 0.7f)
-    pencil.outline(Path().apply { addRect(Rect(x - 1.5f * u, g - wall * 0.7f, x + 1.5f * u, g - wall * 0.7f + 3f * u)) }, width = 0.7f, passes = 1)
+    val window = Path().apply { addRect(Rect(x - 1.5f * u, g - wall * 0.7f, x + 1.5f * u, g - wall * 0.7f + 3f * u)) }
+    pencil.outline(window, width = 0.7f, passes = 1)
+    if (lit) pencil.ink(Crayon.YELLOW).hatch(window, window.getBounds(), spacing = 0.8f, width = 0.8f)
     return if (chimney) Offset(x + width * 0.25f, g - wall - width * 0.55f) else null
 }
 

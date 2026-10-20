@@ -80,3 +80,23 @@ plus lourds que ceux des autres pistes.
 2. Mettre la couleur de fond dans `launcher_background` (`res/values/colors.xml`).
 3. Reporter la palette dans `ui/theme/Theme.kt` (schémas Material clair et sombre, `HeaderBlue`) et,
    si besoin, le style des pictogrammes dans `ui/WeatherIcon.kt`.
+
+## Les coloriages d'Aujourd'hui (`dessins/`)
+
+`dessins/coloriages.pdf` montre le dessin aux crayons du haut d'Aujourd'hui dans une centaine de combinaisons : chaque
+relief (plaine, basse, moyenne, haute, très haute montagne, au sommet), l'eau (lac, mer, rivière, île), chaque lieu
+habité (grande ville, petite ville, village, hameau, ferme, chalet, refuge), la forêt, les saisons, les trois versions
+de chaque ciel et l'intensité de la pluie ou de la neige, les orages, les surprises, le thème sombre. Le texte de
+l'écran est simulé par-dessus pour juger de la lisibilité.
+
+Les dessins viennent du code même de l'appli (`SketchScene.kt`, `SketchDraw.kt`, `SketchDecor.kt`), compilé pour
+l'ordinateur avec Compose sur Skia ; les reliefs sont les coupes réelles des tests (Chamonix, Annecy, Morteau, Valence,
+Paris, Nice, Tromsø), parfois déformées pour une haute ou une basse montagne. Pour le refaire après une modification
+(Java 21 et Python 3 avec reportlab et Pillow) :
+
+```
+./gradlew -p design/dessins run
+python3 design/dessins/catalogue.py design/dessins/build/dessins design/dessins/coloriages.pdf
+```
+
+Les combinaisons se choisissent dans `dessins/src/Dessins.kt` (fonction `catalog`).

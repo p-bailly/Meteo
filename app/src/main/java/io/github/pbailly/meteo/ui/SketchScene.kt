@@ -1,5 +1,7 @@
 package io.github.pbailly.meteo.ui
 
+import io.github.pbailly.meteo.data.Settlement
+import io.github.pbailly.meteo.data.Surroundings
 import io.github.pbailly.meteo.data.TerrainProfile
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -32,11 +34,36 @@ internal enum class SketchSky {
     }
 }
 
-/** Le relief autour du lieu, d'après sa coupe vers le sommet qui le domine. */
-internal enum class Relief { FLAT, HILLS, MOUNTAINS, HIGH_MOUNTAINS }
+/**
+ * Où se trouve le lieu, d'après sa coupe vers le sommet qui le domine : du plus bas au plus haut, puis sur un sommet.
+ * L'ordre compte ([mountains]).
+ */
+internal enum class Relief {
+    /** Plaine, ou de basses collines (sous 600 m) : des champs, des haies, des bosquets. */
+    PLAIN,
+    /** Basse montagne (sommets sous 1 200 m) : des croupes rondes et boisées. */
+    LOW,
+    /** Moyenne montagne (jusqu'à 2 500 m, ou un lieu déjà à 700 m) : des prés, des sapins, des sommets ronds. */
+    MEDIUM,
+    /** Haute montagne (jusqu'à 3 500 m) : la forêt en bas, la roche, la neige en haut. */
+    HIGH,
+    /** Très haute montagne (au-delà) : aiguilles de roche, glaciers et neiges éternelles. */
+    VERY_HIGH,
+    /** Le lieu est au sommet : le relief est en dessous, la croix ou le cairn au premier plan. */
+    SUMMIT;
 
-/** Ce qu'on pose dans le paysage, selon le relief et le jour. */
-internal enum class Decor { VILLAGE, CHALET, FIRS, TREES, FIELDS }
+    val mountains: Boolean get() = this >= MEDIUM
+}
+
+/** Ce qu'on pose dans le paysage, selon le lieu habité, la forêt, le relief et le jour. */
+internal enum class Decor {
+    // Lieux habités, du plus isolé au plus grand.
+    FARM, CHALET, REFUGE, HAMLET, VILLAGE, TOWN, CITY,
+    // Végétation.
+    FIELDS, TREES, FIRS, FOREST,
+    // Au bord de la mer.
+    LIGHTHOUSE,
+}
 
 /** Petites surprises du dessin : certaines selon le temps, d'autres seulement certains jours. */
 internal enum class Surprise {
@@ -60,37 +87,60 @@ internal class SketchTerrain(
     val relief: Relief,
     /** Lacs ou mer traversés par la coupe, de x à x. */
     val water: List<ClosedFloatingPointRange<Float>>,
+    /** La mer au premier plan, au bord du rivage. */
     val sea: Boolean,
-    /** Limite des forêts et limite de la neige, à la même échelle que la crête (hors du dessin si le relief n'y monte pas). */
+    /** Limites de la forêt, de la roche (au-dessus des alpages), de la neige et des glaciers, à la même échelle que la
+     *  crête (hors du dessin si le relief n'y monte pas). */
     val treeline: Float,
     val snowline: Float,
+    val rockline: Float = treeline,
+    val glacierline: Float = 2f,
     /** Position du lieu sur la crête. */
     val placeX: Float,
     /** Au-delà de cette abscisse, le relief est loin (plus de 20 km) : bleuté, sans arbres. */
     val farX: Float = 2f,
+    /** Une rivière coule au pied du relief, devant le lieu. */
+    val river: Boolean = false,
+    /** Une île : la terre s'arrête des deux côtés, la mer tout autour. */
+    val island: Boolean = false,
 ) {
     fun heightAt(x: Float): Float {
         val k = ridge.indexOfFirst { it.first >= x }
-        if (k <= 0) return ridge.first().second
+        if (k < 0) return ridge.last().second
+        if (k == 0) return ridge.first().second
         val (x0, y0) = ridge[k - 1]
         val (x1, y1) = ridge[k]
         return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
     }
 
-    fun isWater(x: Float, margin: Float = 0f) = water.any { x in (it.start - margin)..(it.endInclusive + margin) }
+    fun isWater(x: Float, margin: Float = 0f) = water.any { x in (it.start - margin)..(it.endInclusive + margin) } ||
+        island && heightAt(x) <= 0f
+
+    fun copy(
+        ridge: List<Pair<Float, Float>> = this.ridge,
+        water: List<ClosedFloatingPointRange<Float>> = this.water,
+        sea: Boolean = this.sea,
+        river: Boolean = this.river,
+        island: Boolean = this.island,
+    ) = SketchTerrain(ridge, relief, water, sea, treeline, snowline, rockline, glacierline, placeX, farX, river, island)
 }
 
 internal object SketchTerrains {
     /** Abscisses du début de la coupe, du lieu et de la fin de la coupe (le sommet tombe vers 0,65, avant le texte de droite). */
     private const val LEFT = 0.14f
     private const val PLACE = 0.36f
+    /** Sur un sommet, le lieu est plus au milieu : la pente descend des deux côtés. */
+    private const val SUMMIT_PLACE = 0.47f
     private const val RIGHT = 0.70f
     /** Le plus haut sommet monte au plus à 31 % de la hauteur du dessin au-dessus du pied. */
     const val MAX_LIFT = 0.31f
-    private const val TREELINE_M = 1900.0
     private const val FAR_KM = 20.0
+    /** Le relief qui compte pour le lieu : celui des 15 km autour (pas la montagne qu'on voit à 50 km). */
+    private const val LOCAL_KM = 15.0
+    /** Sur un sommet : rien de plus haut à 2,5 km, et le terrain qui tombe des deux côtés. */
+    private const val SUMMIT_KM = 2.5
 
-    /** Altitude de la neige selon le mois : basse en hiver, sur les plus hauts sommets en été. */
+    /** Altitude de la neige selon le mois : basse en hiver, sur les plus hauts sommets en été (vers 45° de latitude). */
     fun snowAltitude(month: Int): Double = when (month) {
         12, 1, 2 -> 1100.0
         3, 11 -> 1500.0
@@ -100,13 +150,18 @@ internal object SketchTerrains {
         else -> 3200.0
     }
 
+    /** Plus on va vers les pôles, plus la forêt et la neige descendent : 1 900 m dans les Alpes, 300 m à Tromsø. */
+    private fun latitudeShift(latitude: Double) = (abs(latitude) - 45) * 70
+
+    fun treelineAltitude(latitude: Double) = (1900 - latitudeShift(latitude)).coerceIn(300.0, 3800.0)
+
     /** En attendant la coupe (ou sans réseau) : des collines douces. */
     val DEFAULT = SketchTerrain(
         ridge = listOf(
             0f to 0.02f, 0.15f to 0.04f, 0.28f to 0.06f, 0.38f to 0.12f, 0.46f to 0.09f,
             0.56f to 0.17f, 0.66f to 0.11f, 0.74f to 0.14f, 0.84f to 0.05f, 1f to 0.02f,
         ),
-        relief = Relief.HILLS,
+        relief = Relief.LOW,
         water = emptyList(),
         sea = false,
         treeline = 1f,
@@ -114,8 +169,50 @@ internal object SketchTerrains {
         placeX = 0.38f,
     )
 
-    /** Le relief de la coupe [profile], la neige du mois [month] (jusqu'au lieu quand il neige, [snowing]). */
-    fun from(profile: TerrainProfile?, month: Int, snowing: Boolean): SketchTerrain {
+    /**
+     * Où est le lieu : au sommet, en plaine, ou à quel étage de la montagne. [gain] et [angle] : dénivelé jusqu'au
+     * sommet qui domine le lieu, et l'angle sous lequel on le voit.
+     */
+    fun classify(e: DoubleArray, p: Int, kmPerSample: Double, gain: Double, angle: Double): Relief {
+        val ground = e[p]
+        val near = e.indices.filter { abs(it - p) * kmPerSample <= SUMMIT_KM }
+        val before = near.filter { it < p }
+        val after = near.filter { it > p }
+        if (ground >= 400 && before.size >= 2 && after.size >= 2 && near.all { e[it] <= ground + 40 } &&
+            ground - before.minOf { e[it] } >= 120 && ground - after.minOf { e[it] } >= 120
+        ) {
+            return Relief.SUMMIT
+        }
+        // Une butte lointaine ne fait pas un relief : on la voit à moins d'un degré au-dessus de l'horizon.
+        if (gain < 120 || angle < 0.8) return Relief.PLAIN
+        val local = e.indices.filter { abs(it - p) * kmPerSample <= LOCAL_KM }.maxOf { e[it] }
+        // Des montagnes seulement au loin (Valence et le Vercors) : on est en plaine, elles restent à l'horizon.
+        if (local - ground < 150 && ground < 500) return Relief.PLAIN
+        val byPeaks = when {
+            local < 600 -> Relief.PLAIN
+            local < 1200 -> Relief.LOW
+            local < 2500 -> Relief.MEDIUM
+            local < 3500 -> Relief.HIGH
+            else -> Relief.VERY_HIGH
+        }
+        // Un lieu déjà haut : au moins en moyenne montagne (le Haut-Doubs), en haute ou très haute montagne.
+        val byPlace = when {
+            ground >= 2800 -> Relief.VERY_HIGH
+            ground >= 1600 -> Relief.HIGH
+            ground >= 700 -> Relief.MEDIUM
+            else -> Relief.PLAIN
+        }
+        return maxOf(byPeaks, byPlace)
+    }
+
+    /**
+     * Le relief de la coupe [profile], la neige du mois [month] (jusqu'au lieu quand il neige, [snowing]), à la
+     * [latitude] du lieu ; puis ce qui l'entoure ([around]) : un lac, la mer, une rivière, une île.
+     */
+    fun from(profile: TerrainProfile?, month: Int, snowing: Boolean, latitude: Double = 45.0, around: Surroundings? = null): SketchTerrain =
+        shape(profile, month, snowing, latitude).with(around)
+
+    private fun shape(profile: TerrainProfile?, month: Int, snowing: Boolean, latitude: Double): SketchTerrain {
         val e = profile?.elevations ?: return DEFAULT
         val n = e.size
         if (n < 10 || e.any { it.isNaN() }) return DEFAULT
@@ -127,41 +224,87 @@ internal object SketchTerrains {
         // Hauteur dessinée du sommet : d'après l'angle sous lequel on le voit du lieu (sa raideur apparente).
         val distanceKm = max((top - p) * kmPerSample, 0.3)
         val angle = Math.toDegrees(atan(gain / (distanceKm * 1000)))
-        val height = max(MAX_LIFT * (1 - exp(-angle / 3.5)), 0.025).toFloat()
-        val perMeter = height / max(gain, 60.0)
-        val relief = when {
-            // Une butte lointaine ne fait pas un relief : on la voit à moins d'un degré au-dessus de l'horizon.
-            gain < 120 || angle < 0.8 -> Relief.FLAT
-            e[top] < 1500 || gain < 500 -> Relief.HILLS
-            e[top] >= 2800 && gain >= 1200 -> Relief.HIGH_MOUNTAINS
-            else -> Relief.MOUNTAINS
+        val relief = classify(e, p, kmPerSample, gain, angle)
+        val summit = relief == Relief.SUMMIT
+        // Au sommet, tout se mesure depuis le fond de la vallée, et le lieu est le haut du dessin.
+        val base = if (summit) e.min() else ground
+        val perMeter = if (summit) {
+            MAX_LIFT * 0.8f / max(ground - base, 150.0)
+        } else {
+            max(MAX_LIFT * (1 - exp(-angle / 3.5)), 0.025) / max(gain, 60.0)
         }
-        val sharp = relief == Relief.MOUNTAINS || relief == Relief.HIGH_MOUNTAINS
         // Un relief doux est lissé ; une montagne garde ses arêtes.
-        val window = if (sharp) 0 else 2
+        val window = when (relief) {
+            Relief.PLAIN, Relief.LOW -> 2
+            Relief.MEDIUM -> 1
+            else -> 0
+        }
         val smooth = DoubleArray(n) { k -> (k - window..k + window).filter { it in 0 until n }.map { e[it] }.average() }
-        fun x(k: Int) = if (k < p) PLACE - (PLACE - LEFT) * (p - k) / p else PLACE + (RIGHT - PLACE) * (k - p) / max(n - 1 - p, 1)
-        fun lift(v: Double) = ((v - ground) * perMeter).toFloat().coerceIn(-0.05f, MAX_LIFT * 1.05f)
+        val place = if (summit) SUMMIT_PLACE else PLACE
+        fun x(k: Int) = if (k < p) place - (place - LEFT) * (p - k) / p else place + (RIGHT - place) * (k - p) / max(n - 1 - p, 1)
+        fun lift(v: Double) = ((v - base) * perMeter).toFloat().coerceIn(-0.05f, MAX_LIFT * 1.05f)
         val profilePoints = (0 until n).map { k -> x(k) to lift(smooth[k]) * envelope(x(k)) }
         // Au-delà de la coupe, le relief redescend doucement vers les bords (sous le texte).
         val first = profilePoints.first().second
         val last = profilePoints.last().second
         val ridge = listOf(0f to first * 0.3f, LEFT / 2 to first * 0.6f) + profilePoints +
             (1..6).map { i -> val t = i / 6f; RIGHT + (1 - RIGHT) * t to last * (1 - t) * (1 - t) }
-        val water = waterRuns(e, ground, kmPerSample).map { (a, b) -> (if (a == 0) 0f else x(a))..x(b) }
-        val sea = waterRuns(e, ground, kmPerSample).any { (a, _) -> e[a] <= 1.0 }
-        val snowAltitude = if (snowing) ground - 50 else snowAltitude(month)
+        val runs = waterRuns(e, ground, kmPerSample)
+        val water = runs.map { (a, b) -> (if (a == 0) 0f else x(a))..x(b) }
+        val sea = runs.any { (a, _) -> e[a] <= 1.0 }
+        val shift = latitudeShift(latitude)
+        val snowAltitude = if (snowing) ground - 50 else snowAltitude(month) - shift
+        val treeline = treelineAltitude(latitude)
         val far = (p until n).firstOrNull { (it - p) * kmPerSample > FAR_KM }
+        fun at(altitude: Double) = ((altitude - base) * perMeter).toFloat()
         return SketchTerrain(
             ridge = ridge,
             relief = relief,
             water = water,
             sea = sea,
-            treeline = ((TREELINE_M - ground) * perMeter).toFloat(),
-            snowline = ((snowAltitude - ground) * perMeter).toFloat(),
+            treeline = at(treeline),
+            snowline = at(snowAltitude),
+            // Au-dessus de la forêt, les alpages ; la roche plus haut (plus tôt dans les très hautes montagnes).
+            rockline = at(treeline + if (relief == Relief.MEDIUM || relief == Relief.LOW) 350.0 else 150.0),
+            // Les glaciers ne fondent pas l'été : seulement dans les hautes montagnes.
+            glacierline = if (relief >= Relief.HIGH) at(3000 - shift) else 2f,
             placeX = x(p),
             farX = far?.let { x(it) } ?: 2f,
         )
+    }
+
+    /** Ce que la coupe ne montre pas toujours : un lac tout près, la mer, la rivière qui passe, l'île. */
+    private fun SketchTerrain.with(around: Surroundings?): SketchTerrain {
+        if (around == null) return this
+        var t = copy(sea = sea || around.coast, river = around.river && !sea && !around.coast, island = around.island)
+        if (around.lake && t.water.isEmpty() && !t.sea) t = t.withLake()
+        if (t.island) t = t.copy(ridge = t.ridge.map { (x, y) -> x to y * islandTaper(x) - 0.012f * (1 - islandTaper(x)) })
+        return t
+    }
+
+    /**
+     * Un lac au fond de la vallée, à côté du lieu : le plus large creux du relief (là où il ne monte pas de plus de
+     * 1,5 % de la hauteur du dessin), mis bien à plat.
+     */
+    private fun SketchTerrain.withLake(): SketchTerrain {
+        fun extent(x0: Float): Float {
+            val floor = heightAt(x0)
+            var x = x0
+            while (x < 0.74f && x - x0 < 0.14f && heightAt(x + 0.005f) <= floor + 0.015f) x += 0.005f
+            return x
+        }
+        val start = (0..80).map { 0.30f + it * 0.005f }.filter { it <= 0.68f }
+            .maxByOrNull { x0 -> extent(x0) - x0 - abs(x0 - placeX) * 0.1f } ?: return this
+        val end = extent(start).coerceAtLeast(start + 0.04f)
+        val level = (0..10).minOf { heightAt(start + (end - start) * it / 10) }
+        val flattened = ridge.filter { it.first < start } + listOf(start to level, end to level) + ridge.filter { it.first > end }
+        return copy(ridge = flattened, water = water + listOf(start..end))
+    }
+
+    /** L'île : la terre descend dans la mer avant les bords du dessin. */
+    private fun islandTaper(x: Float): Float {
+        fun ramp(a: Float, b: Float) = ((x - a) / (b - a)).coerceIn(0f, 1f).let { it * it * (3 - 2 * it) }
+        return ramp(0.27f, 0.37f) * (1 - ramp(0.67f, 0.76f))
     }
 
     /** Les côtés du dessin restent bas : à gauche la grande température, à droite le ciel et les extrêmes. */
@@ -190,12 +333,41 @@ internal object SketchTerrains {
     }
 }
 
+/** Force de la pluie ou de la neige, et sa forme, d'après le code météo WMO. */
+internal class SketchWeather(
+    /** 0 faible, 1 modérée, 2 forte. */
+    val intensity: Int,
+    val drizzle: Boolean,
+    val freezing: Boolean,
+    /** Averses : un seul gros nuage, et du soleil autour. */
+    val showers: Boolean,
+    /** Neige en grains : des points plutôt que des flocons. */
+    val grains: Boolean = false,
+) {
+    companion object {
+        fun of(code: Int) = SketchWeather(
+            intensity = when (code) {
+                53, 63, 73, 81, 95 -> 1
+                55, 57, 65, 67, 75, 82, 86, 96, 99 -> 2
+                else -> 0
+            },
+            drizzle = code in 51..57,
+            freezing = code in setOf(56, 57, 66, 67),
+            showers = code in 80..86,
+            grains = code == 77,
+        )
+    }
+}
+
 internal class SketchScene(
     val sky: SketchSky,
     val terrain: SketchTerrain,
     val decor: Set<Decor>,
     val surprises: Set<Surprise>,
     val seed: Long,
+    /** Quelle version du ciel : chaque temps se dessine de plusieurs façons ([SketchScenes.SKY_VARIANTS]). */
+    val skyVariant: Int = 0,
+    val weather: SketchWeather = SketchWeather.of(0),
 )
 
 internal object SketchScenes {
@@ -207,6 +379,9 @@ internal object SketchScenes {
     /** Toucher le dessin autant de fois fait passer la soucoupe. */
     const val ABDUCTION_TAPS = 7
 
+    /** Chaque ciel a trois versions : une autre chaque jour, et à chaque fois qu'on touche le dessin. */
+    const val SKY_VARIANTS = 3
+
     /** Âge de la Lune, en jours depuis la dernière nouvelle lune (de 0 à 29,5). */
     fun moonAge(time: LocalDateTime): Double {
         val days = ChronoUnit.MINUTES.between(NEW_MOON, time) / 1440.0
@@ -217,6 +392,9 @@ internal object SketchScenes {
     fun moonIllumination(age: Double): Double = (1 - cos(2 * PI * age / SYNODIC_MONTH)) / 2
 
     fun waxing(age: Double): Boolean = age < SYNODIC_MONTH / 2
+
+    /** Le mois tel que la saison le vit : dans l'hémisphère sud, janvier est un mois d'été. */
+    fun seasonMonth(month: Int, latitude: Double): Int = if (latitude < 0) (month + 5) % 12 + 1 else month
 
     /** Dimanche de Pâques (calendrier grégorien, algorithme de Meeus). */
     fun easterSunday(year: Int): LocalDate {
@@ -248,6 +426,7 @@ internal object SketchScenes {
         placeSeed: Int,
         terrain: SketchTerrain = SketchTerrains.DEFAULT,
         variant: Int = 0,
+        around: Surroundings? = null,
     ): SketchScene {
         val sky = SketchSky.of(code)
         val date = time.toLocalDate()
@@ -256,8 +435,9 @@ internal object SketchScenes {
         val seed = placeSeed * 1_000_003L + date.toEpochDay() * 7_919L + variant * 104_729L
         val rnd = Random(seed)
         val relief = terrain.relief
-        val mountains = relief == Relief.MOUNTAINS || relief == Relief.HIGH_MOUNTAINS
-        val decor = decorFor(relief, rnd)
+        val mountains = relief.mountains
+        val skyVariant = rnd.nextInt(SKY_VARIANTS)
+        val decor = decorFor(terrain, around, rnd)
         val surprises = mutableSetOf<Surprise>()
         val clearish = sky == SketchSky.CLEAR || sky == SketchSky.PARTLY
         val wet = sky == SketchSky.RAIN || sky == SketchSky.STORM || sky == SketchSky.SNOW
@@ -279,7 +459,7 @@ internal object SketchScenes {
                     it < 0.30f -> Surprise.BIRDS
                     it < 0.42f -> Surprise.PLANE
                     // Le parapente part d'un relief.
-                    it < 0.52f -> if (relief != Relief.FLAT) Surprise.PARAGLIDER else Surprise.BIRDS
+                    it < 0.52f -> if (relief != Relief.PLAIN) Surprise.PARAGLIDER else Surprise.BIRDS
                     it < 0.58f -> Surprise.BALLOON
                     else -> null
                 }
@@ -311,39 +491,78 @@ internal object SketchScenes {
         // Une averse en plein jour : souvent un arc-en-ciel.
         if (isDay && code in 80..82 && rnd.nextFloat() < 0.7f) surprises += Surprise.RAINBOW
 
-        if (mountains && rnd.nextFloat() < 0.35f) surprises += Surprise.SUMMIT_CROSS
-        if (terrain.water.isNotEmpty()) when {
+        // Au sommet, toujours la croix (dessinée sur le lieu) ; ailleurs en montagne, parfois sur le plus haut.
+        if (relief == Relief.SUMMIT || mountains && rnd.nextFloat() < 0.35f) surprises += Surprise.SUMMIT_CROSS
+        if (terrain.water.isNotEmpty() || terrain.sea) when {
             !terrain.sea && rnd.nextFloat() < if (sky == SketchSky.FOG) 0.25f else 0.03f -> surprises += Surprise.NESSIE
             isDay && !wet && rnd.nextFloat() < 0.45f -> surprises += Surprise.SAILBOAT
         }
-        if ((Decor.VILLAGE in decor || Decor.CHALET in decor) && (!wet || sky == SketchSky.SNOW) && rnd.nextFloat() < 0.6f) {
-            surprises += Surprise.SMOKE
-        }
-        return SketchScene(sky, terrain, decor, surprises, seed)
+        val chimneys = decor.any { it in CHIMNEYS }
+        if (chimneys && (!wet || sky == SketchSky.SNOW) && rnd.nextFloat() < 0.6f) surprises += Surprise.SMOKE
+        return SketchScene(sky, terrain, decor, surprises, seed, skyVariant, SketchWeather.of(code))
     }
 
-    /** Un peu de variété d'un jour à l'autre, sans sortir de ce que le relief permet. */
-    private fun decorFor(relief: Relief, rnd: Random): Set<Decor> {
+    /** Les maisons qui ont une cheminée qui fume (pas les immeubles de la grande ville). */
+    private val CHIMNEYS = setOf(Decor.FARM, Decor.CHALET, Decor.REFUGE, Decor.HAMLET, Decor.VILLAGE, Decor.TOWN)
+
+    /**
+     * Le décor du lieu : la ville ou le village qu'il est vraiment, la forêt s'il y en a une tout près, et ce que le
+     * relief permet (champs en plaine, feuillus en basse montagne, sapins plus haut). Sans [around] (pas encore chargé,
+     * ou sans réseau), un peu de variété d'un jour à l'autre, d'après le seul relief.
+     */
+    private fun decorFor(terrain: SketchTerrain, around: Surroundings?, rnd: Random): Set<Decor> {
+        val relief = terrain.relief
         val decor = mutableSetOf<Decor>()
-        when (relief) {
-            Relief.FLAT -> {
-                decor += Decor.FIELDS
-                decor += if (rnd.nextFloat() < 0.6f) Decor.VILLAGE else Decor.TREES
-            }
-            Relief.HILLS -> {
-                if (rnd.nextFloat() < 0.7f) decor += Decor.FIRS
-                if (rnd.nextFloat() < 0.55f) decor += Decor.VILLAGE
-                if (decor.isEmpty()) decor += Decor.TREES
-            }
-            Relief.MOUNTAINS, Relief.HIGH_MOUNTAINS -> {
-                if (rnd.nextFloat() < 0.65f) decor += Decor.FIRS
-                when (rnd.nextFloat()) {
-                    in 0f..0.35f -> decor += Decor.CHALET
-                    in 0.35f..0.65f -> decor += Decor.VILLAGE
-                    else -> Unit
+        if (around == null) {
+            when (relief) {
+                Relief.PLAIN -> {
+                    decor += Decor.FIELDS
+                    decor += if (rnd.nextFloat() < 0.6f) Decor.VILLAGE else Decor.TREES
                 }
+                Relief.LOW, Relief.MEDIUM -> {
+                    if (rnd.nextFloat() < 0.7f) decor += if (relief == Relief.LOW) Decor.TREES else Decor.FIRS
+                    if (rnd.nextFloat() < 0.55f) decor += Decor.VILLAGE
+                    if (decor.isEmpty()) decor += Decor.FIRS
+                }
+                Relief.HIGH, Relief.VERY_HIGH -> {
+                    if (rnd.nextFloat() < 0.65f) decor += Decor.FIRS
+                    when (rnd.nextFloat()) {
+                        in 0f..0.35f -> decor += Decor.CHALET
+                        in 0.35f..0.65f -> decor += Decor.VILLAGE
+                        else -> Unit
+                    }
+                }
+                Relief.SUMMIT -> Unit
+            }
+            return decor
+        }
+        // Au-dessus de la limite des arbres, ni forêt ni ferme : un refuge.
+        val aboveTrees = terrain.treeline <= 0.005f
+        when (around.settlement) {
+            Settlement.CITY -> decor += Decor.CITY
+            Settlement.TOWN -> decor += Decor.TOWN
+            Settlement.VILLAGE -> decor += Decor.VILLAGE
+            Settlement.HAMLET -> decor += Decor.HAMLET
+            Settlement.NONE -> when {
+                relief == Relief.SUMMIT -> if (rnd.nextFloat() < 0.4f) decor += Decor.REFUGE
+                aboveTrees -> decor += Decor.REFUGE
+                relief <= Relief.LOW -> decor += Decor.FARM
+                relief == Relief.MEDIUM -> decor += if (rnd.nextFloat() < 0.5f) Decor.FARM else Decor.CHALET
+                else -> decor += Decor.CHALET
             }
         }
+        if (!aboveTrees && relief != Relief.SUMMIT) {
+            if (around.forest) decor += Decor.FOREST
+            when (relief) {
+                Relief.PLAIN -> {
+                    if (around.settlement != Settlement.CITY && !terrain.sea) decor += Decor.FIELDS
+                    if (!around.forest && rnd.nextFloat() < 0.6f) decor += Decor.TREES
+                }
+                Relief.LOW -> if (!around.forest) decor += Decor.TREES
+                else -> if (!around.forest && rnd.nextFloat() < 0.6f) decor += Decor.FIRS
+            }
+        }
+        if ((terrain.sea || terrain.island) && around.settlement != Settlement.CITY && rnd.nextFloat() < 0.5f) decor += Decor.LIGHTHOUSE
         return decor
     }
 }
