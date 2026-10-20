@@ -44,10 +44,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.material3.Icon
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Forecast
@@ -60,8 +61,6 @@ import io.github.pbailly.meteo.data.Predictability
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
-import io.github.pbailly.meteo.ui.theme.LocalTextSize
-import androidx.compose.ui.unit.TextUnit
 
 /** Une ligne de la prévision horaire (une heure, ou un bloc de 3 heures). */
 private class HourLine(
@@ -188,27 +187,15 @@ private fun DayPage(
             Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(if (step == 1) "Heure par heure" else "Par 3 heures", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
             }
-            // En très grand texte, la colonne du ressenti laisse la place aux autres.
-            val feel = LocalTextSize.current < 2
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-                ColumnLabel("HEURE", HOUR_WIDTH)
-                ColumnLabel("", ICON_WIDTH)
-                ColumnLabel("TEMP.", TEMP_WIDTH)
-                if (feel) ColumnLabel("RESS.", FEEL_WIDTH)
-                ColumnLabel("VENT", null, modifier = Modifier.weight(1f))
-                ColumnLabel("PLUIE", RAIN_WIDTH, TextAlign.End)
-                ColumnLabel("PROB.", PROB_WIDTH, TextAlign.End)
-                ColumnLabel("CONF.", PRED_WIDTH, TextAlign.End)
-            }
             HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = colors.outlineVariant)
         }
         items(lines, key = { it.index }) { line ->
-            HourRow(line, feel = LocalTextSize.current < 2)
+            HourRow(line)
             HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = colors.outlineVariant)
         }
         item(key = "note") {
             MonoText(
-                "vent : moyen-rafales en km/h · pluie en mm · confiance : accord des 51 scénarios de l'ensemble européen",
+                "pluie : cumul et probabilité · vent : moyen-rafales · confiance : accord des 51 scénarios de l'ensemble européen",
                 size = 10.sp,
                 maxLines = 3,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
@@ -217,19 +204,10 @@ private fun DayPage(
     }
 }
 
-/** Largeurs des colonnes, en sp pour suivre la taille du texte. */
-private val HOUR_WIDTH = 44.sp
-private val ICON_WIDTH = 34.sp
-private val TEMP_WIDTH = 40.sp
-private val FEEL_WIDTH = 38.sp
-private val RAIN_WIDTH = 40.sp
-private val PROB_WIDTH = 40.sp
-private val PRED_WIDTH = 38.sp
-
-@Composable
-private fun ColumnLabel(text: String, width: TextUnit?, align: TextAlign = TextAlign.Start, modifier: Modifier = Modifier) {
-    MonoText(text, size = 9.5.sp, align = align, modifier = if (width != null) modifier.width(width.asWidth()) else modifier)
-}
+/** Largeurs des colonnes, en sp pour suivre la taille du texte (le pictogramme garde sa taille). */
+private val HOUR_WIDTH = 54.sp
+private val ICON_WIDTH = 36.dp
+private val DETAILS_WIDTH = 104.sp
 
 /** Indice de confiance du jour : jauge à cinq barres et note sur 5. */
 @Composable
@@ -284,47 +262,66 @@ private fun AlmanacTile(icon: androidx.compose.ui.graphics.vector.ImageVector, l
     }
 }
 
-/** Heure, ciel, température, ressenti, vent moyen et rafales, pluie, probabilité et indice de confiance. */
+/**
+ * Une heure, comme un jour de Prévisions : l'heure, le ciel, la température et le ressenti ; puis la pluie (et sa
+ * probabilité), le vent moyen et les rafales, et l'indice de confiance, l'un sous l'autre.
+ */
 @Composable
-private fun HourRow(line: HourLine, feel: Boolean) {
+private fun HourRow(line: HourLine) {
     val colors = MaterialTheme.colorScheme
     val chart = LocalChartColors.current
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().padding(start = 18.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MonoText(line.label, color = colors.onBackground, size = 12.5.sp, bold = true, modifier = Modifier.width(HOUR_WIDTH.asWidth()))
-        Box(Modifier.width(ICON_WIDTH.asWidth())) { WeatherIcon(line.weatherCode, line.isDay, size = 28.dp) }
-        Text(Fmt.temp(line.temperature), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.width(TEMP_WIDTH.asWidth()))
-        if (feel) MonoText(Fmt.temp(line.apparent), size = 11.5.sp, modifier = Modifier.width(FEEL_WIDTH.asWidth()))
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Canvas(Modifier.size(12.dp)) {
-                drawWindArrow(center, line.windDirection, size.minDimension, chart.secondaryInk, 1.4f * density)
+        Text(line.label, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1, modifier = Modifier.width(HOUR_WIDTH.asWidth()))
+        Box(Modifier.width(ICON_WIDTH)) { WeatherIcon(line.weatherCode, line.isDay, size = 30.dp) }
+        Column(Modifier.weight(1f).padding(start = 4.dp, end = 10.dp)) {
+            Text(Fmt.temp(line.temperature), fontWeight = FontWeight.SemiBold, fontSize = 18.sp, maxLines = 1)
+            MonoText("ressenti ${Fmt.temp(line.apparent)}", size = 10.5.sp, maxLines = 1)
+        }
+        Column(Modifier.width(DETAILS_WIDTH.asWidth())) {
+            val wet = !line.precipitation.isNaN() && line.precipitation >= 0.05
+            val likely = !line.probability.isNaN() && line.probability >= 50
+            HourDetail(icon = { Icon(Icons.Outlined.WaterDrop, null, tint = colors.primary, modifier = Modifier.size(13.dp)) }) {
+                MonoText(
+                    "${hourRain(line.precipitation)} · ${Fmt.percent(line.probability).replace(" ", "")}",
+                    color = if (wet || likely) colors.primary else colors.onSurfaceVariant,
+                    bold = wet,
+                    size = 11.5.sp,
+                    maxLines = 1,
+                )
             }
-            Spacer(Modifier.width(5.dp))
-            MonoText("${line.windSpeed.roundToInt()}-${line.windGusts.roundToInt()}", color = colors.onBackground, size = 11.5.sp)
+            HourDetail(icon = {
+                Canvas(Modifier.size(13.dp)) {
+                    drawWindArrow(center, line.windDirection, size.minDimension, chart.secondaryInk, 1.5.dp.toPx())
+                }
+            }) {
+                val windy = line.windGusts >= 60 || line.windSpeed >= 40
+                MonoText(
+                    "${line.windSpeed.roundToInt()}-${line.windGusts.roundToInt()} km/h",
+                    color = if (windy) Color(0xFFC8202A) else colors.onBackground,
+                    bold = windy,
+                    size = 11.5.sp,
+                    maxLines = 1,
+                )
+            }
+            line.confidence?.let { level ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                    ConfidenceGauge(level)
+                    Spacer(Modifier.width(6.dp))
+                    MonoText("$level/5", color = colors.onBackground, size = 11.5.sp)
+                }
+            }
         }
-        val wet = !line.precipitation.isNaN() && line.precipitation >= 0.05
-        MonoText(
-            hourRain(line.precipitation).removeSuffix(" mm"),
-            color = if (wet) colors.primary else colors.onSurfaceVariant,
-            bold = wet,
-            size = 11.5.sp,
-            align = TextAlign.End,
-            modifier = Modifier.width(RAIN_WIDTH.asWidth()),
-        )
-        val likely = !line.probability.isNaN() && line.probability >= 50
-        MonoText(
-            Fmt.percent(line.probability).replace(" ", ""),
-            color = if (likely) colors.primary else colors.onSurfaceVariant,
-            bold = likely,
-            size = 11.5.sp,
-            align = TextAlign.End,
-            modifier = Modifier.width(PROB_WIDTH.asWidth()),
-        )
-        Box(Modifier.width(PRED_WIDTH.asWidth()), contentAlignment = Alignment.CenterEnd) {
-            line.confidence?.let { ConfidenceGauge(it, Modifier.size(width = 20.dp, height = 11.dp)) } ?: MonoText("–")
-        }
+    }
+}
+
+@Composable
+private fun HourDetail(icon: @Composable () -> Unit, text: @Composable () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 1.dp)) {
+        Box(Modifier.width(18.dp), contentAlignment = Alignment.CenterStart) { icon() }
+        text()
     }
 }
 

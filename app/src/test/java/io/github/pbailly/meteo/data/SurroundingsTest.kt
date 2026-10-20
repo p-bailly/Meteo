@@ -99,4 +99,17 @@ class SurroundingsTest {
         assertEquals(6, Regex("out count;").findAll(url).count())
         assertTrue("is_in(47.05770,6.56640)" in url)
     }
+
+    @Test
+    fun `without openstreetmap the geocoder tells the size of the place`() {
+        // Réponse du géocodeur d'Open-Meteo pour « Morteau » : la petite ville du Doubs, et une homonyme à 200 km.
+        val morteau = """{"results":[
+            {"name":"Morteau","latitude":47.05784,"longitude":6.60716,"feature_code":"PPL","population":6343},
+            {"name":"Morteau","latitude":48.22405,"longitude":5.31365,"feature_code":"PPL"}]}"""
+        assertEquals(Settlement.TOWN, SurroundingsQuery.geocodedSettlement(morteau, 47.0578, 6.6072))
+        val newYork = """{"results":[{"name":"New York","latitude":40.71427,"longitude":-74.00597,"feature_code":"PPL","population":8804190}]}"""
+        // À Central Park, à 8 km du centre : toujours la grande ville.
+        assertEquals(Settlement.CITY, SurroundingsQuery.geocodedSettlement(newYork, 40.7812, -73.9665))
+        assertNull(SurroundingsQuery.geocodedSettlement("{}", 47.0, 6.0))
+    }
 }

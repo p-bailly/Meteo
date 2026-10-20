@@ -79,7 +79,8 @@ internal enum class Landmark(val latitude: Double, val longitude: Double, val ra
     FOURVIERE(45.7623, 4.8225, 8.0),
     BONNE_MERE(43.2840, 5.3713, 9.0),
     STRASBOURG_CATHEDRAL(48.5818, 7.7509, 7.0),
-    JET_D_EAU(46.2073, 6.1557, 7.0);
+    JET_D_EAU(46.2073, 6.1557, 7.0),
+    EMPIRE_STATE(40.7484, -73.9857, 15.0);
 
     companion object {
         fun near(latitude: Double, longitude: Double): Landmark? = entries.firstOrNull {
@@ -163,6 +164,23 @@ internal class SketchTerrain(
 
     fun isWater(x: Float, margin: Float = 0f) = water.any { x in (it.start - margin)..(it.endInclusive + margin) } ||
         island && heightAt(x) <= 0f
+
+    /**
+     * Le sol mis à plat de [x0] à [x1], à la hauteur [level], avec une pente douce de part et d'autre : la ville est
+     * au niveau du lieu, pas sur la colline voisine que la coupe, très resserrée, met juste à côté.
+     */
+    fun flattened(x0: Float, x1: Float, level: Float, ramp: Float = 0.035f): SketchTerrain {
+        fun weight(x: Float): Float {
+            val d = when {
+                x < x0 -> (x0 - x) / ramp
+                x > x1 -> (x - x1) / ramp
+                else -> 0f
+            }.coerceAtMost(1f)
+            return d * d * (3 - 2 * d)
+        }
+        val points = (ridge + listOf(x0 to heightAt(x0), x1 to heightAt(x1))).sortedBy { it.first }.distinctBy { it.first }
+        return copy(ridge = points.map { (x, y) -> x to level + (y - level) * weight(x) })
+    }
 
     fun copy(
         ridge: List<Pair<Float, Float>> = this.ridge,
@@ -433,6 +451,8 @@ internal class SketchScene(
     val conditions: SketchConditions = SketchConditions(),
     val light: Light = Light.DAY,
     val landmark: Landmark? = null,
+    /** Où sont posés le lieu habité et l'objet du premier plan, choisi une fois pour toutes ([layoutOf]). */
+    val layout: Layout? = null,
 ) {
     val clouds: SketchClouds? get() = conditions.clouds
 
@@ -633,11 +653,19 @@ internal object SketchScenes {
         val monument = landmark?.takeIf { around == null || Decor.CITY in decor || Decor.TOWN in decor }
         val chimneys = decor.any { it in CHIMNEYS }
         if (chimneys && (!wet || sky == SketchSky.SNOW) && rnd.nextFloat() < 0.6f) surprises += Surprise.SMOKE
-        return SketchScene(
-            sky, terrain, decor, surprises, seed, skyVariant, SketchWeather.of(code), conditions,
-            lightAt(time, isDay, conditions.sunrise, conditions.sunset), monument,
-        )
+        val light = lightAt(time, isDay, conditions.sunrise, conditions.sunset)
+        val weather = SketchWeather.of(code)
+        // Le lieu habité au niveau du lieu : le sol est aplani sous lui.
+        val layout = layoutOf(SketchScene(sky, terrain, decor, surprises, seed, skyVariant, weather, conditions, light, monument))
+        val built = decor.any { it in BUILT } && relief != Relief.SUMMIT
+        val ground = layout.settlement?.takeIf { built }?.let { x ->
+            terrain.flattened(x - layout.half - 0.015f, x + layout.half + 0.015f, terrain.heightAt(terrain.placeX).coerceAtLeast(0f))
+        } ?: terrain
+        return SketchScene(sky, ground, decor, surprises, seed, skyVariant, weather, conditions, light, monument, layout)
     }
+
+    /** Les lieux habités dont le sol est aplani (pas le chalet ni le refuge, posés sur la pente). */
+    private val BUILT = setOf(Decor.FARM, Decor.HAMLET, Decor.VILLAGE, Decor.TOWN, Decor.CITY)
 
     /** Les maisons qui ont une cheminée qui fume (pas les immeubles de la grande ville). */
     private val CHIMNEYS = setOf(Decor.FARM, Decor.CHALET, Decor.REFUGE, Decor.HAMLET, Decor.VILLAGE, Decor.TOWN)

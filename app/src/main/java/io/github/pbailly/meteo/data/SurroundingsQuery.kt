@@ -37,14 +37,14 @@ object SurroundingsQuery {
     fun url(latitude: Double, longitude: Double, server: String = Overpass.SERVERS.first()): String {
         val at = "%.5f,%.5f".format(Locale.ROOT, latitude, longitude)
         fun around(m: Int) = "(around:$m,$at)"
-        // Les réponses arrivent dans l'ordre : lieux habités, puis un compte par question, les îles, et le ski.
+        // Les réponses arrivent dans l'ordre : lieux habités, puis un compte par question, les îles, et le ski. Pas de
+        // recherche de relations autour du lieu (grandes forêts, grands lacs) : c'est ce qui rendait la requête lente ;
+        // les grandes forêts sont trouvées quand le lieu est dedans, les grands lacs par la coupe du relief.
         val query = "[out:json][timeout:30];" +
             "(node[\"place\"~\"^(city|town)$\"]${around(15000)};node[\"place\"~\"^(village|hamlet|isolated_dwelling)$\"]${around(2500)};);out body;" +
-            "(way[\"landuse\"=\"forest\"]${around(FOREST_M)};way[\"natural\"=\"wood\"]${around(FOREST_M)};" +
-            "relation[\"landuse\"=\"forest\"]${around(FOREST_M)};relation[\"natural\"=\"wood\"]${around(FOREST_M)};);out count;" +
+            "(way[\"landuse\"=\"forest\"]${around(FOREST_M)};way[\"natural\"=\"wood\"]${around(FOREST_M)};);out count;" +
             "(way[\"waterway\"=\"river\"]${around(RIVER_M)};way[\"water\"=\"river\"]${around(RIVER_M)};);out count;" +
-            "(way[\"natural\"=\"water\"][\"water\"~\"^(lake|reservoir)$\"]${around(LAKE_M)};" +
-            "relation[\"natural\"=\"water\"][\"water\"~\"^(lake|reservoir)$\"]${around(LAKE_M)};);out count;" +
+            "way[\"natural\"=\"water\"][\"water\"~\"^(lake|reservoir)$\"]${around(LAKE_M)};out count;" +
             "way[\"natural\"=\"coastline\"]${around(COAST_M)};out count;" +
             "is_in($at)->.a;" +
             "(area.a[\"landuse\"=\"forest\"];area.a[\"natural\"=\"wood\"];);out count;" +
@@ -119,6 +119,29 @@ object SurroundingsQuery {
         }
     }
 
+    /**
+     * Le lieu habité d'après le géocodeur d'Open-Meteo (recherche par nom, avec la population), quand OpenStreetMap ne
+     * répond pas : le même calcul que pour les nœuds d'OpenStreetMap, sur les résultats proches du lieu.
+     */
+    fun geocodedSettlement(body: String, latitude: Double, longitude: Double): Settlement? {
+        val results = Json.parseToJsonElement(body).jsonObject["results"] as? JsonArray ?: return null
+        val nodes = results.mapNotNull { e ->
+            val o = e.jsonObject
+            val lat = o["latitude"]?.jsonPrimitive?.doubleOrNull ?: return@mapNotNull null
+            val lon = o["longitude"]?.jsonPrimitive?.doubleOrNull ?: return@mapNotNull null
+            val population = o["population"]?.jsonPrimitive?.doubleOrNull?.toLong()
+            val kind = when {
+                o["feature_code"]?.jsonPrimitive?.contentOrNull == "PPLC" -> "city"
+                population == null -> "village"
+                population >= 50_000 -> "city"
+                population >= 2_000 -> "town"
+                else -> "village"
+            }
+            SettlementNode(kind, population, Terrain.distanceKm(latitude, longitude, lat, lon))
+        }.filter { it.distanceKm <= 30 }
+        return if (nodes.isEmpty()) null else settlement(nodes)
+    }
+
     /** « 2165423 », « 2 165 423 », « 12,345 », « ~5000 » : le nombre d'habitants, ou null. */
     fun parsePopulation(raw: String?): Long? {
         val digits = raw?.let { Regex("[0-9][0-9 ,.  ]*").find(it)?.value } ?: return null
@@ -133,13 +156,19 @@ class SurroundingsRepository(
 ) {
     suspend fun of(place: Place): Surroundings = withContext(Dispatchers.IO) {
         val file = File(cacheDir, "surroundings2_${place.id}.json")
-        if (file.exists()) runCatching { decode(file.readText()) }.getOrNull()?.let { return@withContext it }
+        if (file.exists()) {
+            val cached = runCatching { decode(file.readText()) }.getOrNull()
+            // Un repli (OpenStreetMap n'avait pas répondu) se garde quelques heures, puis on redemande.
+            if (cached != null && (!cached.second || System.currentTimeMillis() - file.lastModified() < PARTIAL_MAX_AGE_MS)) {
+                return@withContext cached.first
+            }
+        }
         var failure: Exception = IOException("Aucun serveur Overpass ne répond")
         for (server in Overpass.SERVERS) {
             try {
                 val found = SurroundingsQuery.parse(httpGet(SurroundingsQuery.url(place.latitude, place.longitude, server)), place.latitude, place.longitude)
                 cacheDir.mkdirs()
-                file.writeText(encode(found))
+                file.writeText(encode(found, partial = false))
                 return@withContext found
             } catch (e: CancellationException) {
                 throw e
@@ -147,10 +176,22 @@ class SurroundingsRepository(
                 failure = e
             }
         }
-        throw failure
+        // OpenStreetMap ne répond pas : au moins la taille de la ville, d'après le géocodeur d'Open-Meteo.
+        val settlement = try {
+            SurroundingsQuery.geocodedSettlement(httpGet(OpenMeteoApi.searchUrl(place.name)), place.latitude, place.longitude)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        } ?: throw failure
+        val partial = Surroundings(settlement)
+        cacheDir.mkdirs()
+        file.writeText(encode(partial, partial = true))
+        partial
     }
 
-    private fun encode(s: Surroundings): String = buildJsonObject {
+    private fun encode(s: Surroundings, partial: Boolean): String = buildJsonObject {
+        put("partial", partial)
         put("settlement", s.settlement.name)
         put("forest", s.forest)
         put("river", s.river)
@@ -160,7 +201,8 @@ class SurroundingsRepository(
         put("ski", s.ski)
     }.toString()
 
-    private fun decode(raw: String): Surroundings {
+    /** Les environs gardés, et s'ils viennent du repli. */
+    private fun decode(raw: String): Pair<Surroundings, Boolean> {
         val o = Json.parseToJsonElement(raw).jsonObject
         fun flag(key: String) = o[key]?.jsonPrimitive?.booleanOrNull ?: false
         return Surroundings(
@@ -171,6 +213,10 @@ class SurroundingsRepository(
             coast = flag("coast"),
             island = flag("island"),
             ski = flag("ski"),
-        )
+        ) to flag("partial")
+    }
+
+    private companion object {
+        const val PARTIAL_MAX_AGE_MS = 6 * 60 * 60 * 1000L
     }
 }

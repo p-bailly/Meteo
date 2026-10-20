@@ -12,8 +12,6 @@ import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.PlaceNames
 import io.github.pbailly.meteo.data.PlacesStore
 import io.github.pbailly.meteo.data.SettingsStore
-import io.github.pbailly.meteo.data.Normals
-import io.github.pbailly.meteo.data.ClimateRepository
 import io.github.pbailly.meteo.data.AirQuality
 import io.github.pbailly.meteo.data.AirQualityRepository
 import io.github.pbailly.meteo.data.Surroundings
@@ -77,8 +75,6 @@ data class MeteoUiState(
     val surroundings: Remote<Surroundings> = Remote(),
     /** Qualité de l'air (sable du Sahara, pollution), pour le ciel du dessin. */
     val airQuality: Remote<AirQuality> = Remote(),
-    /** Normales de saison du lieu (1991-2020). */
-    val normals: Remote<Normals> = Remote(),
     /** Prévision courte de chaque favori, par identifiant de lieu. */
     val summaries: Remote<Map<String, Forecast>> = Remote(),
     /** Lieux consultés, du plus récent au plus ancien (favoris compris). */
@@ -98,7 +94,6 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     // Overpass répond lentement : ces deux-là attendent plus longtemps (slowHttpGet).
     private val terrainRepository = TerrainRepository(File(app.filesDir, "terrain"), ::slowHttpGet)
     private val surroundingsRepository = SurroundingsRepository(File(app.filesDir, "terrain"), ::slowHttpGet)
-    private val climateRepository = ClimateRepository(File(app.filesDir, "normals"), repository.httpGet)
     private val airRepository = AirQualityRepository(File(app.cacheDir, "air"), repository.httpGet)
     private val store = PlacesStore(app)
     private val settings = SettingsStore(app)
@@ -124,7 +119,6 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private var ensembleJob: Job? = null
     private var searchJob: Job? = null
     private var terrainJob: Job? = null
-    private var normalsJob: Job? = null
     private var airJob: Job? = null
     private var summariesJob: Job? = null
     private var pickJob: Job? = null
@@ -134,7 +128,6 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
             loadForecast(it, force = false)
             loadMultiModel(it, force = false)
             loadTerrain(it)
-            loadNormals(it)
             loadAir(it)
         }
         loadSummaries(force = false)
@@ -178,13 +171,12 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(recents = recents) }
         multiModelJob?.cancel()
         _state.update {
-            it.copy(place = place, forecast = Remote(), multiModel = Remote(), ensemble = Remote(), terrain = Remote(), surroundings = Remote(), airQuality = Remote(), normals = Remote(), search = SearchState())
+            it.copy(place = place, forecast = Remote(), multiModel = Remote(), ensemble = Remote(), terrain = Remote(), surroundings = Remote(), airQuality = Remote(), search = SearchState())
         }
         loadForecast(place, force = false)
         // Les modèles servent aussi à la page principale : prévisibilité et fourchettes de pluie.
         loadMultiModel(place, force = false)
         loadTerrain(place)
-        loadNormals(place)
         loadAir(place)
     }
 
@@ -358,21 +350,6 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
                 around.fold(
                     onSuccess = { state.copy(surroundings = Remote(it, System.currentTimeMillis())) },
                     onFailure = { state.copy(surroundings = Remote(error = (it as Exception).userMessage())) },
-                )
-            }
-        }
-    }
-
-    /** Normales de saison : téléchargées une fois par lieu ; sans elles, Aujourd'hui n'affiche simplement pas d'écart. */
-    private fun loadNormals(place: Place) {
-        normalsJob?.cancel()
-        normalsJob = viewModelScope.launch {
-            val result = runLoading { climateRepository.normals(place, java.time.LocalDate.now()) }
-            _state.update { state ->
-                if (state.place?.id != place.id) return@update state
-                result.fold(
-                    onSuccess = { state.copy(normals = Remote(it, System.currentTimeMillis())) },
-                    onFailure = { state.copy(normals = Remote(error = (it as Exception).userMessage())) },
                 )
             }
         }

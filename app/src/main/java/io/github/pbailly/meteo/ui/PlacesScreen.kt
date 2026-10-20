@@ -45,7 +45,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -60,18 +59,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.Place
-import io.github.pbailly.meteo.ui.theme.AppMono
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
 
 
@@ -103,6 +105,14 @@ fun PlacesScreen(
         if (grants.values.any { it }) onLocate() else onLocationDenied()
     }
     val searching = state.search.query.trim().length >= 2
+    // Un lieu choisi : le clavier se ferme (puis l'appli ouvre Aujourd'hui).
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    val choose: (Place) -> Unit = { place ->
+        keyboard?.hide()
+        focus.clearFocus()
+        onSelect(place)
+    }
 
     // Glisser-déposer : appui long sur un favori, puis glisser ; il échange sa place avec celui qu'il survole.
     val listState = rememberLazyListState()
@@ -162,6 +172,14 @@ fun PlacesScreen(
                     }
                 },
                 singleLine = true,
+                // « Rechercher » sur le clavier : le premier lieu trouvé.
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = {
+                    state.search.results.firstOrNull()?.let(choose) ?: run {
+                        keyboard?.hide()
+                        focus.clearFocus()
+                    }
+                }),
                 shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     unfocusedBorderColor = colors.outlineVariant,
@@ -207,7 +225,7 @@ fun PlacesScreen(
             HorizontalDivider(color = colors.outlineVariant)
         }
         if (searching) {
-            searchResults(state, onSelect, onToggleFavorite)
+            searchResults(state, choose, onToggleFavorite)
             return@LazyColumn
         }
         val spots = spots(state)
@@ -228,7 +246,7 @@ fun PlacesScreen(
             SpotRow(
                 spot,
                 dragging,
-                onSelect,
+                choose,
                 onToggleFavorite,
                 Modifier
                     .zIndex(if (dragging) 1f else 0f)
@@ -255,15 +273,6 @@ private fun spots(state: MeteoUiState): List<Spot> {
     return state.favorites.map { spot(it, favorite = true) } + recents.map { spot(it, favorite = false) }
 }
 
-/** Altitude d'un lieu, « 1 035 m » sur une seule ligne, alignée à droite dans sa colonne. */
-@Composable
-private fun Altitude(value: String, size: TextUnit) {
-    Row(Modifier.width(74.sp.asWidth()), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.Bottom) {
-        Text(value, fontFamily = AppMono, fontWeight = FontWeight.Medium, fontSize = size, maxLines = 1, softWrap = false)
-        MonoText(" m", size = 10.sp, modifier = Modifier.padding(bottom = 2.dp))
-    }
-}
-
 @Composable
 private fun SpotRow(
     e: Spot,
@@ -286,11 +295,10 @@ private fun SpotRow(
                 .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Altitude(Fmt.thousands(e.altitude), 15.sp)
-            VerticalDivider(Modifier.padding(horizontal = 12.dp), color = colors.outlineVariant)
-            Column(Modifier.weight(1f)) {
-                Text(e.place.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                e.place.department?.let { MonoText(it, size = 10.5.sp) }
+            // Le nom d'abord, en entier (sur deux lignes s'il le faut) ; l'altitude et le département en petit dessous.
+            Column(Modifier.weight(1f).padding(start = 4.dp, end = 6.dp)) {
+                Text(e.place.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                MonoText(listOfNotNull("${Fmt.thousands(e.altitude)} m", e.place.department).joinToString(" · "), size = 10.5.sp, maxLines = 1)
             }
             if (c != null) {
                 WeatherIcon(c.weatherCode, c.isDay, size = 30.dp)
@@ -339,11 +347,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.searchResults(
                     Modifier.fillMaxWidth().clickable { onSelect(place) }.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Altitude(place.elevation?.let { Fmt.thousands(it) } ?: "–", 14.sp)
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(place.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (place.subtitle.isNotBlank()) MonoText(place.subtitle, size = 11.sp)
+                    Column(Modifier.weight(1f).padding(start = 4.dp)) {
+                        Text(place.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 19.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        val details = listOfNotNull(place.elevation?.let { "${Fmt.thousands(it)} m" }, place.subtitle.takeIf { it.isNotBlank() })
+                        if (details.isNotEmpty()) MonoText(details.joinToString(" · "), size = 11.sp, maxLines = 1)
                     }
                     IconButton(onClick = { onToggleFavorite(place) }) {
                         Icon(
