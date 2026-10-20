@@ -13,6 +13,8 @@ import io.github.pbailly.meteo.data.PlacesStore
 import io.github.pbailly.meteo.data.SettingsStore
 import io.github.pbailly.meteo.data.Normals
 import io.github.pbailly.meteo.data.ClimateRepository
+import io.github.pbailly.meteo.data.AirQuality
+import io.github.pbailly.meteo.data.AirQualityRepository
 import io.github.pbailly.meteo.data.Surroundings
 import io.github.pbailly.meteo.data.SurroundingsRepository
 import io.github.pbailly.meteo.data.Terrain
@@ -66,6 +68,8 @@ data class MeteoUiState(
     val terrain: Remote<TerrainProfile> = Remote(),
     /** Ce qui entoure le lieu (ville ou village, forêt, rivière, lac, mer, île), pour le dessin d'Aujourd'hui. */
     val surroundings: Remote<Surroundings> = Remote(),
+    /** Qualité de l'air (sable du Sahara, pollution), pour le ciel du dessin. */
+    val airQuality: Remote<AirQuality> = Remote(),
     /** Normales de saison du lieu (1991-2020). */
     val normals: Remote<Normals> = Remote(),
     /** Prévision courte de chaque favori, par identifiant de lieu. */
@@ -75,6 +79,9 @@ data class MeteoUiState(
     /** Thème (0 = comme le téléphone, 1 = clair, 2 = sombre) et taille du texte (0 à 2), choisis dans les Réglages. */
     val theme: Int = 0,
     val textSize: Int = 0,
+    /** Dessin d'Aujourd'hui : discret, normal ou coloré (0 à 2), et animé ou non. */
+    val sketchStyle: Int = 1,
+    val sketchMotion: Boolean = true,
 ) {
     val isFavorite: Boolean get() = place != null && favorites.any { it.id == place.id }
 }
@@ -84,6 +91,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private val terrainRepository = TerrainRepository(File(app.filesDir, "terrain"), repository.httpGet)
     private val surroundingsRepository = SurroundingsRepository(File(app.filesDir, "terrain"), repository.httpGet)
     private val climateRepository = ClimateRepository(File(app.filesDir, "normals"), repository.httpGet)
+    private val airRepository = AirQualityRepository(File(app.cacheDir, "air"), repository.httpGet)
     private val store = PlacesStore(app)
     private val settings = SettingsStore(app)
     private val deviceLocation = DeviceLocation(app)
@@ -96,6 +104,8 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
             recents = store.recents().ifEmpty { listOfNotNull(store.lastPlace()) },
             theme = settings.theme(),
             textSize = settings.textSize(),
+            sketchStyle = settings.sketchStyle(),
+            sketchMotion = settings.sketchMotion(),
         ),
     )
     val state: StateFlow<MeteoUiState> = _state.asStateFlow()
@@ -106,6 +116,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private var searchJob: Job? = null
     private var terrainJob: Job? = null
     private var normalsJob: Job? = null
+    private var airJob: Job? = null
     private var summariesJob: Job? = null
 
     init {
@@ -114,6 +125,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
             loadMultiModel(it, force = false)
             loadTerrain(it)
             loadNormals(it)
+            loadAir(it)
         }
         loadSummaries(force = false)
         backfillDepartments()
@@ -156,13 +168,14 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(recents = recents) }
         multiModelJob?.cancel()
         _state.update {
-            it.copy(place = place, forecast = Remote(), multiModel = Remote(), ensemble = Remote(), terrain = Remote(), surroundings = Remote(), normals = Remote(), search = SearchState())
+            it.copy(place = place, forecast = Remote(), multiModel = Remote(), ensemble = Remote(), terrain = Remote(), surroundings = Remote(), airQuality = Remote(), normals = Remote(), search = SearchState())
         }
         loadForecast(place, force = false)
         // Les modèles servent aussi à la page principale : prévisibilité et fourchettes de pluie.
         loadMultiModel(place, force = false)
         loadTerrain(place)
         loadNormals(place)
+        loadAir(place)
     }
 
     fun refresh() {
@@ -170,6 +183,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         loadForecast(place, force = true)
         loadMultiModel(place, force = true)
         if (_state.value.terrain.data == null || _state.value.surroundings.data == null) loadTerrain(place)
+        loadAir(place)
     }
 
     /** Liste des lieux : on rafraîchit la météo des favoris (le cache évite les appels inutiles). */
@@ -202,6 +216,16 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         settings.saveTheme(theme)
         _state.update { it.copy(theme = theme) }
         viewModelScope.launch { Widgets.updateAll(getApplication()) }
+    }
+
+    fun setSketchStyle(style: Int) {
+        settings.saveSketchStyle(style)
+        _state.update { it.copy(sketchStyle = style) }
+    }
+
+    fun setSketchMotion(motion: Boolean) {
+        settings.saveSketchMotion(motion)
+        _state.update { it.copy(sketchMotion = motion) }
     }
 
     fun setTextSize(size: Int) {
@@ -317,6 +341,21 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
                 result.fold(
                     onSuccess = { state.copy(normals = Remote(it, System.currentTimeMillis())) },
                     onFailure = { state.copy(normals = Remote(error = (it as Exception).userMessage())) },
+                )
+            }
+        }
+    }
+
+    /** Qualité de l'air : gardée une heure ; sans elle, le ciel du dessin reste simplement clair. */
+    private fun loadAir(place: Place) {
+        airJob?.cancel()
+        airJob = viewModelScope.launch {
+            val result = runLoading { airRepository.of(place) }
+            _state.update { state ->
+                if (state.place?.id != place.id) return@update state
+                result.fold(
+                    onSuccess = { state.copy(airQuality = Remote(it, System.currentTimeMillis())) },
+                    onFailure = { state.copy(airQuality = Remote(error = (it as Exception).userMessage())) },
                 )
             }
         }

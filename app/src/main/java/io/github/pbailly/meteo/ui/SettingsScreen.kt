@@ -74,6 +74,10 @@ fun SettingsScreen(
     onTheme: (Int) -> Unit,
     textSize: Int,
     onTextSize: (Int) -> Unit,
+    sketchStyle: Int,
+    onSketchStyle: (Int) -> Unit,
+    sketchMotion: Boolean,
+    onSketchMotion: (Boolean) -> Unit,
     hiddenModels: Set<WeatherModel>,
     onModelVisible: (WeatherModel, Boolean) -> Unit,
     meteoFranceKey: String?,
@@ -100,6 +104,22 @@ fun SettingsScreen(
                 Text("Taille du texte", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                 SegmentedToggle(listOf("100 %", "115 %", "130 %"), textSize, onTextSize, Modifier.padding(top = 8.dp), fill = true)
                 MonoText("Plus grand, certains écrans cachent des détails secondaires", size = 10.5.sp, maxLines = 2, modifier = Modifier.padding(top = 6.dp))
+            }
+        }
+        SectionLabel("Dessin d'Aujourd'hui")
+        BorderedCard {
+            Column(Modifier.padding(14.dp)) {
+                Text("Couleurs", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                SegmentedToggle(listOf("Discret", "Normal", "Coloré"), sketchStyle, onSketchStyle, Modifier.padding(top = 8.dp), fill = true)
+                MonoText("Discret : le texte ressort mieux ; coloré : comme un vrai coloriage", size = 10.5.sp, maxLines = 2, modifier = Modifier.padding(top = 6.dp))
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Animation", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                        MonoText("La pluie et la neige tombent, les nuages glissent", size = 10.5.sp, maxLines = 2, modifier = Modifier.padding(top = 2.dp))
+                    }
+                    Switch(checked = sketchMotion, onCheckedChange = onSketchMotion)
+                }
             }
         }
         SectionLabel("Application")

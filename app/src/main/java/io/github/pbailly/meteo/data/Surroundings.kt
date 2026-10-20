@@ -5,7 +5,7 @@ enum class Settlement { NONE, HAMLET, VILLAGE, TOWN, CITY }
 
 /**
  * Ce qui entoure le lieu, d'après OpenStreetMap : la ville ou le village, une forêt, une rivière, un lac, la mer, une
- * île. Le dessin d'Aujourd'hui s'en sert pour poser le décor.
+ * île, une station de ski. Le dessin d'Aujourd'hui s'en sert pour poser le décor.
  */
 data class Surroundings(
     val settlement: Settlement,
@@ -14,4 +14,6 @@ data class Surroundings(
     val lake: Boolean = false,
     val coast: Boolean = false,
     val island: Boolean = false,
+    /** Une station de ski : remontées mécaniques ou pistes de descente tout près. */
+    val ski: Boolean = false,
 )
