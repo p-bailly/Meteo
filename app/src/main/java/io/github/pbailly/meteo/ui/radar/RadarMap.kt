@@ -53,6 +53,11 @@ private const val PLACE_HALO_LAYER = "place-halo-layer"
 private const val STATION_SOURCE = "stations"
 private const val STATION_LAYER = "stations-layer"
 private const val STATION_TEXT = "stations-text"
+private const val PIN_SOURCE = "pin"
+private const val PIN_LAYER = "pin-layer"
+private const val PIN_HALO_LAYER = "pin-halo-layer"
+/** Orange d'accent de l'app : le point choisi ne se confond pas avec le lieu, noir. */
+private const val PIN_COLOR = "#E2701F"
 
 /** Relevé d'une station sur la carte : pastille colorée selon la température, affichée à partir de [minZoom]. */
 data class StationMarker(
@@ -93,23 +98,29 @@ sealed interface MapOverlay {
 }
 
 /**
- * Carte MapLibre : fond OpenFreeMap, couche météo posée sous les noms de villes, lieu entouré.
- * [onWebcamClick] reçoit l'identifiant de la webcam touchée.
+ * Carte MapLibre : fond OpenFreeMap, couche météo posée sous les noms de villes, lieu entouré (si [showPlace]).
+ * [onWebcamClick] reçoit l'identifiant de la webcam touchée ; [onMapClick], le point touché ailleurs, que la carte
+ * marque d'une épingle quand on le lui rend dans [pin].
  */
 @Composable
 fun WeatherMap(
     overlay: MapOverlay,
     center: LatLng,
     modifier: Modifier = Modifier,
+    zoom: Double = 6.6,
+    showPlace: Boolean = true,
     onWebcamClick: (Long) -> Unit = {},
     stations: List<StationMarker> = emptyList(),
     onStationClick: (String) -> Unit = {},
+    pin: LatLng? = null,
+    onMapClick: ((LatLng) -> Unit)? = null,
 ) {
     val mapView = rememberMapViewWithLifecycle()
     var style by remember { mutableStateOf<Style?>(null) }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
     val clicks by rememberUpdatedState(onWebcamClick)
     val stationClicks by rememberUpdatedState(onStationClick)
+    val mapClicks by rememberUpdatedState(onMapClick)
     val currentStations by rememberUpdatedState(stations)
     var imageBounds by remember { mutableStateOf<GeoBounds?>(null) }
     var tileUrl by remember { mutableStateOf<String?>(null) }
@@ -124,7 +135,7 @@ fun WeatherMap(
                 attributionGravity = Gravity.TOP or Gravity.START
                 setAttributionMargins(110, 12, 0, 0)
             }
-            loadedMap.cameraPosition = CameraPosition.Builder().target(center).zoom(6.6).build()
+            loadedMap.cameraPosition = CameraPosition.Builder().target(center).zoom(zoom).build()
             // Au changement de zoom entier, les stations qui ont de la place apparaissent (ou disparaissent).
             var shownZoom = -1
             loadedMap.addOnCameraIdleListener {
@@ -142,10 +153,19 @@ fun WeatherMap(
                     return@addOnMapClickListener true
                 }
                 val feature = loadedMap.queryRenderedFeatures(screen, CAM_LAYER).firstOrNull()
-                feature?.getNumberProperty("id")?.let { clicks(it.toLong()) }
-                feature != null
+                if (feature != null) {
+                    feature.getNumberProperty("id")?.let { clicks(it.toLong()) }
+                    return@addOnMapClickListener true
+                }
+                val tap = mapClicks ?: return@addOnMapClickListener false
+                tap(point)
+                true
             }
             loadedMap.setStyle(Style.Builder().fromUri(STYLE_URL)) { loaded ->
+                if (!showPlace) {
+                    style = loaded
+                    return@setStyle
+                }
                 loaded.addSource(GeoJsonSource(PLACE_SOURCE, Point.fromLngLat(center.longitude, center.latitude)))
                 // Le lieu : un point noir cerclé de blanc dans un halo blanc, lisible sur toutes les couleurs de la
                 // pluie (bleus, violet, rouge, jaune), des températures et du satellite.
@@ -257,6 +277,39 @@ fun WeatherMap(
                     )
                 }
             }
+        }
+    }
+
+    // Point choisi sur la carte : un rond orange dans un halo, au-dessus du lieu.
+    LaunchedEffect(style, pin) {
+        val loaded = style ?: return@LaunchedEffect
+        if (pin == null) {
+            loaded.removeLayer(PIN_LAYER)
+            loaded.removeLayer(PIN_HALO_LAYER)
+            loaded.removeSource(PIN_SOURCE)
+            return@LaunchedEffect
+        }
+        val point = Point.fromLngLat(pin.longitude, pin.latitude)
+        val source = loaded.getSourceAs<GeoJsonSource>(PIN_SOURCE)
+        if (source != null) {
+            source.setGeoJson(point)
+        } else {
+            loaded.addSource(GeoJsonSource(PIN_SOURCE, point))
+            loaded.addLayer(
+                CircleLayer(PIN_HALO_LAYER, PIN_SOURCE).withProperties(
+                    PropertyFactory.circleRadius(16f),
+                    PropertyFactory.circleColor(PIN_COLOR),
+                    PropertyFactory.circleOpacity(0.25f),
+                ),
+            )
+            loaded.addLayer(
+                CircleLayer(PIN_LAYER, PIN_SOURCE).withProperties(
+                    PropertyFactory.circleRadius(7f),
+                    PropertyFactory.circleColor(PIN_COLOR),
+                    PropertyFactory.circleStrokeColor("#FFFFFF"),
+                    PropertyFactory.circleStrokeWidth(2.5f),
+                ),
+            )
         }
     }
 

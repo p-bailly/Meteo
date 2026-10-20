@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.GpsFixed
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarOutline
@@ -39,6 +41,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -76,9 +79,10 @@ import io.github.pbailly.meteo.ui.theme.LocalChartColors
 private class Spot(val place: Place, val forecast: Forecast?, val altitude: Double, val favorite: Boolean, val current: Boolean)
 
 /**
- * Onglet « Lieux » : recherche, météo à ma position, puis les favoris (étoilés) dans l'ordre choisi (appui long
- * puis glisser pour les réordonner) et les lieux consultés récemment, du plus récent au plus ancien. L'étoile de
- * chaque ligne ajoute ou retire un favori ; « Comparer » met les lieux côte à côte, jour par jour.
+ * Onglet « Lieux » : recherche, météo à ma position, choix d'un point sur la carte, puis les favoris (étoilés) dans
+ * l'ordre choisi (appui long puis glisser pour les réordonner) et les lieux consultés récemment, du plus récent au
+ * plus ancien. L'étoile de chaque ligne ajoute ou retire un favori ; « Comparer » met les lieux côte à côte, jour
+ * par jour.
  */
 @Composable
 fun PlacesScreen(
@@ -88,6 +92,7 @@ fun PlacesScreen(
     onQueryChange: (String) -> Unit,
     onLocate: () -> Unit,
     onLocationDenied: () -> Unit,
+    onOpenMap: () -> Unit,
     onOpenSettings: () -> Unit,
     onMoveFavorite: (Int, Int) -> Unit,
     onOpenCompare: () -> Unit,
@@ -188,6 +193,16 @@ fun PlacesScreen(
             state.locationError?.let {
                 Text(it, color = colors.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             }
+            OutlinedButton(
+                onClick = onOpenMap,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, colors.outlineVariant),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp).height(48.dp),
+            ) {
+                Icon(Icons.Outlined.Map, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text("Choisir sur la carte", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            }
             Spacer(Modifier.height(14.dp))
             HorizontalDivider(color = colors.outlineVariant)
         }
@@ -199,7 +214,7 @@ fun PlacesScreen(
         if (spots.isEmpty()) {
             item(key = "empty") {
                 Text(
-                    "Recherche un lieu, puis touche l'étoile sur sa page pour l'ajouter aux favoris.",
+                    "Recherche un lieu ou choisis-le sur la carte, puis touche l'étoile pour l'ajouter aux favoris.",
                     color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(20.dp),
                 )

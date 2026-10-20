@@ -2,22 +2,18 @@ package io.github.pbailly.meteo.data
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.location.Geocoder
 import android.location.Location
 import android.location.LocationManager
 import android.os.Build
 import android.os.CancellationSignal
 import androidx.core.content.ContextCompat
 import androidx.core.location.LocationManagerCompat
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import java.util.Locale
 import kotlin.coroutines.resume
 
 /** Position du téléphone, sans les services Google (LocationManager d'Android). */
-class DeviceLocation(private val context: Context) {
+class DeviceLocation(private val context: Context, private val names: PlaceNames) {
 
     /** Renvoie la position actuelle, ou null si elle est indisponible. La permission doit être accordée. */
     @SuppressLint("MissingPermission")
@@ -41,26 +37,10 @@ class DeviceLocation(private val context: Context) {
         return lastKnown
     }
 
-    /** Nom de la commune la plus proche, via le géocodeur du téléphone quand il existe. */
-    suspend fun placeFor(location: Location): Place = withContext(Dispatchers.IO) {
-        val address = if (Geocoder.isPresent()) {
-            runCatching {
-                @Suppress("DEPRECATION")
-                Geocoder(context, Locale.FRENCH).getFromLocation(location.latitude, location.longitude, 1)?.firstOrNull()
-            }.getOrNull()
-        } else {
-            null
-        }
-        Place(
-            name = address?.locality ?: address?.subAdminArea ?: "Ma position",
-            latitude = location.latitude,
-            longitude = location.longitude,
-            admin1 = address?.adminArea,
-            admin2 = address?.subAdminArea ?: "",
-            country = address?.countryName,
-            elevation = if (location.hasAltitude()) location.altitude else null,
-        )
-    }
+    /** Le lieu de la position : la commune la plus proche quand on lui trouve un nom. */
+    suspend fun placeFor(location: Location): Place =
+        (names.at(location.latitude, location.longitude) ?: Place("Ma position", location.latitude, location.longitude, admin2 = ""))
+            .copy(elevation = if (location.hasAltitude()) location.altitude else null)
 
     @SuppressLint("MissingPermission")
     private suspend fun requestFix(manager: LocationManager, provider: String): Location? =

@@ -85,7 +85,9 @@ la carte) :
   - **Foudre** : imageur d'éclairs de Meteosat (EUMETSAT, sans clé), éclairs par 5 min sur la dernière heure ;
   - **Webcams** autour du lieu : Windy, avec une clé gratuite (api.windy.com) à saisir dans les Réglages ;
     toucher un point affiche l'image sur toute la largeur et le lien vers la page Windy.
-- **Lieux** : recherche, **météo à ma position** (GPS du téléphone, sans les services Google), puis les **favoris**
+- **Lieux** : recherche, **météo à ma position** (GPS du téléphone, sans les services Google), **choisir sur la
+  carte** (toucher un point, ou ailleurs pour le déplacer : il prend le nom de la commune et l'altitude du terrain ;
+  l'étoile l'ajoute aux favoris, « Voir la météo » l'ouvre), puis les **favoris**
   (étoile orange) dans l'ordre choisi — appui long sur un lieu puis glisser pour le déplacer — et les **lieux
   consultés récemment**, du plus récent au plus ancien ; chacun avec son département, son altitude, sa température
   et ses extrêmes. L'étoile de chaque ligne ajoute ou retire un favori. **Comparer** met tous ces lieux côte à côte
@@ -207,7 +209,8 @@ Kotlin, Jetpack Compose, Gradle (wrapper inclus). Il faut un JDK 17+ et le SDK A
 Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 
 - `data/` : appels Open-Meteo et lecture des réponses (`OpenMeteoApi`), cache (`WeatherRepository`),
-  favoris (`PlacesStore`), position (`DeviceLocation`), nouvelles tentatives et messages d'erreur réseau
+  favoris (`PlacesStore`), position (`DeviceLocation`), nom d'un point (`PlaceNames` : géocodeur du téléphone, à
+  défaut Nominatim d'OpenStreetMap), nouvelles tentatives et messages d'erreur réseau
   (`Http`), décompression bzip2 (`Bzip2`), mise à jour de l'appli (`AppUpdate`) ; indice de confiance (`Predictability`), normales de saison
   (`Climate`) ; météo en altitude, limite pluie-neige et neige (`Altitude`), pictogramme du jour et moment de la pluie
   (`Outlook`), coupe du relief (`Terrain`, avec Overpass pour les sommets).
@@ -219,7 +222,7 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
   en image Web Mercator colorée (`MercatorLookup`, `RainClass`) ; prévision PIAF via WCS (`MeteoFrancePiaf`,
   lecteur `GeoTiff`) et extrapolation de secours (`Nowcast`).
 - `ui/` : navigation et barre du bas (`MeteoApp`, `Glacier`), onglets (`TodayScreen`, `DaysScreen`,
-  `AltitudeScreen`, `radar/RadarScreen`, `PlacesScreen`), comparaison des lieux (`CompareScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
+  `AltitudeScreen`, `radar/RadarScreen`, `PlacesScreen`), choix d'un lieu sur la carte (`MapPickScreen`), comparaison des lieux (`CompareScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
   (`MeteogramsScreen`, `DaysTab`, `MeteogramTab`, `MultiModelTab`), réglages (`SettingsScreen`), pictogrammes
   dessinés au trait (`WeatherIcon`), dessin au crayon d'Aujourd'hui (`WeatherSketch`, son décor et ses surprises dans `SketchScene` et
   `SketchDecor`), outils de graphique
@@ -236,5 +239,6 @@ Données : Open-Meteo.com (licence CC BY 4.0) ; radar et relevés : Météo-Fran
 relevés : MétéoSuisse (données ouvertes), NOAA Aviation Weather Center (METAR, domaine public) ;
 carte de température : Deutscher Wetterdienst (DWD, données ouvertes, modèle ICON-EU) ;
 relief : Copernicus DEM (via Open-Meteo), sommets © contributeurs OpenStreetMap (ODbL) ;
+noms des lieux choisis sur la carte ou trouvés par le GPS, sans géocodeur sur le téléphone : Nominatim, © contributeurs OpenStreetMap (ODbL) ;
 fond de carte : OpenFreeMap, © OpenStreetMap ; polices : Archivo et Martian Mono (SIL Open Font License 1.1,
 `licences/Archivo-OFL.txt` et `licences/MartianMono-OFL.txt`).
