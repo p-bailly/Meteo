@@ -1,7 +1,8 @@
 name: APK
 
-# À chaque push : tests et compilation de l'APK signé. Publication dans la release « apk-latest »
-# uniquement depuis la branche par défaut du dépôt (les autres branches gardent l'APK en artefact).
+# À chaque push : tests et compilation de l'APK signé. Publication dans une release « apk-<numéro> » marquée comme la
+# dernière, uniquement depuis la branche par défaut du dépôt (les autres branches gardent l'APK en artefact). La
+# nouvelle release est créée avant de retirer les anciennes : il y a toujours un meteo.apk à télécharger.
 # Lien direct pour le téléphone : https://github.com/<propriétaire>/<dépôt>/releases/latest/download/meteo.apk
 on:
   push:
@@ -43,9 +44,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete apk-latest --cleanup-tag --yes || true
-          gh release create apk-latest meteo.apk \
+          TAG="apk-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" meteo.apk \
             --title "Météo – dernière version" \
             --notes "APK compilé automatiquement depuis la branche ${GITHUB_REF_NAME} (commit ${GITHUB_SHA::7}). Ouvre ce lien depuis le téléphone pour l'installer." \
             --target "$GITHUB_SHA" \
-            --latest
+            --latest \
+            || gh release upload "$TAG" meteo.apk --clobber
+          # gh crée la release en brouillon le temps d'envoyer l'APK : on s'assure qu'elle est bien publiée (un
+          # brouillon n'est pas « la dernière version » et reste invisible pour les téléphones).
+          gh release edit "$TAG" --draft=false --latest
+          # Seulement ensuite, les anciennes (dont l'ancienne « apk-latest »).
+          for old in $(gh release list --limit 100 --json tagName --jq '.[].tagName'); do
+            case "$old" in
+              "$TAG") ;;
+              apk-*) gh release delete "$old" --cleanup-tag --yes || true ;;
+            esac
+          done
