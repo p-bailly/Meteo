@@ -28,13 +28,34 @@ class TerrainTest {
         assertEquals(3842.0, peaks[1].elevation, 0.0)
         assertEquals(4808.7, Overpass.parseElevation("4808,7")!!, 1e-9)
         assertNull(Overpass.parseElevation("12000"))
-        assertTrue(Overpass.peaksUrl(45.9237, 6.8694).contains("around%3A25000%2C45.9237%2C6.8694"))
+        assertTrue(Overpass.peaksUrl(45.9237, 6.8694).contains("around%3A60000%2C45.9237%2C6.8694"))
     }
 
     @Test
     fun `the highest peak within the radius is the target`() {
         val far = Peak("Loin", 46.5, 6.8694, 5000.0)
         assertEquals(montBlanc, Terrain.highestPeak(chamonix.latitude, chamonix.longitude, listOf(midi, montBlanc, far)))
+    }
+
+    @Test
+    fun `the dominant peak is the one that stands out the most from the place`() {
+        // Morteau (769 m) : sommets d'OpenStreetMap ; le Chasseron est plus haut, le Mont Vouillot domine la ville.
+        val vouillot = Peak("Mont Vouillot", 47.078, 6.604, 1160.0)
+        val morteauPeaks = listOf(
+            Peak("Le Chasseron", 46.852, 6.538, 1607.0),
+            Peak("Mont Racine", 47.022, 6.816, 1439.0),
+            Peak("Mont Châteleu", 46.99, 6.575, 1301.0),
+            vouillot,
+            Peak("Sommet des Ages", 47.0, 6.575, 1114.0),
+        )
+        assertEquals(vouillot, Terrain.dominantPeak(47.05784, 6.60716, 769.0, morteauPeaks))
+        // Valence (126 m) : le Grand Veymont à 49 km passe devant la colline de Crussol et le rebord du Vercors.
+        val veymont = Peak("Grand Veymont", 44.866, 5.523, 2341.0)
+        val valencePeaks = listOf(veymont, Peak("Crussol", 44.94, 4.86, 400.0), Peak("Rebord du Vercors", 44.95, 5.27, 1350.0))
+        assertEquals(veymont, Terrain.dominantPeak(44.9256, 4.90956, 126.0, valencePeaks))
+        // Chamonix : le Mont Blanc reste la cible.
+        assertEquals(montBlanc, Terrain.dominantPeak(chamonix.latitude, chamonix.longitude, 1035.0, listOf(midi, montBlanc, brevent)))
+        assertNull(Terrain.dominantPeak(47.05784, 6.60716, Double.NaN, morteauPeaks))
     }
 
     @Test

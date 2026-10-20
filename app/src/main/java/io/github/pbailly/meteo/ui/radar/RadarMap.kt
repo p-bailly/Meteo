@@ -49,6 +49,7 @@ private const val CAM_SOURCE = "webcams"
 private const val CAM_LAYER = "webcams-layer"
 private const val PLACE_SOURCE = "place"
 private const val PLACE_LAYER = "place-layer"
+private const val PLACE_HALO_LAYER = "place-halo-layer"
 private const val STATION_SOURCE = "stations"
 private const val STATION_LAYER = "stations-layer"
 private const val STATION_TEXT = "stations-text"
@@ -146,12 +147,23 @@ fun WeatherMap(
             }
             loadedMap.setStyle(Style.Builder().fromUri(STYLE_URL)) { loaded ->
                 loaded.addSource(GeoJsonSource(PLACE_SOURCE, Point.fromLngLat(center.longitude, center.latitude)))
+                // Le lieu : un point noir cerclé de blanc dans un halo blanc, lisible sur toutes les couleurs de la
+                // pluie (bleus, violet, rouge, jaune), des températures et du satellite.
+                loaded.addLayer(
+                    CircleLayer(PLACE_HALO_LAYER, PLACE_SOURCE).withProperties(
+                        PropertyFactory.circleRadius(11f),
+                        PropertyFactory.circleOpacity(0f),
+                        PropertyFactory.circleStrokeColor("#FFFFFF"),
+                        PropertyFactory.circleStrokeWidth(2.5f),
+                        PropertyFactory.circleStrokeOpacity(0.9f),
+                    ),
+                )
                 loaded.addLayer(
                     CircleLayer(PLACE_LAYER, PLACE_SOURCE).withProperties(
-                        PropertyFactory.circleRadius(9f),
-                        PropertyFactory.circleOpacity(0f),
-                        PropertyFactory.circleStrokeColor("#2D7BEA"),
-                        PropertyFactory.circleStrokeWidth(3f),
+                        PropertyFactory.circleRadius(5.5f),
+                        PropertyFactory.circleColor("#111111"),
+                        PropertyFactory.circleStrokeColor("#FFFFFF"),
+                        PropertyFactory.circleStrokeWidth(2f),
                     ),
                 )
                 style = loaded
