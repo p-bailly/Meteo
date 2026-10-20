@@ -51,6 +51,9 @@ jobs:
             --target "$GITHUB_SHA" \
             --latest \
             || gh release upload "$TAG" meteo.apk --clobber
+          # gh crée la release en brouillon le temps d'envoyer l'APK : on s'assure qu'elle est bien publiée (un
+          # brouillon n'est pas « la dernière version » et reste invisible pour les téléphones).
+          gh release edit "$TAG" --draft=false --latest
           # Seulement ensuite, les anciennes (dont l'ancienne « apk-latest »).
           for old in $(gh release list --limit 100 --json tagName --jq '.[].tagName'); do
             case "$old" in
