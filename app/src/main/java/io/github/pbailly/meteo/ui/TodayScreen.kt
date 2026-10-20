@@ -26,7 +26,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Air
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Terrain
@@ -113,17 +112,20 @@ fun TodayScreen(
                             f.current?.let {
                                 WeatherSketch(
                                     it.weatherCode, it.isDay, it.time, place.latitude, place.id.hashCode(), state.terrain.data, state.surroundings.data,
+                                    cloudLayers(f),
                                     Modifier.matchParentSize().statusBarsPadding(),
                                 )
                             }
                             Column {
-                                TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces)
+                                // Neige & altitude (à la saison de la neige) : une pastille dans l'en-tête, pour laisser la
+                                // place au dessin.
+                                TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces, onOpenAltitude.takeIf { snowSeason(f) })
                                 StatusLine(statusText(remote))
                                 NowBlock(f, state.normals.data)
+                                // Sous le texte, le bas du dessin : le village, la rivière, les champs, bien visibles.
+                                Spacer(Modifier.height(SKETCH_GROUND))
                             }
                         }
-                        // Neige & altitude seulement à la saison de la neige.
-                        if (snowSeason(f)) AltitudeLink(f, onOpenAltitude)
                         MetricsGrid(f)
                     },
                     fill = { NextHours(f, Modifier.fillMaxSize()) },
@@ -133,8 +135,29 @@ fun TodayScreen(
     }
 }
 
+/** Hauteur du dessin laissée libre sous le texte d'Aujourd'hui. */
+private val SKETCH_GROUND = 44.dp
+
+/** Nuages bas, moyens et hauts de l'heure en cours, pour les dessiner à leur hauteur. */
+private fun cloudLayers(f: Forecast): SketchClouds? {
+    val h = f.hourly
+    val i = Outlook.nowIndex(f)
+    val low = h.cloudCoverLow.getOrElse(i) { Double.NaN }
+    val mid = h.cloudCoverMid.getOrElse(i) { Double.NaN }
+    val high = h.cloudCoverHigh.getOrElse(i) { Double.NaN }
+    if (low.isNaN() || mid.isNaN() || high.isNaN()) return null
+    return SketchClouds((low / 100).toFloat(), (mid / 100).toFloat(), (high / 100).toFloat())
+}
+
 @Composable
-private fun TodayHeader(f: Forecast, place: Place, favorite: Boolean, onToggleFavorite: () -> Unit, onOpenPlaces: () -> Unit) {
+private fun TodayHeader(
+    f: Forecast,
+    place: Place,
+    favorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    onOpenPlaces: () -> Unit,
+    onOpenAltitude: (() -> Unit)?,
+) {
     val colors = MaterialTheme.colorScheme
     val elevation = place.elevation ?: f.elevation
     Row(
@@ -181,6 +204,7 @@ private fun TodayHeader(f: Forecast, place: Place, favorite: Boolean, onToggleFa
                 modifier = Modifier.padding(start = 2.dp, top = 4.dp),
             )
         }
+        onOpenAltitude?.let { AltitudeChip(f, it) }
         FavoriteStar(favorite, onToggleFavorite)
     }
 }
@@ -268,27 +292,26 @@ fun snowSeason(f: Forecast): Boolean {
     return day >= 1015 || day <= 315
 }
 
-/** Lien vers la page Neige & altitude, avec l'iso 0 °C actuel. */
+/** Pastille vers la page Neige & altitude : une montagne et l'iso 0 °C actuel (la montagne seule en très grand texte). */
 @Composable
-private fun AltitudeLink(f: Forecast, onClick: () -> Unit) {
+private fun AltitudeChip(f: Forecast, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val iso = Altitude.freezingLevel(f, Outlook.nowIndex(f))
     Row(
         Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp)
+            .padding(start = 6.dp)
             .clip(RoundedCornerShape(14.dp))
             .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
-            .background(colors.surfaceContainerLowest)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .background(colors.surfaceContainerLowest.copy(alpha = 0.85f))
+            .clickable(onClickLabel = "Neige & altitude", onClick = onClick)
+            .padding(horizontal = 9.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Outlined.Terrain, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(8.dp))
-        Text("Neige & altitude", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, modifier = Modifier.weight(1f))
-        if (!iso.isNaN() && LocalTextSize.current < 2) MonoText("iso 0 °C · ${Fmt.altitude(iso, 100)}", color = colors.primary, size = 11.sp, bold = true)
-        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
+        Icon(Icons.Outlined.Terrain, contentDescription = "Neige & altitude", tint = colors.primary, modifier = Modifier.size(18.dp))
+        if (!iso.isNaN() && LocalTextSize.current < 2) {
+            Spacer(Modifier.width(5.dp))
+            MonoText("0° ${Fmt.altitude(iso, 100)}", color = colors.primary, size = 11.sp, bold = true)
+        }
     }
 }
 

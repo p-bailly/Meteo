@@ -197,6 +197,24 @@ class SketchSceneTest {
     }
 
     @Test
+    fun `clouds are drawn at their height`() {
+        val time = LocalDateTime.of(2026, 10, 20, 15, 0)
+        val chamonix = SketchTerrains.from(profile("chamonix"), 10, snowing = false)
+        val paris = SketchTerrains.from(profile("paris"), 10, snowing = false)
+        fun drop(t: SketchTerrain, clouds: SketchClouds?) = SketchScenes.scene(3, true, time, 1, t, clouds = clouds).cloudDrop
+        val low = SketchClouds(low = 0.9f, mid = 0.2f, high = 0f)
+        val mid = SketchClouds(low = 0.1f, mid = 0.9f, high = 0.3f)
+        // Nuages bas en montagne : ils descendent sur les sommets ; en plaine, un peu ; moyens : à leur place.
+        assertTrue(drop(chamonix, low) > 0.08f)
+        assertEquals(0.05f, drop(paris, low), 0.001f)
+        assertEquals(0f, drop(chamonix, mid), 0f)
+        assertEquals(0f, drop(chamonix, null), 0f)
+        // Seulement des nuages hauts : un voile.
+        assertTrue(SketchScenes.scene(3, true, time, 1, paris, clouds = SketchClouds(0.05f, 0.1f, 0.9f)).highVeil)
+        assertFalse(SketchScenes.scene(3, true, time, 1, paris, clouds = mid).highVeil)
+    }
+
+    @Test
     fun `every sky has its variants and its strength`() {
         val time = LocalDateTime.of(2026, 10, 20, 15, 0)
         for (code in listOf(0, 2, 3, 45, 61, 73, 95)) {

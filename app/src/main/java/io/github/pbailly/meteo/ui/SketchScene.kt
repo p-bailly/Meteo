@@ -359,6 +359,12 @@ internal class SketchWeather(
     }
 }
 
+/**
+ * Part du ciel couverte par les nuages bas (sous 2 km), moyens (2 à 6 km) et hauts (au-delà), de 0 à 1, d'après la
+ * prévision de l'heure : les nuages bas coiffent les montagnes, les hauts ne sont qu'un voile ou des filaments.
+ */
+data class SketchClouds(val low: Float, val mid: Float, val high: Float)
+
 internal class SketchScene(
     val sky: SketchSky,
     val terrain: SketchTerrain,
@@ -368,7 +374,24 @@ internal class SketchScene(
     /** Quelle version du ciel : chaque temps se dessine de plusieurs façons ([SketchScenes.SKY_VARIANTS]). */
     val skyVariant: Int = 0,
     val weather: SketchWeather = SketchWeather.of(0),
-)
+    val clouds: SketchClouds? = null,
+) {
+    /** Surtout des nuages bas : ils descendent sur le relief. */
+    val lowClouds: Boolean get() = clouds != null && clouds.low >= 0.4f && clouds.low >= clouds.mid
+
+    /** Seulement un voile de nuages hauts : le soleil passe au travers. */
+    val highVeil: Boolean get() = clouds != null && clouds.high >= 0.4f && clouds.low < 0.25f && clouds.mid < 0.25f
+
+    /**
+     * De combien les nuages descendent (en fraction de la hauteur du dessin) : quand ils sont bas, ils accrochent le
+     * haut des montagnes (le dernier tiers des sommets disparaît dedans) ; en plaine, ils descendent un peu.
+     */
+    val cloudDrop: Float get() {
+        if (!lowClouds) return 0f
+        val top = terrain.ridge.filter { it.first in 0.40f..0.76f }.maxOfOrNull { it.second } ?: 0f
+        return if (terrain.relief.mountains) ((FOOT - top * 0.7f - 0.06f) - 0.50f).coerceIn(0f, 0.15f) else 0.05f
+    }
+}
 
 internal object SketchScenes {
     private const val SYNODIC_MONTH = 29.530588853
@@ -427,6 +450,7 @@ internal object SketchScenes {
         terrain: SketchTerrain = SketchTerrains.DEFAULT,
         variant: Int = 0,
         around: Surroundings? = null,
+        clouds: SketchClouds? = null,
     ): SketchScene {
         val sky = SketchSky.of(code)
         val date = time.toLocalDate()
@@ -499,7 +523,7 @@ internal object SketchScenes {
         }
         val chimneys = decor.any { it in CHIMNEYS }
         if (chimneys && (!wet || sky == SketchSky.SNOW) && rnd.nextFloat() < 0.6f) surprises += Surprise.SMOKE
-        return SketchScene(sky, terrain, decor, surprises, seed, skyVariant, SketchWeather.of(code))
+        return SketchScene(sky, terrain, decor, surprises, seed, skyVariant, SketchWeather.of(code), clouds)
     }
 
     /** Les maisons qui ont une cheminée qui fume (pas les immeubles de la grande ville). */
