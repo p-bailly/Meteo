@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Météo</string>
+    <string name="widget_now_name">Maintenant</string>
+    <string name="widget_now_description">Température, ciel et extrêmes du jour ; en large, le ressenti et l\'arrivée de la pluie</string>
+    <string name="widget_forecast_name">Prévisions</string>
+    <string name="widget_forecast_description">Le temps actuel et les prochains jours ; en plus haut, les prochaines heures</string>
+    <string name="widget_hours_name">Prochaines heures</string>
+    <string name="widget_hours_description">Quand la pluie arrive, et le graphique des 24 prochaines heures</string>
 </resources>

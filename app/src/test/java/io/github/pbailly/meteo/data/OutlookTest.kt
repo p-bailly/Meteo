@@ -1,6 +1,7 @@
 package io.github.pbailly.meteo.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -63,6 +64,34 @@ class OutlookTest {
         assertEquals(3800.0, Outlook.snowReference(3842.0, 4808.0), 0.0)
         // Relief inconnu : 2 000 m.
         assertEquals(2000.0, Outlook.snowReference(173.0), 0.0)
+    }
+
+    @Test
+    fun `next rain starts later in the day`() {
+        val f = forecast(codes = { h -> if (h in 15..17) 61 else 2 }, rain = { h -> if (h in 15..17) 0.8 else 0.0 })
+        val rain = Outlook.nextRain(f, from = 9)!!
+        assertEquals(LocalDateTime.of(2026, 10, 26, 15, 0), rain.start)
+        assertEquals(LocalDateTime.of(2026, 10, 26, 18, 0), rain.end)
+        assertEquals(2.4, rain.total, 1e-9)
+        assertEquals(false, rain.snow)
+    }
+
+    @Test
+    fun `rain already falling has no start`() {
+        val f = forecast(codes = { h -> if (h <= 11) 73 else 3 }, rain = { h -> if (h <= 11) 0.5 else 0.0 })
+        val rain = Outlook.nextRain(f, from = 8)!!
+        assertNull(rain.start)
+        assertEquals(LocalDateTime.of(2026, 10, 26, 12, 0), rain.end)
+        assertEquals(true, rain.snow)
+    }
+
+    @Test
+    fun `a few drops are not rain`() {
+        val f = forecast(codes = { 51 }, rain = { 0.1 })
+        assertNull(Outlook.nextRain(f, from = 0))
+        // Pluie au-delà de la période regardée : rien à annoncer.
+        val late = forecast(codes = { 3 }, rain = { h -> if (h == 20) 2.0 else 0.0 })
+        assertNull(Outlook.nextRain(late, hours = 6, from = 10))
     }
 
     private fun forecast(codes: (Int) -> Int, rain: (Int) -> Double): Forecast {
