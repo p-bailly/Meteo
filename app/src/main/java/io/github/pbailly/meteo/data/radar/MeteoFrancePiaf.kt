@@ -55,25 +55,41 @@ class MeteoFrancePiaf(
                     CoverageDescription.parse(http(url, apiKey, "application/xml").decodeToString())
                 }.getOrNull()
             }
+            var failure: Exception? = null
+            var failures = 0
             for (time in times) {
+                // Deux échecs de suite : le service ne répond plus, inutile d'insister image par image.
+                if (failures >= 2) break
                 val file = File(folder, "${time.epochSecond}.png")
                 if (file.exists()) continue
-                val url = "$WCS/GetCoverage?service=WCS&version=2.0.1" +
-                    "&coverageid=" + URLEncoder.encode(run.coverageId, "UTF-8") +
-                    "&subset=" + URLEncoder.encode("time(${ISO.format(time)})", "UTF-8") +
-                    "&subset=" + URLEncoder.encode("lat(${area.south},${area.north})", "UTF-8") +
-                    "&subset=" + URLEncoder.encode("long(${area.west},${area.east})", "UTF-8") +
-                    "&format=image/tiff"
-                val grid = toGrid(GeoTiff.read(http(url, apiKey, "image/tiff")), run.coverageId, area, description)
-                val table = lookup?.takeIf { it.gridWidth == grid.width && it.gridHeight == grid.height }
-                    ?: MercatorLookup.forGrid(MeteoFranceRadar.BOUNDS, MeteoFranceRadar.IMAGE_WIDTH, grid).also { lookup = it }
-                val bitmap = Bitmap.createBitmap(table.render(grid.mmPerHour), table.width, table.height, Bitmap.Config.ARGB_8888)
-                val tmp = File(folder, "${time.epochSecond}.tmp")
-                tmp.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                bitmap.recycle()
-                tmp.renameTo(file)
+                // Une image qui ne vient pas n'empêche pas les autres : on garde celles qui sont arrivées.
+                try {
+                    val url = "$WCS/GetCoverage?service=WCS&version=2.0.1" +
+                        "&coverageid=" + URLEncoder.encode(run.coverageId, "UTF-8") +
+                        "&subset=" + URLEncoder.encode("time(${ISO.format(time)})", "UTF-8") +
+                        "&subset=" + URLEncoder.encode("lat(${area.south},${area.north})", "UTF-8") +
+                        "&subset=" + URLEncoder.encode("long(${area.west},${area.east})", "UTF-8") +
+                        "&format=image/tiff"
+                    val grid = toGrid(GeoTiff.read(http(url, apiKey, "image/tiff")), run.coverageId, area, description)
+                    val table = lookup?.takeIf { it.gridWidth == grid.width && it.gridHeight == grid.height }
+                        ?: MercatorLookup.forGrid(MeteoFranceRadar.BOUNDS, MeteoFranceRadar.IMAGE_WIDTH, grid).also { lookup = it }
+                    val bitmap = Bitmap.createBitmap(table.render(grid.mmPerHour), table.width, table.height, Bitmap.Config.ARGB_8888)
+                    val tmp = File(folder, "${time.epochSecond}.tmp")
+                    tmp.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    bitmap.recycle()
+                    tmp.renameTo(file)
+                    failures = 0
+                } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (e is RadarAuthException) throw e
+                    failure = e
+                    failures++
+                }
             }
-            times.map { RadarFrame(it, File(folder, "${it.epochSecond}.png")) }.filter { it.file.exists() }
+            val frames = times.map { RadarFrame(it, File(folder, "${it.epochSecond}.png")) }.filter { it.file.exists() }
+            if (frames.isEmpty()) throw failure ?: IllegalStateException("aucune image PIAF")
+            frames
         }
     }
 

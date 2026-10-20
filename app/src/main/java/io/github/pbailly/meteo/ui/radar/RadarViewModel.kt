@@ -209,6 +209,8 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
                 throw e
             } catch (e: Exception) {
                 piafFrames = emptyList()
+                // Une panne passagère : on réessaie dans 2 minutes, pas dans 10.
+                piafCheckedAt = Instant.now().minus(PIAF_INTERVAL).plus(PIAF_RETRY)
                 piafNote = if (e is RadarAuthException) {
                     "Prévision calculée par l'app (1 h). Pour celle de Météo-France (3 h) : s'abonner à " +
                         "« PrevisionImmediatePrecipitations » sur le portail, puis générer une nouvelle clé."
@@ -252,31 +254,25 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
                 .filter { Duration.between(it.time, last.time).toMinutes() in MIN_GAP..MAX_GAP }
                 .minByOrNull { abs(Duration.between(it.time, last.time).toMinutes() - IDEAL_GAP) }
         }
-        if (latest == null || reference == null) {
-            if (forecast != null) return
-            _state.update {
-                it.copy(
-                    forecastNote = if (latest == null) null else
-                        "Prévision : il faut 2 images radar à quelques minutes d'écart, la suivante arrive dans moins de 5 min.",
-                )
-            }
-            return
-        }
+        if (latest == null) return
+        // Toujours une prévision : sans deuxième image, ou sans assez de pluie pour mesurer son déplacement, la pluie
+        // reste où elle est (une carte sèche quand il ne pleut nulle part), au lieu de ne rien montrer.
         nowcastJob = viewModelScope.launch {
             try {
                 val newer = radar.pixels(latest)
-                val older = radar.pixels(reference)
-                val minutes = Duration.between(reference.time, latest.time).toSeconds() / 60.0
-                val motion = withContext(Dispatchers.Default) {
-                    Nowcast.estimateMotion(older.argb, newer.argb, newer.width, newer.height, minutes)
+                val motion = reference?.let {
+                    val older = radar.pixels(it)
+                    val minutes = Duration.between(it.time, latest.time).toSeconds() / 60.0
+                    withContext(Dispatchers.Default) { Nowcast.estimateMotion(older.argb, newer.argb, newer.width, newer.height, minutes) }
                 }
-                if (motion == null) {
-                    if (forecast == null) {
-                        _state.update { it.copy(forecastNote = "Pas assez de pluie sur la carte pour calculer son déplacement.") }
+                if (motion == null && forecast == null) {
+                    piafNote = piafNote ?: if (reference == null) {
+                        "Une seule image radar pour l'instant : la pluie est montrée sans son déplacement (la suivante arrive dans moins de 5 min)."
+                    } else {
+                        "Peu de pluie sur la carte : son déplacement ne se mesure pas, elle est montrée là où elle est."
                     }
-                    return@launch
                 }
-                nowcast = NowcastBase(latest.time, newer, motion)
+                nowcast = NowcastBase(latest.time, newer, motion ?: MotionField.still(newer.width, newer.height))
                 chooseForecast()
                 publishSlots(selectLatest = false)
             } catch (e: CancellationException) {
@@ -337,6 +333,7 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
         const val IDEAL_GAP = 15L
 
         val PIAF_INTERVAL: Duration = Duration.ofMinutes(10)
+        val PIAF_RETRY: Duration = Duration.ofMinutes(2)
     }
 }
 

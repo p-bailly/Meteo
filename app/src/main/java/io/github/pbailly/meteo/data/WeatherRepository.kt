@@ -46,7 +46,7 @@ class WeatherRepository(
     }
 
     suspend fun search(query: String): List<Place> = withContext(Dispatchers.IO) {
-        OpenMeteoApi.parseSearch(httpGet(OpenMeteoApi.searchUrl(query)))
+        OpenMeteoApi.parseSearch(httpGet(OpenMeteoApi.searchUrl(query)), query)
     }
 
     /** Altitude d'un point (modèle de terrain Copernicus à 90 m) ; null si l'API n'en donne pas. */

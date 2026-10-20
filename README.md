@@ -55,6 +55,14 @@ la carte) :
   on les fête, le 14 Juillet, le muguet et le poisson d'avril seulement en France. Et des monuments du monde : Burj
   Khalifa, la grande mosquée d'Abou Dabi et d'Istanbul, Saint-Basile de Moscou, la tour de Tokyo, le Taj Mahal, les
   pyramides, l'Opéra de Sydney, le Christ de Rio.
+  **Chez nous**, au plus juste : le clocher comtois dans toute la Franche-Comté (village, petite ville ou ville), la
+  ferme à tuyé sur les plateaux du Haut-Doubs, la ferme bressane à colombages en plaine (Asnans-Beauvoisin), le temple et
+  la grande ferme du Jura suisse (La Brévine, son lac des Taillères), l'église au campanile de fer, les pins parasols et
+  les cyprès de Provence (La Londe-les-Maures, sa mer, son port, ses vignes et les îles d'Hyères) ; Morteau et le
+  château Pertusier, Valence et Saint-Apollinaire face aux ruines de Crussol, Besançon et sa citadelle au-dessus de la
+  vieille ville. Les villes européennes de moins de 250 000 habitants sont des vieilles villes aux toits de tuiles. Ce
+  qu'on sait de ces lieux (la taille de la ville, la rivière, le lac, la mer, le train) complète OpenStreetMap et
+  dessine tout de suite, même sans sa réponse.
   Enfin **le temps**, chaque ciel en trois versions et plus ou moins fort selon la
   prévision : le **soleil et la lune à leur vraie place** (à gauche, au milieu ou à droite selon la direction où l'on
   regarde, plus ou moins haut selon l'heure ; la lune couchée ne se dessine pas), la lune dans sa vraie phase et étoiles (ou la Grande Ourse, ou la Voie lactée), éclaircies, ciel
@@ -121,7 +129,7 @@ la carte) :
   - **Foudre** : imageur d'éclairs de Meteosat (EUMETSAT, sans clé), éclairs par 5 min sur la dernière heure ;
   - **Webcams** autour du lieu : Windy, avec une clé gratuite (api.windy.com) à saisir dans les Réglages ;
     toucher un point affiche l'image sur toute la largeur et le lien vers la page Windy.
-- **Lieux** : recherche, **météo à ma position** (GPS du téléphone, sans les services Google), **choisir sur la
+- **Lieux** : recherche (les lieux les plus importants d'abord : le nom exact, puis les capitales, chefs-lieux et villes les plus peuplées, la France un peu avant le reste du monde), **météo à ma position** (GPS du téléphone, sans les services Google), **choisir sur la
   carte** (toucher un point, ou ailleurs pour le déplacer : il prend le nom de la commune et l'altitude du terrain ;
   l'étoile l'ajoute aux favoris, « Voir la météo » l'ouvre), puis les **favoris**
   (étoile orange) dans l'ordre choisi — appui long sur un lieu puis glisser pour le déplacer — et les **lieux
