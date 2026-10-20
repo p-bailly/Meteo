@@ -25,12 +25,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.GpsFixed
-import androidx.compose.material.icons.outlined.RemoveCircleOutline
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,7 +53,6 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,15 +67,16 @@ import androidx.core.content.ContextCompat
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.ui.theme.AppMono
+import io.github.pbailly.meteo.ui.theme.LocalChartColors
 
-private val AlertRed = Color(0xFFC8202A)
 
 /** Une ligne de la liste : un lieu, sa prévision courte, favori ou non, affiché ou non. */
 private class Spot(val place: Place, val forecast: Forecast?, val altitude: Double, val favorite: Boolean, val current: Boolean)
 
 /**
- * Onglet « Lieux » : recherche, météo à ma position, puis les favoris dans l'ordre choisi (appui long puis glisser
- * pour les réordonner). « Modifier » permet de retirer des favoris.
+ * Onglet « Lieux » : recherche, météo à ma position, puis les favoris (étoilés) dans l'ordre choisi (appui long
+ * puis glisser pour les réordonner) et les lieux consultés récemment, du plus récent au plus ancien. L'étoile de
+ * chaque ligne ajoute ou retire un favori ; « Comparer » met les lieux côte à côte, jour par jour.
  */
 @Composable
 fun PlacesScreen(
@@ -88,10 +88,10 @@ fun PlacesScreen(
     onLocationDenied: () -> Unit,
     onOpenSettings: () -> Unit,
     onMoveFavorite: (Int, Int) -> Unit,
+    onOpenCompare: () -> Unit,
 ) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
-    var editing by rememberSaveable { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         if (grants.values.any { it }) onLocate() else onLocationDenied()
     }
@@ -140,8 +140,8 @@ fun PlacesScreen(
     LazyColumn(Modifier.fillMaxSize().imePadding().then(dragModifier), state = listState) {
         item(key = "title") {
             ScreenHeader("Lieux") {
+                if ((state.favorites + state.recents).distinctBy { it.id }.size >= 2) OutlineChip("Comparer", onClick = onOpenCompare)
                 IconButton(onClick = onOpenSettings) { Icon(Icons.Outlined.Settings, contentDescription = "Réglages", tint = colors.onSurfaceVariant) }
-                if (state.favorites.isNotEmpty()) OutlineChip(if (editing) "Terminé" else "Modifier", onClick = { editing = !editing })
             }
             OutlinedTextField(
                 value = state.search.query,
@@ -204,11 +204,12 @@ fun PlacesScreen(
             }
             return@LazyColumn
         }
-        items(spots, key = { if (it.favorite) favoriteKey(it.place) else "current-${it.place.id}" }) { spot ->
+        val firstRecent = spots.firstOrNull { !it.favorite }
+        items(spots, key = { if (it.favorite) favoriteKey(it.place) else "recent-${it.place.id}" }) { spot ->
             val dragging = spot.favorite && dragKey == favoriteKey(spot.place)
+            if (spot === firstRecent && spots.first() !== spot) SectionLabel("Consultés récemment")
             SpotRow(
                 spot,
-                editing,
                 dragging,
                 onSelect,
                 onToggleFavorite,
@@ -225,26 +226,21 @@ fun PlacesScreen(
     }
 }
 
-/** Le lieu affiché s'il n'est pas un favori, puis les favoris dans l'ordre choisi. */
+/** Les favoris dans l'ordre choisi, puis les autres lieux consultés, du plus récent au plus ancien. */
 private fun spots(state: MeteoUiState): List<Spot> {
     val current = state.place
-    val currentForecast = state.forecast.data
-    val favorites = state.favorites.map { p ->
-        val f = if (p.id == current?.id && currentForecast != null) currentForecast else state.summaries.data?.get(p.id)
-        Spot(p, f, p.elevation ?: f?.elevation ?: 0.0, favorite = true, current = p.id == current?.id)
+    fun spot(p: Place, favorite: Boolean): Spot {
+        val f = if (p.id == current?.id && state.forecast.data != null) state.forecast.data else state.summaries.data?.get(p.id)
+        return Spot(p, f, p.elevation ?: f?.elevation?.takeIf { !it.isNaN() } ?: 0.0, favorite = favorite, current = p.id == current?.id)
     }
-    val shown = if (current != null && state.favorites.none { it.id == current.id }) {
-        listOf(Spot(current, currentForecast, current.elevation ?: currentForecast?.elevation ?: 0.0, favorite = false, current = true))
-    } else {
-        emptyList()
-    }
-    return shown + favorites
+    val favoriteIds = state.favorites.map { it.id }.toSet()
+    val recents = (state.recents + listOfNotNull(current)).distinctBy { it.id }.filter { it.id !in favoriteIds }
+    return state.favorites.map { spot(it, favorite = true) } + recents.map { spot(it, favorite = false) }
 }
 
 @Composable
 private fun SpotRow(
     e: Spot,
-    editing: Boolean,
     dragging: Boolean,
     onSelect: (Place) -> Unit,
     onToggleFavorite: (Place) -> Unit,
@@ -260,29 +256,18 @@ private fun SpotRow(
                 .fillMaxWidth()
                 .background(if (e.current || dragging) colors.surfaceContainer else Color.Transparent)
                 .clickable { onSelect(e.place) }
-                .padding(start = 12.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
+                .padding(start = 12.dp, end = 4.dp, top = 12.dp, bottom = 12.dp)
                 .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.width(62.dp), horizontalAlignment = Alignment.End) {
-                Text(Fmt.thousands(e.altitude), fontFamily = AppMono, fontWeight = FontWeight.Medium, fontSize = 16.sp, maxLines = 1)
+                Text(Fmt.thousands(e.altitude), fontFamily = AppMono, fontWeight = FontWeight.Medium, fontSize = 16.sp, maxLines = 1, softWrap = false)
                 MonoText("m", size = 10.sp)
             }
             VerticalDivider(Modifier.padding(horizontal = 12.dp), color = colors.outlineVariant)
             Column(Modifier.weight(1f)) {
                 Text(e.place.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 e.place.department?.let { MonoText(it, size = 10.5.sp) }
-            }
-            if (editing) {
-                if (e.favorite) Icon(Icons.Outlined.DragHandle, contentDescription = "Appui long pour déplacer", tint = colors.onSurfaceVariant)
-                IconButton(onClick = { onToggleFavorite(e.place) }) {
-                    if (e.favorite) {
-                        Icon(Icons.Outlined.RemoveCircleOutline, contentDescription = "Retirer des favoris", tint = AlertRed)
-                    } else {
-                        Icon(Icons.Outlined.StarOutline, contentDescription = "Ajouter aux favoris", tint = colors.primary)
-                    }
-                }
-                return@Row
             }
             if (c != null) {
                 WeatherIcon(c.weatherCode, c.isDay, size = 30.dp)
@@ -296,6 +281,15 @@ private fun SpotRow(
                 }
             } else {
                 Box(Modifier.width(108.dp), contentAlignment = Alignment.CenterEnd) { MonoText("…") }
+            }
+            // Étoile : pleine et orange pour un favori ; la toucher l'ajoute ou le retire.
+            IconButton(onClick = { onToggleFavorite(e.place) }, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    if (e.favorite) Icons.Rounded.Star else Icons.Rounded.StarOutline,
+                    contentDescription = if (e.favorite) "Retirer des favoris" else "Ajouter aux favoris",
+                    tint = if (e.favorite) LocalChartColors.current.accent else colors.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
             }
         }
         HorizontalDivider(color = colors.outlineVariant)

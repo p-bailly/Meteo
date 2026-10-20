@@ -58,6 +58,11 @@ data class MeteoUiState(
     val terrain: Remote<TerrainProfile> = Remote(),
     /** Prévision courte de chaque favori, par identifiant de lieu. */
     val summaries: Remote<Map<String, Forecast>> = Remote(),
+    /** Lieux consultés, du plus récent au plus ancien (favoris compris). */
+    val recents: List<Place> = emptyList(),
+    /** Thème (0 = comme le téléphone, 1 = clair, 2 = sombre) et taille du texte (0 à 2), choisis dans les Réglages. */
+    val theme: Int = 0,
+    val textSize: Int = 0,
 ) {
     val isFavorite: Boolean get() = place != null && favorites.any { it.id == place.id }
 }
@@ -70,7 +75,14 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private val deviceLocation = DeviceLocation(app)
 
     private val _state = MutableStateFlow(
-        MeteoUiState(place = store.lastPlace(), favorites = store.favorites(), hiddenModels = settings.hiddenModels()),
+        MeteoUiState(
+            place = store.lastPlace(),
+            favorites = store.favorites(),
+            hiddenModels = settings.hiddenModels(),
+            recents = store.recents().ifEmpty { listOfNotNull(store.lastPlace()) },
+            theme = settings.theme(),
+            textSize = settings.textSize(),
+        ),
     )
     val state: StateFlow<MeteoUiState> = _state.asStateFlow()
 
@@ -122,6 +134,9 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
 
     fun selectPlace(place: Place) {
         store.saveLastPlace(place)
+        val recents = (listOf(place) + _state.value.recents.filterNot { it.id == place.id }).take(MAX_RECENTS)
+        store.saveRecents(recents)
+        _state.update { it.copy(recents = recents) }
         multiModelJob?.cancel()
         _state.update { it.copy(place = place, forecast = Remote(), multiModel = Remote(), terrain = Remote(), search = SearchState()) }
         loadForecast(place, force = false)
@@ -157,6 +172,16 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         store.saveFavorites(updated)
         _state.update { it.copy(favorites = updated) }
         loadSummaries(force = false)
+    }
+
+    fun setTheme(theme: Int) {
+        settings.saveTheme(theme)
+        _state.update { it.copy(theme = theme) }
+    }
+
+    fun setTextSize(size: Int) {
+        settings.saveTextSize(size)
+        _state.update { it.copy(textSize = size) }
     }
 
     fun setModelVisible(model: WeatherModel, visible: Boolean) {
@@ -245,9 +270,16 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Retire un lieu de la liste des lieux consultés. */
+    fun forgetRecent(place: Place) {
+        val recents = _state.value.recents.filterNot { it.id == place.id }
+        store.saveRecents(recents)
+        _state.update { it.copy(recents = recents) }
+    }
+
     private fun loadSummaries(force: Boolean) {
-        // Toujours dans le même ordre : réordonner les favoris ne relance pas d'appel.
-        val places = _state.value.favorites.sortedBy { it.id }
+        // Favoris et lieux récents, toujours dans le même ordre : réordonner ne relance pas d'appel.
+        val places = (_state.value.favorites + _state.value.recents).distinctBy { it.id }.sortedBy { it.id }
         summariesJob?.cancel()
         if (places.isEmpty()) {
             _state.update { it.copy(summaries = Remote()) }
@@ -285,6 +317,8 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val SEARCH_DEBOUNCE_MS = 350L
+        /** Lieux consultés gardés en mémoire (favoris compris). */
+        const val MAX_RECENTS = 10
     }
 }
 

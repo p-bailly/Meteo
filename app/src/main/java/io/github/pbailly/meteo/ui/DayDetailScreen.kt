@@ -65,6 +65,8 @@ import io.github.pbailly.meteo.ui.theme.OnTemperature
 import io.github.pbailly.meteo.ui.theme.predictabilityColor
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import io.github.pbailly.meteo.ui.theme.LocalTextSize
+import androidx.compose.ui.unit.TextUnit
 
 /** Une ligne de la prévision horaire (une heure, ou un bloc de 3 heures). */
 private class HourLine(
@@ -195,13 +197,14 @@ private fun DayPage(
         item(key = "hourly-title") {
             Row(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(if (step == 1) "Heure par heure" else "Par 3 heures", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, modifier = Modifier.weight(1f))
-                MonoText("prévisibilité à droite")
             }
+            // En très grand texte, la colonne du ressenti laisse la place aux autres.
+            val feel = LocalTextSize.current < 2
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
                 ColumnLabel("HEURE", HOUR_WIDTH)
                 ColumnLabel("", ICON_WIDTH)
                 ColumnLabel("TEMP.", TEMP_WIDTH)
-                ColumnLabel("RESS.", FEEL_WIDTH)
+                if (feel) ColumnLabel("RESS.", FEEL_WIDTH)
                 ColumnLabel("VENT", null, modifier = Modifier.weight(1f))
                 ColumnLabel("PLUIE", RAIN_WIDTH, TextAlign.End)
                 ColumnLabel("PROB.", PROB_WIDTH, TextAlign.End)
@@ -210,7 +213,7 @@ private fun DayPage(
             HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = colors.outlineVariant)
         }
         items(lines, key = { it.index }) { line ->
-            HourRow(line)
+            HourRow(line, feel = LocalTextSize.current < 2)
             HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = colors.outlineVariant)
         }
         item(key = "note") {
@@ -224,17 +227,18 @@ private fun DayPage(
     }
 }
 
-private val HOUR_WIDTH = 44.dp
-private val ICON_WIDTH = 34.dp
-private val TEMP_WIDTH = 40.dp
-private val FEEL_WIDTH = 38.dp
-private val RAIN_WIDTH = 40.dp
-private val PROB_WIDTH = 40.dp
-private val PRED_WIDTH = 38.dp
+/** Largeurs des colonnes, en sp pour suivre la taille du texte. */
+private val HOUR_WIDTH = 44.sp
+private val ICON_WIDTH = 34.sp
+private val TEMP_WIDTH = 40.sp
+private val FEEL_WIDTH = 38.sp
+private val RAIN_WIDTH = 40.sp
+private val PROB_WIDTH = 40.sp
+private val PRED_WIDTH = 38.sp
 
 @Composable
-private fun ColumnLabel(text: String, width: Dp?, align: TextAlign = TextAlign.Start, modifier: Modifier = Modifier) {
-    MonoText(text, size = 9.5.sp, align = align, modifier = if (width != null) modifier.width(width) else modifier)
+private fun ColumnLabel(text: String, width: TextUnit?, align: TextAlign = TextAlign.Start, modifier: Modifier = Modifier) {
+    MonoText(text, size = 9.5.sp, align = align, modifier = if (width != null) modifier.width(width.asWidth()) else modifier)
 }
 
 /** Prévisibilité : carré à la couleur du niveau (vert sûr → rouge incertain), avec le pourcentage. */
@@ -299,17 +303,17 @@ private fun AlmanacTile(icon: androidx.compose.ui.graphics.vector.ImageVector, l
 
 /** Heure, ciel, température, ressenti, vent moyen et rafales, pluie, probabilité et prévisibilité. */
 @Composable
-private fun HourRow(line: HourLine) {
+private fun HourRow(line: HourLine, feel: Boolean) {
     val colors = MaterialTheme.colorScheme
     val chart = LocalChartColors.current
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MonoText(line.label, color = colors.onBackground, size = 12.5.sp, bold = true, modifier = Modifier.width(HOUR_WIDTH))
-        Box(Modifier.width(ICON_WIDTH)) { WeatherIcon(line.weatherCode, line.isDay, size = 28.dp) }
-        Text(Fmt.temp(line.temperature), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.width(TEMP_WIDTH))
-        MonoText(Fmt.temp(line.apparent), size = 11.5.sp, modifier = Modifier.width(FEEL_WIDTH))
+        MonoText(line.label, color = colors.onBackground, size = 12.5.sp, bold = true, modifier = Modifier.width(HOUR_WIDTH.asWidth()))
+        Box(Modifier.width(ICON_WIDTH.asWidth())) { WeatherIcon(line.weatherCode, line.isDay, size = 28.dp) }
+        Text(Fmt.temp(line.temperature), fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.width(TEMP_WIDTH.asWidth()))
+        if (feel) MonoText(Fmt.temp(line.apparent), size = 11.5.sp, modifier = Modifier.width(FEEL_WIDTH.asWidth()))
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
             Canvas(Modifier.size(12.dp)) {
                 drawWindArrow(center, line.windDirection, size.minDimension, chart.secondaryInk, 1.4f * density)
@@ -324,7 +328,7 @@ private fun HourRow(line: HourLine) {
             bold = wet,
             size = 11.5.sp,
             align = TextAlign.End,
-            modifier = Modifier.width(RAIN_WIDTH),
+            modifier = Modifier.width(RAIN_WIDTH.asWidth()),
         )
         val likely = !line.probability.isNaN() && line.probability >= 50
         MonoText(
@@ -333,9 +337,9 @@ private fun HourRow(line: HourLine) {
             bold = likely,
             size = 11.5.sp,
             align = TextAlign.End,
-            modifier = Modifier.width(PROB_WIDTH),
+            modifier = Modifier.width(PROB_WIDTH.asWidth()),
         )
-        Box(Modifier.width(PRED_WIDTH), contentAlignment = Alignment.CenterEnd) {
+        Box(Modifier.width(PRED_WIDTH.asWidth()), contentAlignment = Alignment.CenterEnd) {
             Box(
                 Modifier
                     .size(width = 30.dp, height = 22.dp)

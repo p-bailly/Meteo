@@ -63,10 +63,13 @@ object OpenMeteoApi {
     private val SUMMARY_CURRENT = listOf(
         "temperature_2m", "apparent_temperature", "weather_code", "is_day", "wind_speed_10m", "wind_direction_10m",
     )
-    private val SUMMARY_HOURLY = listOf(
-        "temperature_2m", "relative_humidity_2m", "precipitation", "weather_code", "freezing_level_height",
+    /** Heures : pour le pictogramme représentatif de chaque jour. */
+    private val SUMMARY_HOURLY = listOf("precipitation", "weather_code", "is_day")
+    /** Jours : pour la liste des lieux et leur comparaison. */
+    private val SUMMARY_DAILY = listOf(
+        "weather_code", "temperature_2m_max", "temperature_2m_min", "precipitation_sum", "wind_speed_10m_max",
+        "wind_direction_10m_dominant", "sunshine_duration",
     )
-    private val SUMMARY_DAILY = listOf("weather_code", "temperature_2m_max", "temperature_2m_min")
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -116,7 +119,7 @@ object OpenMeteoApi {
     fun parseElevation(body: String): DoubleArray {
         val root = parseRoot(body)
         val values = root["elevation"] as? JsonArray ?: throw OpenMeteoException("Réponse incomplète : « elevation » manquant")
-        return DoubleArray(values.size) { values[it].jsonPrimitive.doubleOrNull ?: Double.NaN }
+        return DoubleArray(values.size) { values[it].jsonPrimitive.doubleOrNull.validElevation() ?: Double.NaN }
     }
 
     fun searchUrl(query: String): String = buildUrl(
@@ -141,7 +144,7 @@ object OpenMeteoApi {
                 admin1 = o.string("admin1"),
                 admin2 = o.string("admin2"),
                 country = o.string("country"),
-                elevation = o.double("elevation"),
+                elevation = o.double("elevation").validElevation(),
             )
         }
     }
@@ -227,7 +230,7 @@ object OpenMeteoApi {
         return Forecast(
             latitude = root.double("latitude") ?: Double.NaN,
             longitude = root.double("longitude") ?: Double.NaN,
-            elevation = root.double("elevation") ?: Double.NaN,
+            elevation = root.double("elevation").validElevation() ?: Double.NaN,
             timezone = root.string("timezone") ?: "GMT",
             utcOffsetSeconds = root.double("utc_offset_seconds")?.toInt() ?: 0,
             current = current,
@@ -303,3 +306,6 @@ object OpenMeteoApi {
 }
 
 class OpenMeteoException(message: String) : Exception(message)
+
+/** Altitude plausible, ou null : Open-Meteo renvoie -9999 quand il n'en connaît pas (Tromsø, par exemple). */
+fun Double?.validElevation(): Double? = this?.takeIf { !it.isNaN() && it > -1000 }

@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,7 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AcUnit
 import androidx.compose.material.icons.outlined.Terrain
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -53,7 +51,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Altitude
@@ -68,7 +65,6 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 private const val SLOTS = 8
-private val AlertRed = Color(0xFFC8202A)
 
 /** Une case du sélecteur : un jour (mode Jours) ou trois heures d'un jour (mode Heures). */
 private class Slot(
@@ -124,16 +120,24 @@ fun AltitudeScreen(state: MeteoUiState, place: Place, onRefresh: () -> Unit, onB
             val selected = if (mode == 0) selectedDay else hour.coerceIn(0, slots.lastIndex)
             val slot = slots[selected]
             val reference = Outlook.snowReference(Altitude.ground(f))
-            item(key = "now") { AltitudeNowPanel(f, state.terrain.data, Modifier.padding(top = 12.dp, bottom = 6.dp)) }
             item(key = "chips") {
                 SlotChips(f, slots, selected, reference) { if (mode == 0) day = it else hour = it }
             }
             item(key = "relief") {
                 val title = if (mode == 0) "Coupe du relief · ${Fmt.dayShort(slot.date)}" else "Coupe du relief · ${Fmt.dayShort(slot.date)}, ${slot.main}"
                 Panel(Modifier.padding(top = 12.dp)) {
-                    PanelTitle(Icons.Outlined.Terrain, title, "vallée → sommets")
+                    PanelTitle(Icons.Outlined.Terrain, title, null)
                     CrossSection(f, slot, state.terrain.data, place, Modifier.fillMaxWidth().height(290.dp).padding(top = 10.dp))
-                    Legend()
+                    // Ressenti et vent en altitude, sur une ligne.
+                    val high = if (Altitude.ground(f) < 1700) 2000.0 else 3000.0
+                    val wind = Altitude.wind(f, slot.sample, high)
+                    val feel = Altitude.windChill(Altitude.temperature(f, slot.sample, high), wind.speed)
+                    MonoText(
+                        "à ${Fmt.altitude(high)} : ressenti ${Fmt.temp(feel)} · vent ${Outlook.compass(wind.direction)} ${Fmt.kmh(wind.speed)}",
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 2,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
                 }
             }
             item(key = "trend") {
@@ -146,16 +150,7 @@ fun AltitudeScreen(state: MeteoUiState, place: Place, onRefresh: () -> Unit, onB
                 }
                 TrendChart(f, slots, selected, reference, Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(260.dp))
             }
-            item(key = "table") { AltitudeTable(f, slot, mode, state.terrain.data, place) }
-            item(key = "note") {
-                MonoText(
-                    "Températures du modèle entre le sol et les niveaux de pression · limite pluie-neige : 300 m sous l'iso 0 · " +
-                        "neige : pluie du lieu tombant en neige à cette altitude (1 mm ≈ 1 cm).",
-                    size = 10.sp,
-                    maxLines = 4,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                )
-            }
+            item(key = "end") { Gap(16.dp) }
         }
     }
 }
@@ -244,28 +239,6 @@ private fun SlotChips(f: Forecast, slots: List<Slot>, selected: Int, reference: 
     }
 }
 
-@Composable
-private fun Legend() {
-    val colors = MaterialTheme.colorScheme
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Canvas(Modifier.size(width = 22.dp, height = 10.dp)) {
-            drawLine(colors.primary, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1.6.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 6f)))
-        }
-        MonoText(" Iso 0 °C", size = 10.5.sp)
-        Spacer(Modifier.width(14.dp))
-        Canvas(Modifier.size(width = 22.dp, height = 10.dp)) {
-            drawLine(colors.onBackground, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1.6.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 5f)), cap = StrokeCap.Round)
-        }
-        MonoText(" Pluie-neige", size = 10.5.sp)
-        Spacer(Modifier.width(14.dp))
-        Canvas(Modifier.size(12.dp)) {
-            drawRect(colors.primary, style = Stroke(1.dp.toPx()))
-            clipRect { hatch(colors.primary.copy(alpha = 0.7f), 4.dp.toPx(), 1.dp.toPx()) }
-        }
-        MonoText(" Enneigé", size = 10.5.sp)
-    }
-}
-
 /** Hachures en diagonale sur toute la zone de dessin (à découper par l'appelant). */
 private fun DrawScope.hatch(color: Color, spacing: Float, width: Float) {
     var x = -size.height
@@ -291,8 +264,9 @@ private fun CrossSection(f: Forecast, slot: Slot, terrain: TerrainProfile?, plac
     val snowLine = slot.snowLine
     val snowing = snowLine != null && Altitude.snow(f, slot.hours, (elevations.maxOrNull() ?: ground)) >= 0.5
     Canvas(modifier) {
-        val axis = 40.dp.toPx()
-        val left = axis
+        // Colonne de gauche : altitude et température à cette altitude (heure du jour ou de la tranche choisie).
+        val labelWidth = 78.dp.toPx()
+        val left = labelWidth + 6.dp.toPx()
         val right = size.width
         val top = 20.dp.toPx()
         val bottom = size.height - 2.dp.toPx()
@@ -303,14 +277,20 @@ private fun CrossSection(f: Forecast, slot: Slot, terrain: TerrainProfile?, plac
         val step = (right - left) / (elevations.size - 1)
         fun x(k: Int) = left + k * step
 
-        val tick = if (maxAlt - minAlt > 2500) 1000.0 else 500.0
-        var t = Math.ceil(minAlt / tick) * tick
-        while (t < maxAlt) {
-            if (y(t) > top) {
-                drawLine(chart.grid, Offset(left, y(t)), Offset(right, y(t)), 1.dp.toPx())
-                drawLabel(measurer, Fmt.thousands(t), Offset(0f, y(t)), chart.muted, 11f, anchorY = 0.5f)
-            }
-            t += tick
+        val wanted = listOfNotNull(terrain?.summit?.elevation?.takeIf { it > 3250 }, 4000.0, 3000.0, 2000.0, 1500.0, 1000.0, 500.0)
+            .filter { it > ground + 150 && it < maxAlt - 150 && y(it) > top }
+        val rows = ArrayList<Double>()
+        val minGap = 17.sp.toPx()
+        for (alt in wanted.sortedDescending()) {
+            if (rows.isEmpty() || y(alt) - y(rows.last()) >= minGap) rows += alt
+        }
+        while (rows.isNotEmpty() && y(ground) - y(rows.last()) < minGap) rows.removeAt(rows.lastIndex)
+        rows += ground
+        for (alt in rows) {
+            val yy = y(alt)
+            drawLine(chart.grid, Offset(left, yy), Offset(right, yy), 1.dp.toPx())
+            drawLabel(measurer, Fmt.thousands(alt), Offset(0f, yy), chart.muted, 10f, anchorY = 0.5f)
+            drawLabel(measurer, Fmt.temp(Altitude.temperature(f, slot.sample, alt)), Offset(labelWidth, yy), colors.onBackground, 12.5f, anchorX = 1f, anchorY = 0.5f, bold = true)
         }
 
         val line = Path()
@@ -567,75 +547,3 @@ private fun TrendChart(f: Forecast, slots: List<Slot>, selected: Int, reference:
     }
 }
 
-/** Sommet, 2 000 m (ou 3 000 m) et lieu : température, ressenti, vent et neige du jour (ou des trois heures). */
-@Composable
-private fun AltitudeTable(f: Forecast, slot: Slot, mode: Int, terrain: TerrainProfile?, place: Place) {
-    val colors = MaterialTheme.colorScheme
-    val ground = Altitude.ground(f)
-    val rows = altitudeRows(ground, terrain, place)
-    val title = (if (mode == 0) Fmt.dayShort(slot.date) else "${Fmt.dayShort(slot.date)} · ${slot.axis}").uppercase(Locale.FRANCE)
-    Column(Modifier.padding(start = 18.dp, end = 16.dp, top = 16.dp)) {
-        Row(Modifier.fillMaxWidth().padding(bottom = 6.dp)) {
-            MonoText(title, size = 10.sp, modifier = Modifier.weight(1f))
-            MonoText("TEMP.", size = 10.sp, modifier = Modifier.width(52.dp))
-            MonoText("RESSENTI", size = 10.sp, modifier = Modifier.width(62.dp))
-            MonoText("VENT", size = 10.sp, modifier = Modifier.width(72.dp))
-            MonoText("NEIGE", size = 10.sp, align = TextAlign.End, modifier = Modifier.width(56.dp))
-        }
-        HorizontalDivider(color = colors.outlineVariant)
-        rows.forEach { (alt, name) ->
-            val i = slot.sample
-            val t = Altitude.temperature(f, i, alt)
-            val wind = Altitude.wind(f, i, alt)
-            val feel = if (alt == ground) f.hourly.apparentTemperature.getOrElse(i) { Double.NaN } else Altitude.windChill(t, wind.speed)
-            val cm = Altitude.snow(f, slot.hours, alt)
-            val rain = Altitude.rain(f, slot.hours, alt)
-            Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    MonoText(Fmt.altitude(alt), color = colors.onBackground, size = 13.sp, bold = true)
-                    if (name != null) MonoText(name, size = 10.sp)
-                }
-                Text(Fmt.temp(t), fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.width(52.dp))
-                Text(
-                    Fmt.temp(feel),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 17.sp,
-                    color = if (!feel.isNaN() && feel <= -20) AlertRed else colors.onBackground,
-                    modifier = Modifier.width(62.dp),
-                )
-                MonoText("${Outlook.compass(wind.direction)} ${Fmt.kmh(wind.speed)}", size = 11.sp, modifier = Modifier.width(72.dp))
-                Text(
-                    when {
-                        cm >= 1 -> "+${cm.roundToInt()} cm"
-                        rain >= 0.5 -> "pluie"
-                        else -> "–"
-                    },
-                    color = if (cm >= 1 || rain >= 0.5) colors.primary else colors.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                    textAlign = TextAlign.End,
-                    modifier = Modifier.width(56.dp),
-                )
-            }
-            HorizontalDivider(color = colors.outlineVariant)
-        }
-    }
-}
-
-/** Altitudes du tableau, de la plus haute à la plus basse, avec leur nom quand on en a un. */
-private fun altitudeRows(ground: Double, terrain: TerrainProfile?, place: Place): List<Pair<Double, String?>> {
-    val rows = ArrayList<Pair<Double, String?>>()
-    val summit = terrain?.summit
-    if (summit != null && summit.elevation > ground + 300) rows += summit.elevation to summit.name
-    if ((summit == null || summit.elevation < 2700) && ground < 2700) rows += 3000.0 to terrain?.nameNear(3000.0)
-    if (ground < 1800) rows += 2000.0 to terrain?.nameNear(2000.0)
-    rows += ground to place.name
-    val kept = ArrayList<Pair<Double, String?>>()
-    for (row in rows.sortedByDescending { it.first }) {
-        if (kept.none { Math.abs(it.first - row.first) < 150 } || row.first == ground) {
-            kept.removeAll { row.first == ground && it.first != ground && Math.abs(it.first - ground) < 150 }
-            kept += row
-        }
-    }
-    return kept
-}

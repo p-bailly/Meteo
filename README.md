@@ -22,11 +22,10 @@ la carte) :
 
 - **Aujourd'hui**, sur un seul écran sans défiler : le lieu, son département et son altitude, l'étoile des favoris
   (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel et les
-  extrêmes du jour (maxi en orange, mini en bleu) ; une ligne **Neige & altitude** (avec l'iso 0 °C actuel) qui ouvre
-  la page du même nom ; vent, rafales, humidité, pression (et sa tendance), indice UV, coucher et lever du soleil ;
-  et les **48 prochaines heures** à faire défiler, dans toute la hauteur qui reste (pictogramme, courbe de
-  température, probabilité et barres de pluie), avec le résumé de la pluie : « pluie aujourd'hui 17-20 h · 3,0 mm »
-  le matin et en journée, « pluie cette nuit… » le soir (et pour une pluie d'après minuit), sinon « demain ».
+  extrêmes du jour (maxi en orange, mini en bleu) ; de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
+  (avec l'iso 0 °C actuel) qui ouvre la page du même nom ; vent, rafales, humidité, pression (et sa tendance),
+  indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
+  qui reste (pictogramme, courbe de température, probabilité et barres de pluie).
 - **Prévisions** (14 jours) : pour chaque jour, le pictogramme, la barre mini-maxi (du bleu à l'orange), et l'un
   sous l'autre la pluie (goutte, mm), le vent maximal (flèche dans la direction où il souffle, km/h, en rouge à
   partir de 40), l'ensoleillement (soleil, heures) et l'**indice de confiance** sur 5 (pastille de couleur), tiré de
@@ -38,12 +37,10 @@ la carte) :
   - **14 jours**, en grand, à faire glisser du doigt : pictogramme, indice de confiance (accord des modèles),
     mini-maxi, cumul de pluie et vent du jour (flèche de la direction dominante et vitesse maximale) ;
   - **Modèles** : comparaison de 8 modèles avec leur moyenne.
-- **Neige & altitude** (depuis la ligne du même nom dans Aujourd'hui) : d'abord **maintenant** — coupe du relief du
-  lieu vers le plus haut sommet des environs, température sur place, à 1 000, 1 500, 2 000, 3 000 m et au sommet,
-  iso 0 °C et limite pluie-neige, ressenti et vent à 2 000 m ; puis par jour ou par tranche de 3 heures : coupe du
-  relief vallée → sommets avec l'iso 0, la limite pluie-neige, les sommets nommés, la neige attendue à 2 000 et
-  3 000 m et les pentes enneigées ; iso 0 et limite pluie-neige jour par jour, neige à 2 000 m ; température,
-  ressenti, vent et neige au sommet, à 2 000 m et sur le lieu.
+- **Neige & altitude** (depuis la ligne du même nom dans Aujourd'hui), par jour ou par tranche de 3 heures : une
+  coupe du relief vallée → sommets avec la température à chaque altitude, l'iso 0, la limite pluie-neige, les
+  sommets nommés, la neige attendue à 2 000 et 3 000 m et les pentes enneigées, puis le ressenti et le vent à
+  2 000 m ; ensuite l'iso 0 et la limite pluie-neige jour par jour, avec la neige à 2 000 m.
 - **Radar** : les cartes, avec frise des heures et animation :
   - **Pluie** : radar Météo-France et sa prévision (voir ci-dessous pour la clé) ;
   - **Température** à 2 m maintenant : modèle ICON-EU du DWD (sans clé, fichier GRIB2 d'environ 1 Mo du serveur de
@@ -57,10 +54,13 @@ la carte) :
   - **Foudre** : imageur d'éclairs de Meteosat (EUMETSAT, sans clé), éclairs par 5 min sur la dernière heure ;
   - **Webcams** autour du lieu : Windy, avec une clé gratuite (api.windy.com) à saisir dans les Réglages ;
     toucher un point affiche l'image sur toute la largeur et le lien vers la page Windy.
-- **Lieux** : recherche (ville, col, station, sommet), **météo à ma position** (GPS du téléphone, sans les services
-  Google), favoris avec leur département, leur altitude, leur température et leurs extrêmes, **dans l'ordre choisi** :
-  appui long sur un lieu puis glisser pour le déplacer. « Modifier » retire des favoris ; l'engrenage ouvre les
-  **Réglages** (modèles de la comparaison, clés Météo-France et Windy).
+- **Lieux** : recherche, **météo à ma position** (GPS du téléphone, sans les services Google), puis les **favoris**
+  (étoile orange) dans l'ordre choisi — appui long sur un lieu puis glisser pour le déplacer — et les **lieux
+  consultés récemment**, du plus récent au plus ancien ; chacun avec son département, son altitude, sa température
+  et ses extrêmes. L'étoile de chaque ligne ajoute ou retire un favori. **Comparer** met tous ces lieux côte à côte
+  sur 8 jours (pictogramme, maxi et mini, pluie) ; l'engrenage ouvre les **Réglages** : thème (comme le téléphone,
+  jour ou nuit), taille du texte (100, 115 ou 130 % : plus grand, certains écrans cachent des détails secondaires),
+  modèles de la comparaison, clés Météo-France et Windy.
 
 Comment la prévision est résumée :
 
@@ -82,7 +82,7 @@ Comment l'altitude est calculée :
 - **Coupe du relief** : sommets nommés d'OpenStreetMap (API Overpass, sans clé) et altitudes du terrain
   (modèle Copernicus à 90 m, via l'API d'altitude d'Open-Meteo), téléchargées une seule fois par lieu.
 
-Thème clair et sombre, identité « Glacier » (voir `design/`) avec l'orange en couleur d'accent, cache local (pas de
+Thème clair et sombre (au choix dans les Réglages), identité « Glacier » (voir `design/`) avec l'orange en couleur d'accent, cache local (pas de
 nouvel appel pendant 30 min, affichage hors ligne). Une connexion coupée en plein téléchargement (réseau mobile
 instable, erreur « SSL… BAD_DECRYPT ») est retentée deux fois ; si elle échoue encore, l'app affiche un message
 simple (« Connexion interrompue, touche ↻ pour réessayer ») au lieu de l'erreur brute.
@@ -147,7 +147,7 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
   en image Web Mercator colorée (`MercatorLookup`, `RainClass`) ; prévision PIAF via WCS (`MeteoFrancePiaf`,
   lecteur `GeoTiff`) et extrapolation de secours (`Nowcast`).
 - `ui/` : navigation et barre du bas (`MeteoApp`, `Glacier`), onglets (`TodayScreen`, `DaysScreen`,
-  `AltitudeScreen` avec `AltitudeNow`, `radar/RadarScreen`, `PlacesScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
+  `AltitudeScreen`, `radar/RadarScreen`, `PlacesScreen`), comparaison des lieux (`CompareScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
   (`MeteogramsScreen`, `DaysTab`, `MeteogramTab`, `MultiModelTab`), réglages (`SettingsScreen`), pictogrammes
   dessinés au trait (`WeatherIcon`), outils de graphique (`ChartKit`), carte MapLibre
   (`radar/RadarMap`).

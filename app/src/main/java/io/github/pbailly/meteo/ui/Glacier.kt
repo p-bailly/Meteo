@@ -272,6 +272,16 @@ fun PanelTitle(icon: ImageVector?, title: String, aside: String? = null) {
     }
 }
 
+/**
+ * Largeur exprimée en sp : elle grandit comme un texte courant (12 sp) avec la taille du texte (colonnes de tableaux).
+ * On n'utilise pas la conversion des grandes tailles, qu'Android agrandit beaucoup moins que les petites.
+ */
+@Composable
+fun TextUnit.asWidth(): Dp {
+    val scale = with(androidx.compose.ui.platform.LocalDensity.current) { 12.sp.toDp().value / 12f }
+    return (value * scale).dp
+}
+
 /** Texte en Martian Mono (données, unités, heures). */
 @Composable
 fun MonoText(

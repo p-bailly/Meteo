@@ -12,18 +12,27 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-/** Favoris et dernier lieu consulté, gardés dans les préférences de l'app. */
+/** Favoris, lieux consultés récemment et dernier lieu affiché, gardés dans les préférences de l'app. */
 class PlacesStore(context: Context) {
     private val prefs = context.getSharedPreferences("places", Context.MODE_PRIVATE)
 
-    fun favorites(): List<Place> = runCatching {
-        val raw = prefs.getString(KEY_FAVORITES, null) ?: return emptyList()
+    fun favorites(): List<Place> = list(KEY_FAVORITES)
+
+    fun saveFavorites(places: List<Place>) = saveList(KEY_FAVORITES, places)
+
+    /** Lieux consultés, du plus récent au plus ancien. */
+    fun recents(): List<Place> = list(KEY_RECENTS)
+
+    fun saveRecents(places: List<Place>) = saveList(KEY_RECENTS, places)
+
+    private fun list(key: String): List<Place> = runCatching {
+        val raw = prefs.getString(key, null) ?: return emptyList()
         (Json.parseToJsonElement(raw) as JsonArray).mapNotNull { decode(it.jsonObject) }
     }.getOrDefault(emptyList())
 
-    fun saveFavorites(places: List<Place>) {
+    private fun saveList(key: String, places: List<Place>) {
         val array = buildJsonArray { places.forEach { add(encode(it)) } }
-        prefs.edit().putString(KEY_FAVORITES, array.toString()).apply()
+        prefs.edit().putString(key, array.toString()).apply()
     }
 
     fun lastPlace(): Place? = runCatching {
@@ -55,12 +64,13 @@ class PlacesStore(context: Context) {
             admin1 = o["admin1"]?.jsonPrimitive?.contentOrNull,
             admin2 = o["admin2"]?.jsonPrimitive?.contentOrNull,
             country = o["country"]?.jsonPrimitive?.contentOrNull,
-            elevation = o["elevation"]?.jsonPrimitive?.doubleOrNull,
+            elevation = o["elevation"]?.jsonPrimitive?.doubleOrNull.validElevation(),
         )
     }
 
     private companion object {
         const val KEY_FAVORITES = "favorites"
+        const val KEY_RECENTS = "recents"
         const val KEY_LAST = "last_place"
     }
 }

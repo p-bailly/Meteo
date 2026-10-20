@@ -154,9 +154,10 @@ private fun dayLines(f: Forecast, reference: Double, multiModel: MultiModelForec
     }
 }
 
-private val DAY_WIDTH = 54.dp
+/** Largeurs des colonnes, en sp pour suivre la taille du texte (le pictogramme garde sa taille). */
+private val DAY_WIDTH = 54.sp
 private val ICON_WIDTH = 36.dp
-private val DETAILS_WIDTH = 92.dp
+private val DETAILS_WIDTH = 92.sp
 
 @Composable
 private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Double, reference: Double, onClick: () -> Unit) {
@@ -169,7 +170,7 @@ private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Doub
             .padding(start = 18.dp, end = 16.dp, top = 10.dp, bottom = 10.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.width(DAY_WIDTH)) {
+            Column(Modifier.width(DAY_WIDTH.asWidth())) {
                 Text(
                     if (line.date == today) "Auj." else Fmt.dayName(line.date).removeSuffix(".").replaceFirstChar { it.titlecase(Locale.FRANCE) },
                     fontWeight = FontWeight.SemiBold,
@@ -180,7 +181,7 @@ private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Doub
             }
             Box(Modifier.width(ICON_WIDTH)) { WeatherIcon(line.code, true, size = 30.dp) }
             Row(Modifier.weight(1f).padding(start = 4.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                MonoText(Fmt.temp(line.min), color = colors.primary, size = 12.sp, modifier = Modifier.width(30.dp))
+                MonoText(Fmt.temp(line.min), color = colors.primary, size = 12.sp, modifier = Modifier.width(30.sp.asWidth()))
                 TemperatureBar(line.min, line.max, low, high, Modifier.weight(1f).height(7.dp))
                 Text(
                     Fmt.temp(line.max),
@@ -188,11 +189,11 @@ private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Doub
                     fontSize = 16.sp,
                     textAlign = TextAlign.End,
                     maxLines = 1,
-                    modifier = Modifier.width(36.dp),
+                    modifier = Modifier.width(36.sp.asWidth()),
                 )
             }
             // Pluie, vent et soleil l'un sous l'autre, chacun avec son pictogramme.
-            Column(Modifier.width(DETAILS_WIDTH)) {
+            Column(Modifier.width(DETAILS_WIDTH.asWidth())) {
                 val wet = !line.rain.isNaN() && line.rain >= 0.1
                 Detail(icon = { Icon(Icons.Outlined.WaterDrop, null, tint = colors.primary, modifier = Modifier.size(13.dp)) }) {
                     MonoText("${Fmt.decimal(line.rain)} mm", color = if (wet) colors.primary else colors.onSurfaceVariant, bold = wet, size = 11.5.sp)
@@ -223,7 +224,7 @@ private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Doub
         }
         // Neige attendue, sur sa propre ligne sous le jour.
         if (line.snow >= 1) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = DAY_WIDTH, top = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = DAY_WIDTH.asWidth(), top = 4.dp)) {
                 Icon(Icons.Outlined.AcUnit, null, tint = colors.primary, modifier = Modifier.size(13.dp))
                 Spacer(Modifier.width(6.dp))
                 MonoText("neige : +${line.snow.roundToInt()} cm à ${Fmt.altitude(reference)}", color = colors.primary, bold = true, size = 11.sp)

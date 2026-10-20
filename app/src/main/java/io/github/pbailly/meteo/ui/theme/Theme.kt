@@ -144,10 +144,25 @@ val HeaderBlue = Color(0xFF1C6497)
 
 val LocalChartColors = staticCompositionLocalOf { LightChart }
 
+/** Échelle du texte pour chaque taille des Réglages : normale, grande, très grande. */
+val TEXT_SCALES = floatArrayOf(1f, 1.15f, 1.3f)
+
+/** Taille du texte choisie (0 = normale, 1 = grande, 2 = très grande) : les écrans chargés s'en servent pour s'alléger. */
+val LocalTextSize = androidx.compose.runtime.staticCompositionLocalOf { 0 }
+
 @Composable
-fun MeteoTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+fun MeteoTheme(darkTheme: Boolean = isSystemInDarkTheme(), textSize: Int = 0, content: @Composable () -> Unit) {
+    // Texte agrandi : on multiplie l'échelle des polices du téléphone (taille normale : rien ne change).
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val scaled = if (textSize > 0) {
+        androidx.compose.ui.unit.Density(density.density, density.fontScale * TEXT_SCALES[textSize.coerceIn(0, 2)])
+    } else {
+        density
+    }
     androidx.compose.runtime.CompositionLocalProvider(
         LocalChartColors provides if (darkTheme) DarkChart else LightChart,
+        LocalTextSize provides textSize,
+        androidx.compose.ui.platform.LocalDensity provides scaled,
     ) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColors else LightColors,

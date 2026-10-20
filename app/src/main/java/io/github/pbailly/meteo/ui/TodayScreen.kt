@@ -71,8 +71,8 @@ import io.github.pbailly.meteo.ui.theme.AppCondensed
 import io.github.pbailly.meteo.ui.theme.AppSans
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
 import java.time.LocalDateTime
-import java.util.Locale
 import kotlin.math.roundToInt
+import io.github.pbailly.meteo.ui.theme.LocalTextSize
 
 /**
  * Onglet « Aujourd'hui » : le lieu, la température en grand, la météo en altitude (coupe du relief, iso 0 °C,
@@ -109,7 +109,8 @@ fun TodayScreen(
                         TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces)
                         StatusLine(statusText(remote))
                         NowBlock(f)
-                        AltitudeLink(f, onOpenAltitude)
+                        // Neige & altitude seulement à la saison de la neige.
+                        if (snowSeason(f)) AltitudeLink(f, onOpenAltitude)
                         MetricsGrid(f)
                     },
                     fill = { NextHours(f, Modifier.fillMaxSize()) },
@@ -161,7 +162,8 @@ private fun TodayHeader(f: Forecast, place: Place, favorite: Boolean, onToggleFa
                 listOfNotNull(
                     place.department ?: place.country?.takeIf { it.isNotBlank() },
                     Fmt.dateLine(time.toLocalDate()),
-                    Fmt.clock(time),
+                    // En très grand texte, l'heure laisse la place au reste de la ligne.
+                    Fmt.clock(time).takeIf { LocalTextSize.current < 2 },
                 ).joinToString(" · "),
                 modifier = Modifier.padding(start = 2.dp, top = 4.dp),
             )
@@ -223,6 +225,13 @@ private fun FillHeight(viewport: Dp, minFill: Dp, modifier: Modifier, top: @Comp
     }
 }
 
+/** Saison de la neige : de la mi-octobre à la mi-mars (date du lieu). */
+fun snowSeason(f: Forecast): Boolean {
+    val date = f.current?.time?.toLocalDate() ?: f.daily.date.firstOrNull() ?: return true
+    val day = date.monthValue * 100 + date.dayOfMonth
+    return day >= 1015 || day <= 315
+}
+
 /** Lien vers la page Neige & altitude, avec l'iso 0 °C actuel. */
 @Composable
 private fun AltitudeLink(f: Forecast, onClick: () -> Unit) {
@@ -242,7 +251,7 @@ private fun AltitudeLink(f: Forecast, onClick: () -> Unit) {
         Icon(Icons.Outlined.Terrain, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))
         Text("Neige & altitude", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, modifier = Modifier.weight(1f))
-        if (!iso.isNaN()) MonoText("iso 0 °C · ${Fmt.altitude(iso, 100)}", color = colors.primary, size = 11.sp, bold = true)
+        if (!iso.isNaN() && LocalTextSize.current < 2) MonoText("iso 0 °C · ${Fmt.altitude(iso, 100)}", color = colors.primary, size = 11.sp, bold = true)
         Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
     }
 }
@@ -319,7 +328,7 @@ private fun MetricsGrid(f: Forecast) {
             VerticalDivider(color = colors.outlineVariant)
             Tile(Icons.Outlined.WbSunny, "INDICE UV", if (uv.isNaN()) "–" else uv.roundToInt().toString(), uvLabel(uv), Modifier.weight(1f), accent = true)
             VerticalDivider(color = colors.outlineVariant)
-            Tile(Icons.Outlined.WbTwilight, "SOLEIL", sunMain, sunNote, Modifier.weight(1f), accent = true)
+            Tile(Icons.Outlined.WbTwilight, "SOLEIL", sunMain, if (LocalTextSize.current < 2) sunNote else "", Modifier.weight(1f), accent = true)
         }
     }
 }
@@ -372,16 +381,10 @@ private fun NextHours(f: Forecast, modifier: Modifier = Modifier) = Column(modif
     val hours = (start until minOf(h.size, start + 48)).toList()
     if (hours.isEmpty()) return@Column
     val colors = MaterialTheme.colorScheme
-    // Titre, puis la pluie des 24 prochaines heures en dessous : ni l'un ni l'autre ne passe à la ligne.
-    Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 6.dp)) {
-        Text("Prochaines heures", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, maxLines = 1)
-        val (summary, wet) = rainSummary(f, hours.take(24))
-        MonoText(summary, color = if (wet) colors.primary else colors.onSurfaceVariant, bold = wet, modifier = Modifier.padding(top = 2.dp))
-    }
     val measurer = rememberTextMeasurer()
     val chart = LocalChartColors.current
     val dark = chart.darkTheme
-    Box(Modifier.fillMaxWidth().weight(1f).horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp)) {
+    Box(Modifier.fillMaxWidth().weight(1f).horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
         Canvas(Modifier.width(46.dp * hours.size).fillMaxHeight()) {
             val col = size.width / hours.size
             val temps = hours.map { h.temperature[it] }.filter { !it.isNaN() }
@@ -456,30 +459,6 @@ private fun NextHours(f: Forecast, modifier: Modifier = Modifier) = Column(modif
                 drawCircle(colors.onBackground, 3.5.dp.toPx(), center, style = Stroke(1.5.dp.toPx()))
             }
         }
-    }
-}
-
-/** « pluie 17-20 h · 3,0 mm », « neige 2-6 h · 4 cm », ou « sec jusqu'à 23 h ». */
-private fun rainSummary(f: Forecast, hours: List<Int>): Pair<String, Boolean> {
-    val h = f.hourly
-    val wet = hours.filter { (h.precipitation[it].takeIf { v -> !v.isNaN() } ?: 0.0) >= 0.1 }
-    if (wet.isEmpty()) return "sec sur 24 h" to false
-    val first = wet.first()
-    var last = first
-    for (idx in wet.drop(1)) if (idx - last <= 2) last = idx else break
-    val total = (first..last).sumOf { h.precipitation[it].takeIf { v -> !v.isNaN() } ?: 0.0 }
-    val ground = Altitude.ground(f)
-    val snow = Altitude.snow(f, first..last, ground)
-    // Heures des barres, bornes comprises : « 17-20 h ».
-    val span = Outlook.rainPeriod(h.time[first], h.time[hours.first()]) + " " + when {
-        first == hours.first() -> "jusqu'à ${(h.time[last].hour + 1) % 24} h"
-        first == last -> "${h.time[first].hour} h"
-        else -> "${h.time[first].hour}-${h.time[last].hour} h"
-    }
-    return if (snow >= total / 2 && snow >= 0.5) {
-        "neige $span · ${snow.roundToInt()} cm" to true
-    } else {
-        "pluie $span · ${String.format(Locale.FRANCE, "%.1f", total)} mm" to true
     }
 }
 

@@ -27,8 +27,8 @@ import kotlinx.coroutines.launch
 /**
  * Navigation : cinq onglets (Aujourd'hui, Prévisions, Météogramme, Radar, Lieux), dans la barre du bas ou en
  * glissant d'une page à l'autre (sauf sur la carte, où le glissement déplace la carte). Le détail d'un jour, la page
- * « Neige & altitude » et les réglages s'ouvrent par-dessus, avec un bouton retour ; le retour arrière ramène
- * ensuite à l'onglet Aujourd'hui.
+ * « Neige & altitude », la comparaison des lieux et les réglages s'ouvrent par-dessus, avec un bouton retour ; le
+ * retour arrière ramène ensuite à l'onglet Aujourd'hui.
  */
 @Composable
 fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
@@ -37,6 +37,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showAltitude by rememberSaveable { mutableStateOf(false) }
+    var showCompare by rememberSaveable { mutableStateOf(false) }
     var openDay by rememberSaveable { mutableIntStateOf(-1) }
     val place = state.place
     val forecast = state.forecast.data
@@ -46,6 +47,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
     fun goTo(tab: Tab) {
         showSettings = false
         showAltitude = false
+        showCompare = false
         openDay = -1
         // Sans animation : on ne traverse pas les pages intermédiaires (la carte est lourde à afficher).
         scope.launch { pager.scrollToPage(tab.ordinal) }
@@ -71,6 +73,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
                     onLocationDenied = viewModel::onLocationDenied,
                     onOpenSettings = { showSettings = true },
                     onMoveFavorite = viewModel::moveFavorite,
+                    onOpenCompare = { showCompare = true },
                 )
             }
             when {
@@ -80,6 +83,10 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
                     val layers: LayersViewModel = viewModel()
                     val layerState by layers.state.collectAsStateWithLifecycle()
                     SettingsScreen(
+                        theme = state.theme,
+                        onTheme = viewModel::setTheme,
+                        textSize = state.textSize,
+                        onTextSize = viewModel::setTextSize,
                         hiddenModels = state.hiddenModels,
                         onModelVisible = viewModel::setModelVisible,
                         meteoFranceKey = radarState.apiKey,
@@ -90,6 +97,15 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
                     )
                 }
                 place == null -> placesScreen()
+                showCompare -> CompareScreen(
+                    state = state,
+                    onSelect = {
+                        viewModel.selectPlace(it)
+                        goTo(Tab.TODAY)
+                    },
+                    onRefresh = { viewModel.refreshSummaries() },
+                    onBack = { showCompare = false },
+                )
                 forecast != null && openDay >= 0 ->
                     DayDetailScreen(forecast, state.multiModel.data, place, initialDay = openDay, onBack = { openDay = -1 })
                 showAltitude -> AltitudeScreen(state = state, place = place, onRefresh = viewModel::refresh, onBack = { showAltitude = false })

@@ -53,6 +53,10 @@ import io.github.pbailly.meteo.ui.theme.LocalChartColors
 
 @Composable
 fun SettingsScreen(
+    theme: Int,
+    onTheme: (Int) -> Unit,
+    textSize: Int,
+    onTextSize: (Int) -> Unit,
     hiddenModels: Set<WeatherModel>,
     onModelVisible: (WeatherModel, Boolean) -> Unit,
     meteoFranceKey: String?,
@@ -69,6 +73,18 @@ fun SettingsScreen(
             .verticalScroll(rememberScrollState()),
     ) {
         DetailHeader("Réglages", onBack)
+        SectionLabel("Affichage")
+        BorderedCard {
+            Column(Modifier.padding(14.dp)) {
+                Text("Thème", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                SegmentedToggle(listOf("Auto", "Jour", "Nuit"), theme, onTheme, Modifier.padding(top = 8.dp), fill = true)
+                MonoText("Auto : comme le téléphone", size = 10.5.sp, modifier = Modifier.padding(top = 6.dp))
+                Spacer(Modifier.height(16.dp))
+                Text("Taille du texte", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                SegmentedToggle(listOf("100 %", "115 %", "130 %"), textSize, onTextSize, Modifier.padding(top = 8.dp), fill = true)
+                MonoText("Plus grand, certains écrans cachent des détails secondaires", size = 10.5.sp, maxLines = 2, modifier = Modifier.padding(top = 6.dp))
+            }
+        }
         SectionLabel("Modèles de la comparaison")
         BorderedCard {
             WeatherModel.entries.forEachIndexed { i, model ->
@@ -103,7 +119,7 @@ fun SettingsScreen(
         SectionLabel("Sources")
         MonoText(
             "Prévisions : Open-Meteo.com (CC BY 4.0). Radar, prévision immédiate et relevés : Météo-France " +
-                "(Licence Ouverte). Relevés : MétéoSuisse, NOAA (METAR des aéroports). Relief : Copernicus DEM (via " +
+                "(Licence Ouverte). Relevés : MétéoSuisse, NOAA (METAR des aéroports). Carte de température : DWD (ICON-EU). Relief : Copernicus DEM (via " +
                 "Open-Meteo), sommets © contributeurs OpenStreetMap. Fond de carte : OpenFreeMap, © OpenStreetMap. " +
                 "Polices : Archivo et Martian Mono (SIL OFL 1.1).",
             size = 10.5.sp,

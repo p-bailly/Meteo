@@ -79,6 +79,13 @@ class OpenMeteoApiTest {
     }
 
     @Test
+    fun `unknown elevation from the geocoder is dropped`() {
+        // Open-Meteo renvoie -9999 quand il ne connaît pas l'altitude (Tromsø).
+        val body = """{"results":[{"name":"Tromsø","latitude":69.6489,"longitude":18.95508,"elevation":-9999.0,"admin1":"Troms"}]}"""
+        assertNull(OpenMeteoApi.parseSearch(body).single().elevation)
+    }
+
+    @Test
     fun `search without results returns an empty list`() {
         assertTrue(OpenMeteoApi.parseSearch("""{"generationtime_ms":0.3}""").isEmpty())
     }

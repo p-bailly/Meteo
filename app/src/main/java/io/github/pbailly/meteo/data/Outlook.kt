@@ -81,25 +81,6 @@ object Outlook {
         return day.map { minOf(h.weatherCode[it], 3) }.average().let { Math.round(it).toInt() }.coerceIn(0, 3)
     }
 
-    /**
-     * Quand tombe une pluie qui commence à [start], vu depuis [now] : le matin et en journée, une pluie du jour
-     * même est pour « aujourd'hui » ; le soir (à partir de 18 h), et pour une pluie d'après minuit, c'est « cette
-     * nuit » jusqu'à 7 h le lendemain ; ensuite « demain » ou le jour (« jeu. 22 »).
-     */
-    fun rainPeriod(start: LocalDateTime, now: LocalDateTime): String {
-        val today = now.toLocalDate()
-        val evening = now.hour >= 18 || now.hour < 6
-        // La nuit en cours (avant 6 h) ou la prochaine se termine à 7 h.
-        val nightEnd = if (now.hour < 6) today.atTime(7, 0) else today.plusDays(1).atTime(7, 0)
-        return when {
-            start.toLocalDate() == today && !evening -> "aujourd'hui"
-            start.isBefore(nightEnd) -> "cette nuit"
-            start.toLocalDate() == today -> "aujourd'hui"
-            start.toLocalDate() == today.plusDays(1) -> "demain"
-            else -> dayLabel(start.toLocalDate(), today)
-        }
-    }
-
     /** « auj. », « demain » ou « lun. 26 ». */
     fun dayLabel(date: LocalDate, today: LocalDate): String = when (date) {
         today -> "auj."
