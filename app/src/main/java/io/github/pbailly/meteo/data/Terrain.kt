@@ -32,6 +32,8 @@ object Terrain {
     /** Distance ajoutée au calcul de la domination : une colline voisine ne passe pas devant une montagne. */
     private const val DOMINANCE_OFFSET_KM = 10.0
     const val SAMPLES = 100
+    /** La coupe va au moins à 3 km du lieu. */
+    const val MIN_VIEW_KM = 3.0
     private const val BEFORE = 0.25
     private const val AFTER = 0.15
     /** Sommets dessinés sur la coupe : à moins de 2 km de la ligne ; sommets servant à nommer une altitude : 3 km. */
@@ -62,6 +64,14 @@ object Terrain {
             if (d > radiusKm || gain < 200) null else peak to gain / (d + DOMINANCE_OFFSET_KM)
         }.maxByOrNull { it.second }?.first
     }
+
+    /**
+     * Où regarder : le sommet qui domine le lieu ; sinon (le lieu est lui-même un sommet, le Mont Blanc) le plus haut
+     * sommet nommé à plus de 3 km, pour que la coupe descende dans la vallée au lieu de rester sur place.
+     */
+    fun viewTarget(latitude: Double, longitude: Double, ground: Double, peaks: List<Peak>): Peak? =
+        dominantPeak(latitude, longitude, ground, peaks)
+            ?: peaks.filter { distanceKm(latitude, longitude, it.latitude, it.longitude) in MIN_VIEW_KM..SEARCH_RADIUS_KM }.maxByOrNull { it.elevation }
 
     /** Le plus haut sommet nommé à moins de [radiusKm] du lieu. */
     fun highestPeak(latitude: Double, longitude: Double, peaks: List<Peak>, radiusKm: Double = SEARCH_RADIUS_KM): Peak? =
@@ -148,6 +158,7 @@ object Overpass {
     /** Le serveur principal, puis deux miroirs si celui-ci ne répond pas. */
     val SERVERS = listOf(
         "https://overpass-api.de/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
         "https://overpass.kumi.systems/api/interpreter",
         "https://overpass.private.coffee/api/interpreter",
     )
@@ -195,7 +206,8 @@ class TerrainRepository(
     suspend fun profile(place: Place): TerrainProfile = withContext(Dispatchers.IO) {
         // « terrain2 » : coupes vers le sommet qui domine le lieu (avant : le plus haut à 25 km).
         val file = File(cacheDir, "terrain2_${place.id}.json")
-        if (file.exists()) runCatching { decode(file.readText()) }.getOrNull()?.let { return@withContext it }
+        // Une coupe de moins d'un kilomètre (vers le lieu lui-même, quand il est un sommet) est refaite.
+        if (file.exists()) runCatching { decode(file.readText()) }.getOrNull()?.takeIf { it.lengthKm >= 1.0 }?.let { return@withContext it }
         val peaks = peaks(place)
         val ground = place.elevation ?: try {
             OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(listOf(place.latitude to place.longitude)))).firstOrNull() ?: Double.NaN
@@ -204,14 +216,17 @@ class TerrainRepository(
         } catch (_: Exception) {
             Double.NaN
         }
-        val target = Terrain.dominantPeak(place.latitude, place.longitude, ground, peaks)
-            ?: Terrain.highestPeak(place.latitude, place.longitude, peaks)
+        val target = Terrain.viewTarget(place.latitude, place.longitude, ground, peaks)
         val (toLat, toLon) = if (target != null) {
             target.latitude to target.longitude
         } else {
             val grid = Terrain.gridPoints(place.latitude, place.longitude)
             val heights = OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(grid)))
-            grid[heights.indices.maxByOrNull { if (heights[it].isNaN()) -1e9 else heights[it] } ?: 0]
+            // Le point culminant de la grille, à plus de 3 km (au sommet, la coupe ne reste pas sur place).
+            grid[
+                heights.indices.filter { Terrain.distanceKm(place.latitude, place.longitude, grid[it].first, grid[it].second) >= Terrain.MIN_VIEW_KM }
+                    .maxByOrNull { if (heights[it].isNaN()) -1e9 else heights[it] } ?: 0,
+            ]
         }
         val line = Terrain.line(place.latitude, place.longitude, toLat, toLon)
         val elevations = OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line)))

@@ -149,6 +149,8 @@ internal class SketchTerrain(
     val river: Boolean = false,
     /** Une île : la terre s'arrête des deux côtés, la mer tout autour. */
     val island: Boolean = false,
+    /** Le lieu est sur l'eau (en mer, au milieu d'un lac) : ni village ni champs autour. */
+    val onWater: Boolean = false,
 ) {
     fun heightAt(x: Float): Float {
         val k = ridge.indexOfFirst { it.first >= x }
@@ -168,16 +170,16 @@ internal class SketchTerrain(
         sea: Boolean = this.sea,
         river: Boolean = this.river,
         island: Boolean = this.island,
-    ) = SketchTerrain(ridge, relief, water, sea, treeline, snowline, rockline, glacierline, placeX, farX, river, island)
+    ) = SketchTerrain(ridge, relief, water, sea, treeline, snowline, rockline, glacierline, placeX, farX, river, island, onWater)
 }
 
 internal object SketchTerrains {
-    /** Abscisses du début de la coupe, du lieu et de la fin de la coupe (le sommet tombe vers 0,65, avant le texte de droite). */
+    /** Abscisses du début de la coupe, du lieu et de la fin de la coupe (le sommet tombe vers 0,6, avant le texte de droite). */
     private const val LEFT = 0.14f
     private const val PLACE = 0.36f
     /** Sur un sommet, le lieu est plus au milieu : la pente descend des deux côtés. */
     private const val SUMMIT_PLACE = 0.47f
-    private const val RIGHT = 0.70f
+    private const val RIGHT = 0.64f
     /** Le plus haut sommet monte au plus à 31 % de la hauteur du dessin au-dessus du pied. */
     const val MAX_LIFT = 0.31f
     private const val FAR_KM = 20.0
@@ -316,13 +318,14 @@ internal object SketchTerrains {
             glacierline = if (relief >= Relief.HIGH) at(3000 - shift) else 2f,
             placeX = x(p),
             farX = far?.let { x(it) } ?: 2f,
+            onWater = runs.any { (a, b) -> p in a..b },
         )
     }
 
     /** Ce que la coupe ne montre pas toujours : un lac tout près, la mer, la rivière qui passe, l'île. */
     private fun SketchTerrain.with(around: Surroundings?): SketchTerrain {
         if (around == null) return this
-        var t = copy(sea = sea || around.coast, river = around.river && !sea && !around.coast, island = around.island)
+        var t = copy(sea = sea || around.coast, river = around.river && !sea && !around.coast && !onWater, island = around.island)
         if (around.lake && t.water.isEmpty() && !t.sea) t = t.withLake()
         if (t.island) t = t.copy(ridge = t.ridge.map { (x, y) -> x to y * islandTaper(x) - 0.012f * (1 - islandTaper(x)) })
         return t
@@ -353,11 +356,18 @@ internal object SketchTerrains {
         return ramp(0.27f, 0.37f) * (1 - ramp(0.67f, 0.76f))
     }
 
-    /** Les côtés du dessin restent bas : à gauche la grande température, à droite le ciel et les extrêmes. */
+    /**
+     * Les côtés du dessin restent bas : à gauche la grande température, à droite le ciel en toutes lettres et les
+     * extrêmes ; le relief n'y monte pas jusqu'au texte.
+     */
     private fun envelope(x: Float): Float = when {
         x < 0.36f -> {
             val t = ((x - 0.10f) / 0.26f).coerceIn(0f, 1f)
             0.35f + 0.65f * t * t * (3 - 2 * t)
+        }
+        x > 0.58f -> {
+            val t = ((x - 0.58f) / 0.20f).coerceIn(0f, 1f)
+            1f - 0.5f * t * t * (3 - 2 * t)
         }
         else -> 1f
     }
@@ -582,7 +592,8 @@ internal object SketchScenes {
 
         // Au premier plan.
         val groundThing = when {
-            skyThing == Surprise.ABDUCTION -> null
+            // Sur l'eau, rien ne tient debout au premier plan.
+            skyThing == Surprise.ABDUCTION || terrain.onWater -> null
             date == easter || date == easter.plusDays(1) -> Surprise.EGGS
             day == MonthDay.of(10, 31) || eve == MonthDay.of(10, 31) -> Surprise.PUMPKIN
             date.dayOfMonth == 13 && date.dayOfWeek == DayOfWeek.FRIDAY -> Surprise.BLACK_CAT
@@ -598,6 +609,8 @@ internal object SketchScenes {
 
         // Au sommet, toujours la croix (dessinée sur le lieu) ; ailleurs en montagne, parfois sur le plus haut.
         if (relief == Relief.SUMMIT || mountains && rnd.nextFloat() < 0.35f) surprises += Surprise.SUMMIT_CROSS
+        // En mer ou sur le lac, de jour : un voilier, toujours.
+        if (terrain.onWater && isDay && !wet && !conditions.frozen) surprises += Surprise.SAILBOAT
         // Pas de bateau ni de monstre sur un lac gelé.
         if (terrain.water.isNotEmpty() && !conditions.frozen || terrain.sea) when {
             !terrain.sea && rnd.nextFloat() < if (sky == SketchSky.FOG) 0.25f else 0.03f -> surprises += Surprise.NESSIE
@@ -615,7 +628,7 @@ internal object SketchScenes {
         if (isDay && relief >= Relief.HIGH && !wet && rnd.nextFloat() < 0.4f) decor += Decor.CHAMOIS
         if (isDay && (terrain.sea || terrain.island) && sky != SketchSky.STORM) decor += Decor.GULLS
         if (around?.ski == true && relief.mountains) decor += Decor.SKI
-        if (conditions.windKmh >= 15 && relief != Relief.SUMMIT) decor += Decor.WINDSOCK
+        if (conditions.windKmh >= 15 && relief != Relief.SUMMIT && !terrain.onWater) decor += Decor.WINDSOCK
         // Le monument de la grande ville, quand on y est.
         val monument = landmark?.takeIf { around == null || Decor.CITY in decor || Decor.TOWN in decor }
         val chimneys = decor.any { it in CHIMNEYS }
@@ -637,31 +650,24 @@ internal object SketchScenes {
     private fun decorFor(terrain: SketchTerrain, around: Surroundings?, rnd: Random): Set<Decor> {
         val relief = terrain.relief
         val decor = mutableSetOf<Decor>()
+        // Au-dessus de la limite des arbres, ni forêt ni ferme : un refuge.
+        val aboveTrees = terrain.treeline <= 0.005f
+        // Sur l'eau, rien de bâti ni de planté autour : la mer ou le lac (et le bateau).
+        if (terrain.onWater) return decor
         if (around == null) {
+            // Sans les environs (pas encore chargés, ou OpenStreetMap ne répond pas), pas de village inventé : seulement
+            // ce que le relief fait pousser.
+            if (relief == Relief.SUMMIT || aboveTrees) return decor
             when (relief) {
                 Relief.PLAIN -> {
                     decor += Decor.FIELDS
-                    decor += if (rnd.nextFloat() < 0.6f) Decor.VILLAGE else Decor.TREES
+                    if (rnd.nextFloat() < 0.7f) decor += Decor.TREES
                 }
-                Relief.LOW, Relief.MEDIUM -> {
-                    if (rnd.nextFloat() < 0.7f) decor += if (relief == Relief.LOW) Decor.TREES else Decor.FIRS
-                    if (rnd.nextFloat() < 0.55f) decor += Decor.VILLAGE
-                    if (decor.isEmpty()) decor += Decor.FIRS
-                }
-                Relief.HIGH, Relief.VERY_HIGH -> {
-                    if (rnd.nextFloat() < 0.65f) decor += Decor.FIRS
-                    when (rnd.nextFloat()) {
-                        in 0f..0.35f -> decor += Decor.CHALET
-                        in 0.35f..0.65f -> decor += Decor.VILLAGE
-                        else -> Unit
-                    }
-                }
-                Relief.SUMMIT -> Unit
+                Relief.LOW -> decor += if (rnd.nextFloat() < 0.7f) Decor.TREES else Decor.FIRS
+                else -> if (rnd.nextFloat() < 0.7f) decor += Decor.FIRS
             }
             return decor
         }
-        // Au-dessus de la limite des arbres, ni forêt ni ferme : un refuge.
-        val aboveTrees = terrain.treeline <= 0.005f
         when (around.settlement) {
             Settlement.CITY -> decor += Decor.CITY
             Settlement.TOWN -> decor += Decor.TOWN

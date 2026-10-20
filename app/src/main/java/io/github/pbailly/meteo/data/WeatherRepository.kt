@@ -92,11 +92,17 @@ class WeatherRepository(
 
 private fun defaultHttpGet(url: String): String = retryOnNetworkError { httpGetOnce(url) }
 
-private fun httpGetOnce(url: String): String {
+/**
+ * Pour OpenStreetMap (Overpass) : une requête sur les environs d'un lieu prend souvent 15 à 25 s, au-delà des 20 s
+ * accordées à Open-Meteo.
+ */
+fun slowHttpGet(url: String): String = retryOnNetworkError { httpGetOnce(url, readTimeoutMs = 60_000) }
+
+private fun httpGetOnce(url: String, readTimeoutMs: Int = 20_000): String {
     val connection = URL(url).openConnection() as HttpURLConnection
     try {
         connection.connectTimeout = 15_000
-        connection.readTimeout = 20_000
+        connection.readTimeout = readTimeoutMs
         connection.setRequestProperty("Accept", "application/json")
         connection.setRequestProperty("User-Agent", "Meteo-perso/1.0 (Android; github.com/p-bailly/Meteo)")
         val code = connection.responseCode

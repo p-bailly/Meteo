@@ -100,4 +100,15 @@ class TerrainTest {
         val profile = Terrain.build(line, elevations, null, emptyList())
         assertEquals(ProfileLabel(70, null, 2500.0), profile.summit)
     }
+
+    @Test
+    fun `on a summit the profile looks towards another peak`() {
+        val jorasses = Peak("Grandes Jorasses", 45.8687, 6.9879, 4208.0)
+        val courmayeur = Peak("Mont Blanc de Courmayeur", 45.8295, 6.8565, 4748.0)
+        // Sur le Mont Blanc, rien ne le domine : on regarde le plus haut sommet à plus de 3 km, pas le Mont Blanc lui-même.
+        val target = Terrain.viewTarget(montBlanc.latitude, montBlanc.longitude, 4808.0, listOf(montBlanc, courmayeur, jorasses, midi))
+        assertEquals("Grandes Jorasses", target?.name)
+        // À Chamonix, toujours le sommet qui domine.
+        assertEquals("Mont Blanc", Terrain.viewTarget(chamonix.latitude, chamonix.longitude, 1035.0, listOf(montBlanc, midi, brevent))?.name)
+    }
 }

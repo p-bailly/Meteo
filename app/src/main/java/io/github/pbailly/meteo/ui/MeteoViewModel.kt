@@ -17,6 +17,7 @@ import io.github.pbailly.meteo.data.ClimateRepository
 import io.github.pbailly.meteo.data.AirQuality
 import io.github.pbailly.meteo.data.AirQualityRepository
 import io.github.pbailly.meteo.data.Surroundings
+import io.github.pbailly.meteo.data.slowHttpGet
 import io.github.pbailly.meteo.data.SurroundingsRepository
 import io.github.pbailly.meteo.data.Terrain
 import io.github.pbailly.meteo.data.TerrainProfile
@@ -94,8 +95,9 @@ data class MeteoUiState(
 
 class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = WeatherRepository(File(app.cacheDir, "openmeteo"))
-    private val terrainRepository = TerrainRepository(File(app.filesDir, "terrain"), repository.httpGet)
-    private val surroundingsRepository = SurroundingsRepository(File(app.filesDir, "terrain"), repository.httpGet)
+    // Overpass répond lentement : ces deux-là attendent plus longtemps (slowHttpGet).
+    private val terrainRepository = TerrainRepository(File(app.filesDir, "terrain"), ::slowHttpGet)
+    private val surroundingsRepository = SurroundingsRepository(File(app.filesDir, "terrain"), ::slowHttpGet)
     private val climateRepository = ClimateRepository(File(app.filesDir, "normals"), repository.httpGet)
     private val airRepository = AirQualityRepository(File(app.cacheDir, "air"), repository.httpGet)
     private val store = PlacesStore(app)

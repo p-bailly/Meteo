@@ -104,7 +104,7 @@ fun TodayScreen(
                 val viewport = maxHeight
                 FillHeight(
                     viewport = viewport,
-                    minFill = 250.dp,
+                    minFill = 232.dp,
                     modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                     top = {
                         // Le haut de l'écran, avec en fond un dessin au crayon du temps qu'il fait (sous la barre d'état,
@@ -139,7 +139,7 @@ fun TodayScreen(
 }
 
 /** Hauteur du dessin laissée libre sous le texte d'Aujourd'hui. */
-private val SKETCH_GROUND = 44.dp
+private val SKETCH_GROUND = 72.dp
 
 /**
  * Ce que la prévision de l'heure ajoute au dessin : les nuages bas, moyens et hauts (pour les dessiner à leur hauteur),
@@ -476,14 +476,15 @@ private fun NextHours(f: Forecast, modifier: Modifier = Modifier) = Column(modif
             val tMin = temps.minOrNull() ?: 0.0
             val tMax = (temps.maxOrNull() ?: 1.0).let { if (it - tMin < 4) tMin + 4 else it }
             val maxMm = maxOf(2.0, hours.maxOf { h.precipitation[it].takeIf { v -> !v.isNaN() } ?: 0.0 })
-            // Hauteur au-delà du minimum (184 dp) : partagée entre la courbe de température et les barres de pluie.
-            val extra = (size.height - 184.dp.toPx()).coerceAtLeast(0f)
-            val tempBottom = 100.dp.toPx() + extra * 0.4f
-            val tempSpan = 26.dp.toPx() + extra * 0.4f
+            // Hauteur au-delà du minimum (168 dp) : surtout pour la courbe de température ; les barres de pluie restent
+            // basses, pour laisser la place au dessin du haut.
+            val extra = (size.height - 168.dp.toPx()).coerceAtLeast(0f)
+            val tempBottom = 100.dp.toPx() + extra * 0.65f
+            val tempSpan = 26.dp.toPx() + extra * 0.5f
             fun ty(t: Double) = (tempBottom - (t - tMin) / (tMax - tMin) * tempSpan).toFloat()
             val probabilityY = tempBottom + 16.dp.toPx()
             val barBottom = size.height - 4.dp.toPx()
-            val barTop = probabilityY + 24.dp.toPx()
+            val barTop = probabilityY + 20.dp.toPx()
 
             for (k in 1 until hours.size) {
                 drawLine(chart.grid, Offset(col * k, 18.dp.toPx()), Offset(col * k, barBottom), 1.dp.toPx())
