@@ -49,6 +49,26 @@ Les calques monochromes restent à faire pour celui qui sera retenu.
 | 10 | **Barbule** | Pointé de station synoptique : ciel à 4/8 couvert, vent en barbules et fanion | Clin d'œil pointu pour les passionnés de cartes | Illisible pour le grand public |
 | 11 | **Pluviomètre** | Une goutte tombe dans un pluviomètre gradué, niveau en rouge | Simple, concret, met la pluie au centre | Moins de place pour le soleil et la température |
 
+## Au crayon (`logos/crayon/`)
+
+Les pictogrammes météo classiques (soleil, nuage, pluie, lune), dessinés comme le fond d'Aujourd'hui
+(`ui/WeatherSketch.kt`) : chaque trait repassé deux fois avec un léger tremblé, ombres hachurées, crayons de couleur
+jaune et bleu sur papier crème `#F6F1E6`, graphite `#2E3644`. Les SVG sont générés par `generer.py` (tremblé tiré
+au hasard mais reproductible) : modifier le script puis le relancer.
+
+| | Logo | Remarque |
+|---|---|---|
+| C1 | **Soleil** | Le plus simple et le plus lisible en petit |
+| C2 | **Éclaircies** | Soleil derrière un nuage : l'icône météo par excellence |
+| C3 | **Pluie** | Nuage et averse, plus mélancolique |
+| C4 | **Giboulée** | Soleil, nuage et pluie : tous les temps à la fois, un peu chargé à 24 dp |
+| C5 | **Montagne** | Rappelle le dessin de fond et le thème Glacier (sommet enneigé) |
+| C6 | **Nuit** | Lune, étoiles et nuage à la craie sur fond nuit |
+| C7 | **Craie** | Éclaircies à la craie blanche sur le bleu glacier actuel : garde la couleur de l'icône |
+
+Les hachures et le tremblé passent en vector drawable Android (ce ne sont que des chemins), mais les fichiers sont
+plus lourds que ceux des autres pistes.
+
 ## Changer de direction
 
 1. Convertir le SVG choisi en vector drawable pour `app/src/main/res/drawable/ic_launcher_foreground.xml`
