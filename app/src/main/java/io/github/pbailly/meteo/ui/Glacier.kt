@@ -8,6 +8,7 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -35,12 +36,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -55,57 +59,68 @@ import io.github.pbailly.meteo.ui.theme.AppSans
 enum class Tab(val label: String, val icon: ImageVector) {
     TODAY("Aujourd'hui", Icons.Outlined.WbSunny),
     FORECAST("Prévisions", Icons.Outlined.CalendarMonth),
-    METEOGRAM("Météogramme", Icons.Outlined.ShowChart),
-    RADAR("Radar", Icons.Outlined.TrackChanges),
+    METEOGRAM("Courbes", Icons.Outlined.ShowChart),
+    RADAR("Cartes", Icons.Outlined.TrackChanges),
     PLACES("Lieux", Icons.Outlined.Place),
 }
 
-/** Barre du bas : pictogramme au trait et libellé ; l'onglet actif en bleu glacier, souligné d'un trait au-dessus. */
+/**
+ * Barre du bas : pictogramme au trait et libellé ; l'onglet actif en bleu glacier, souligné d'un trait au-dessus.
+ * Tous les libellés ont la même taille : la plus grande à laquelle le plus long tient encore dans sa case.
+ */
 @Composable
 fun BottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
     val colors = MaterialTheme.colorScheme
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
     Surface(color = colors.surfaceContainerLowest) {
-        Column(Modifier.navigationBarsPadding()) {
-            HorizontalDivider(color = colors.outlineVariant)
-            Row(Modifier.fillMaxWidth().height(64.dp)) {
-                Tab.entries.forEach { tab ->
-                    val active = tab == selected
-                    val tint = if (active) colors.primary else colors.onSurfaceVariant
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .height(64.dp)
-                            .clickable { onSelect(tab) },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Box(
+        BoxWithConstraints(Modifier.navigationBarsPadding()) {
+            val cell = with(density) { (maxWidth / Tab.entries.size - 4.dp).toPx() }
+            val labelSize = remember(cell, density) {
+                generateSequence(12f) { it - 0.5f }.takeWhile { it >= 9f }.firstOrNull { size ->
+                    Tab.entries.all { tab ->
+                        measurer.measure(tab.label, labelStyle(size.sp, FontWeight.SemiBold), maxLines = 1, softWrap = false).size.width <= cell
+                    }
+                }?.sp ?: 9.sp
+            }
+            Column {
+                HorizontalDivider(color = colors.outlineVariant)
+                Row(Modifier.fillMaxWidth().height(64.dp)) {
+                    Tab.entries.forEach { tab ->
+                        val active = tab == selected
+                        val tint = if (active) colors.primary else colors.onSurfaceVariant
+                        Column(
                             Modifier
-                                .width(30.dp)
-                                .height(3.dp)
-                                .background(if (active) colors.primary else Color.Transparent, RoundedCornerShape(bottomStart = 2.dp, bottomEnd = 2.dp)),
-                        )
-                        Spacer(Modifier.height(9.dp))
-                        Icon(tab.icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
-                        Spacer(Modifier.height(3.dp))
-                        // « Météogramme » rétrécit un peu plutôt que d'être coupé sur les petits écrans.
-                        BasicText(
-                            tab.label,
-                            style = TextStyle(
-                                color = tint,
-                                fontSize = 12.sp,
-                                fontFamily = AppSans,
-                                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                            ),
-                            maxLines = 1,
-                            autoSize = TextAutoSize.StepBased(minFontSize = 9.sp, maxFontSize = 12.sp, stepSize = 0.5.sp),
-                            modifier = Modifier.padding(horizontal = 2.dp),
-                        )
+                                .weight(1f)
+                                .height(64.dp)
+                                .clickable { onSelect(tab) },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Box(
+                                Modifier
+                                    .width(30.dp)
+                                    .height(3.dp)
+                                    .background(if (active) colors.primary else Color.Transparent, RoundedCornerShape(bottomStart = 2.dp, bottomEnd = 2.dp)),
+                            )
+                            Spacer(Modifier.height(9.dp))
+                            Icon(tab.icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+                            Spacer(Modifier.height(3.dp))
+                            BasicText(
+                                tab.label,
+                                style = labelStyle(labelSize, if (active) FontWeight.SemiBold else FontWeight.Normal).copy(color = tint),
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 2.dp),
+                            )
+                        }
                     }
                 }
             }
         }
     }
 }
+
+private fun labelStyle(size: TextUnit, weight: FontWeight) = TextStyle(fontSize = size, fontFamily = AppSans, fontWeight = weight)
 
 /** En-tête d'un onglet : grand titre, et à droite un sélecteur ou un bouton. */
 @Composable

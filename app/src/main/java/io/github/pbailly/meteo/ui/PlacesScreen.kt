@@ -279,7 +279,8 @@ private fun SpotRow(
             }
             if (c != null) {
                 WeatherIcon(c.weatherCode, c.isDay, size = 30.dp)
-                Column(Modifier.width(70.dp), horizontalAlignment = Alignment.End) {
+                // Largeur en sp : « -12° / -15° » tient encore avec la grande taille de texte.
+                Column(Modifier.width(78.sp.asWidth()), horizontalAlignment = Alignment.End) {
                     Text(Fmt.temp(c.temperature), fontWeight = FontWeight.SemiBold, fontSize = 22.sp, maxLines = 1)
                     MonoText(
                         "${Fmt.temp(f.daily.temperatureMax.getOrElse(today) { Double.NaN })} / ${Fmt.temp(f.daily.temperatureMin.getOrElse(today) { Double.NaN })}",
@@ -288,7 +289,7 @@ private fun SpotRow(
                     )
                 }
             } else {
-                Box(Modifier.width(108.dp), contentAlignment = Alignment.CenterEnd) { MonoText("…") }
+                Box(Modifier.width(30.dp + 78.sp.asWidth()), contentAlignment = Alignment.CenterEnd) { MonoText("…") }
             }
             // Étoile : pleine et orange pour un favori ; la toucher l'ajoute ou le retire.
             IconButton(onClick = { onToggleFavorite(e.place) }, modifier = Modifier.size(40.dp)) {

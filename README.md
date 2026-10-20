@@ -38,7 +38,7 @@ la carte) :
   sous l'autre la pluie (goutte, mm), le vent maximal (flèche dans la direction où il souffle, km/h, en rouge à
   partir de 40), l'ensoleillement (soleil, heures) et l'**indice de confiance** sur 5 (jauge à cinq barres) ; la
   neige attendue s'il en tombe. Toucher un jour ouvre son **détail heure par heure**.
-- **Météogramme** :
+- **Courbes** (météogrammes) :
   - **7 jours**, heure par heure : température et ressenti, pluie et sa probabilité, nuages, vent moyen et rafales,
     pression ; sur la courbe du vent moyen, une flèche toutes les 6 heures montre où va le vent ; trait orange :
     maintenant ;
@@ -53,7 +53,7 @@ la carte) :
   Valence) avec la température à chaque altitude, l'iso 0, la limite pluie-neige, les
   sommets nommés, la neige attendue à 2 000 et 3 000 m et les pentes enneigées, puis le ressenti et le vent à
   2 000 m ; ensuite l'iso 0 et la limite pluie-neige jour par jour, avec la neige à 2 000 m.
-- **Radar** : les cartes, avec frise des heures et animation ; le menu posé en haut à droite de la carte choisit la
+- **Cartes** : le radar et les autres cartes, avec frise des heures et animation ; le menu posé en haut à droite de la carte choisit la
   couche, le bouton « Webcams » de l'en-tête affiche les webcams ; le lieu est un point noir cerclé de blanc :
   - **Pluie** : radar Météo-France et sa prévision (voir ci-dessous pour la clé) ;
   - **Température** à 2 m maintenant : modèle ICON-EU du DWD (sans clé, fichier GRIB2 d'environ 1 Mo du serveur de
