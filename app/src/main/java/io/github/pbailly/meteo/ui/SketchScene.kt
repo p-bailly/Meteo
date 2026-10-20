@@ -152,6 +152,8 @@ internal class SketchTerrain(
     val island: Boolean = false,
     /** Le lieu est sur l'eau (en mer, au milieu d'un lac) : ni village ni champs autour. */
     val onWater: Boolean = false,
+    /** Faux tant que la coupe du relief n'est pas arrivée : un sol plat, sans décor inventé. */
+    val known: Boolean = true,
 ) {
     fun heightAt(x: Float): Float {
         val k = ridge.indexOfFirst { it.first >= x }
@@ -188,7 +190,7 @@ internal class SketchTerrain(
         sea: Boolean = this.sea,
         river: Boolean = this.river,
         island: Boolean = this.island,
-    ) = SketchTerrain(ridge, relief, water, sea, treeline, snowline, rockline, glacierline, placeX, farX, river, island, onWater)
+    ) = SketchTerrain(ridge, relief, water, sea, treeline, snowline, rockline, glacierline, placeX, farX, river, island, onWater, known)
 }
 
 internal object SketchTerrains {
@@ -221,18 +223,19 @@ internal object SketchTerrains {
 
     fun treelineAltitude(latitude: Double) = (1900 - latitudeShift(latitude)).coerceIn(300.0, 3800.0)
 
-    /** En attendant la coupe (ou sans réseau) : des collines douces. */
+    /**
+     * En attendant la coupe (une seconde, ou plus sans réseau) : un sol presque plat, sans rien dessus ; pas de
+     * collines ni de village qui disparaîtraient l'instant d'après.
+     */
     val DEFAULT = SketchTerrain(
-        ridge = listOf(
-            0f to 0.02f, 0.15f to 0.04f, 0.28f to 0.06f, 0.38f to 0.12f, 0.46f to 0.09f,
-            0.56f to 0.17f, 0.66f to 0.11f, 0.74f to 0.14f, 0.84f to 0.05f, 1f to 0.02f,
-        ),
-        relief = Relief.LOW,
+        ridge = listOf(0f to 0.005f, 0.3f to 0.01f, 0.5f to 0.008f, 0.7f to 0.012f, 1f to 0.005f),
+        relief = Relief.PLAIN,
         water = emptyList(),
         sea = false,
         treeline = 1f,
         snowline = 2f,
         placeX = 0.38f,
+        known = false,
     )
 
     /**
@@ -453,6 +456,8 @@ internal class SketchScene(
     val landmark: Landmark? = null,
     /** Où sont posés le lieu habité et l'objet du premier plan, choisi une fois pour toutes ([layoutOf]). */
     val layout: Layout? = null,
+    /** Habitants du lieu habité : sa taille dessinée en dépend. */
+    val population: Long? = null,
 ) {
     val clouds: SketchClouds? get() = conditions.clouds
 
@@ -656,12 +661,13 @@ internal object SketchScenes {
         val light = lightAt(time, isDay, conditions.sunrise, conditions.sunset)
         val weather = SketchWeather.of(code)
         // Le lieu habité au niveau du lieu : le sol est aplani sous lui.
-        val layout = layoutOf(SketchScene(sky, terrain, decor, surprises, seed, skyVariant, weather, conditions, light, monument))
+        val population = around?.population
+        val layout = layoutOf(SketchScene(sky, terrain, decor, surprises, seed, skyVariant, weather, conditions, light, monument, population = population))
         val built = decor.any { it in BUILT } && relief != Relief.SUMMIT
         val ground = layout.settlement?.takeIf { built }?.let { x ->
             terrain.flattened(x - layout.half - 0.015f, x + layout.half + 0.015f, terrain.heightAt(terrain.placeX).coerceAtLeast(0f))
         } ?: terrain
-        return SketchScene(sky, ground, decor, surprises, seed, skyVariant, weather, conditions, light, monument, layout)
+        return SketchScene(sky, ground, decor, surprises, seed, skyVariant, weather, conditions, light, monument, layout, population)
     }
 
     /** Les lieux habités dont le sol est aplani (pas le chalet ni le refuge, posés sur la pente). */
@@ -680,8 +686,8 @@ internal object SketchScenes {
         val decor = mutableSetOf<Decor>()
         // Au-dessus de la limite des arbres, ni forêt ni ferme : un refuge.
         val aboveTrees = terrain.treeline <= 0.005f
-        // Sur l'eau, rien de bâti ni de planté autour : la mer ou le lac (et le bateau).
-        if (terrain.onWater) return decor
+        // Sur l'eau, rien de bâti ni de planté autour : la mer ou le lac (et le bateau). Sans la coupe, rien non plus.
+        if (terrain.onWater || !terrain.known) return decor
         if (around == null) {
             // Sans les environs (pas encore chargés, ou OpenStreetMap ne répond pas), pas de village inventé : seulement
             // ce que le relief fait pousser.

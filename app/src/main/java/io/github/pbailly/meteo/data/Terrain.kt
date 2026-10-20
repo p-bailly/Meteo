@@ -27,6 +27,8 @@ import kotlin.math.sqrt
 /** Construction de la coupe : choix du sommet, points à échantillonner, repères. Sans réseau, pour les tests. */
 object Terrain {
     const val SEARCH_RADIUS_KM = 25.0
+    /** La coupe rapide cherche ce qui domine le lieu sur une grille de 100 km de côté (mailles de 11 km). */
+    const val QUICK_RADIUS_KM = 50.0
     /** Sommets cherchés jusqu'à 60 km : le Grand Veymont domine Valence à 49 km. */
     const val PEAK_RADIUS_KM = 60.0
     /** Distance ajoutée au calcul de la domination : une colline voisine ne passe pas devant une montagne. */
@@ -72,6 +74,17 @@ object Terrain {
     fun viewTarget(latitude: Double, longitude: Double, ground: Double, peaks: List<Peak>): Peak? =
         dominantPeak(latitude, longitude, ground, peaks)
             ?: peaks.filter { distanceKm(latitude, longitude, it.latitude, it.longitude) in MIN_VIEW_KM..SEARCH_RADIUS_KM }.maxByOrNull { it.elevation }
+
+    /**
+     * Sans les sommets d'OpenStreetMap : le point d'une grille d'altitudes qui domine le lieu (même calcul que
+     * [dominantPeak]), sinon le plus haut à plus de 3 km.
+     */
+    fun dominantPoint(latitude: Double, longitude: Double, ground: Double, grid: List<Pair<Double, Double>>, heights: DoubleArray): Pair<Double, Double>? {
+        val candidates = grid.indices.filter { !heights.getOrElse(it) { Double.NaN }.isNaN() }.map { it to distanceKm(latitude, longitude, grid[it].first, grid[it].second) }
+            .filter { (_, d) -> d >= MIN_VIEW_KM }
+        val dominant = if (ground.isNaN()) null else candidates.filter { (i, _) -> heights[i] - ground >= 200 }.maxByOrNull { (i, d) -> (heights[i] - ground) / (d + DOMINANCE_OFFSET_KM) }
+        return (dominant ?: candidates.maxByOrNull { (i, _) -> heights[i] })?.let { grid[it.first] }
+    }
 
     /** Le plus haut sommet nommé à moins de [radiusKm] du lieu. */
     fun highestPeak(latitude: Double, longitude: Double, peaks: List<Peak>, radiusKm: Double = SEARCH_RADIUS_KM): Peak? =
@@ -164,7 +177,7 @@ object Overpass {
     )
 
     fun peaksUrl(latitude: Double, longitude: Double, radiusKm: Double = Terrain.PEAK_RADIUS_KM, server: String = SERVERS.first()): String {
-        val query = "[out:json][timeout:60];node[\"natural\"=\"peak\"][\"name\"][\"ele\"]" +
+        val query = "[out:json][timeout:25];node[\"natural\"=\"peak\"][\"name\"][\"ele\"]" +
             "(around:${(radiusKm * 1000).roundToInt()},${"%.4f".format(java.util.Locale.ROOT, latitude)}," +
             "${"%.4f".format(java.util.Locale.ROOT, longitude)});out body;"
         return "$server?data=" + URLEncoder.encode(query, "UTF-8")
@@ -197,43 +210,58 @@ object Overpass {
 
 /**
  * Coupe du relief d'un lieu, gardée sur le téléphone : le relief ne change pas, on ne la télécharge qu'une fois.
- * Les sommets viennent d'Overpass ; sans eux, on prend le point culminant d'une grille d'altitudes.
+ * D'abord une coupe rapide ([quick], une seconde : deux appels à l'API d'altitude d'Open-Meteo) ; puis, avec les
+ * sommets nommés d'OpenStreetMap (Overpass, lent : [overpassGet]), la coupe définitive ([profile]).
  */
 class TerrainRepository(
     private val cacheDir: File,
     private val httpGet: (String) -> String,
+    private val overpassGet: (String) -> String = httpGet,
 ) {
-    suspend fun profile(place: Place): TerrainProfile = withContext(Dispatchers.IO) {
-        // « terrain2 » : coupes vers le sommet qui domine le lieu (avant : le plus haut à 25 km).
-        val file = File(cacheDir, "terrain2_${place.id}.json")
-        // Une coupe de moins d'un kilomètre (vers le lieu lui-même, quand il est un sommet) est refaite.
-        if (file.exists()) runCatching { decode(file.readText()) }.getOrNull()?.takeIf { it.lengthKm >= 1.0 }?.let { return@withContext it }
-        val peaks = peaks(place)
-        val ground = place.elevation ?: try {
-            OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(listOf(place.latitude to place.longitude)))).firstOrNull() ?: Double.NaN
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            Double.NaN
-        }
-        val target = Terrain.viewTarget(place.latitude, place.longitude, ground, peaks)
-        val (toLat, toLon) = if (target != null) {
-            target.latitude to target.longitude
-        } else {
-            val grid = Terrain.gridPoints(place.latitude, place.longitude)
-            val heights = OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(grid)))
-            // Le point culminant de la grille, à plus de 3 km (au sommet, la coupe ne reste pas sur place).
-            grid[
-                heights.indices.filter { Terrain.distanceKm(place.latitude, place.longitude, grid[it].first, grid[it].second) >= Terrain.MIN_VIEW_KM }
-                    .maxByOrNull { if (heights[it].isNaN()) -1e9 else heights[it] } ?: 0,
-            ]
-        }
+    private fun file(place: Place) = File(cacheDir, "terrain2_${place.id}.json")
+
+    /** La coupe déjà gardée (une coupe de moins d'un kilomètre, vers le lieu lui-même, est refaite). */
+    suspend fun cached(place: Place): TerrainProfile? = withContext(Dispatchers.IO) {
+        val file = file(place)
+        if (file.exists()) runCatching { decode(file.readText()) }.getOrNull()?.takeIf { it.lengthKm >= 1.0 } else null
+    }
+
+    private fun ground(place: Place): Double = place.elevation ?: try {
+        OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(listOf(place.latitude to place.longitude)))).firstOrNull() ?: Double.NaN
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        Double.NaN
+    }
+
+    /** Sans OpenStreetMap : vers le point d'une grille d'altitudes qui domine le lieu, sans noms de sommets. */
+    suspend fun quick(place: Place): TerrainProfile = withContext(Dispatchers.IO) {
+        val ground = ground(place)
+        val grid = Terrain.gridPoints(place.latitude, place.longitude, Terrain.QUICK_RADIUS_KM)
+        val heights = OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(grid)))
+        val (toLat, toLon) = Terrain.dominantPoint(place.latitude, place.longitude, ground, grid, heights) ?: grid.first()
         val line = Terrain.line(place.latitude, place.longitude, toLat, toLon)
-        val elevations = OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line)))
-        val profile = Terrain.build(line, elevations, target, peaks)
+        Terrain.build(line, OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line))), null, emptyList())
+    }
+
+    /**
+     * La coupe définitive, vers le sommet nommé qui domine le lieu, gardée sur le téléphone. Sans réponse
+     * d'OpenStreetMap, la coupe rapide [fallback] est gardée telle quelle.
+     */
+    suspend fun profile(place: Place, fallback: TerrainProfile? = null): TerrainProfile = withContext(Dispatchers.IO) {
+        cached(place)?.let { return@withContext it }
+        val peaks = peaks(place)
+        val ground = ground(place)
+        val target = Terrain.viewTarget(place.latitude, place.longitude, ground, peaks)
+        val profile = if (target == null) {
+            fallback ?: quick(place)
+        } else {
+            val line = Terrain.line(place.latitude, place.longitude, target.latitude, target.longitude)
+            Terrain.build(line, OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line))), target, peaks)
+        }
         cacheDir.mkdirs()
         cacheDir.listFiles { f -> f.name.startsWith("terrain_") }?.forEach { it.delete() }
-        file.writeText(encode(profile))
+        file(place).writeText(encode(profile))
         profile
     }
 
@@ -241,7 +269,7 @@ class TerrainRepository(
     private fun peaks(place: Place): List<Peak> {
         for (server in Overpass.SERVERS) {
             try {
-                return Overpass.parsePeaks(httpGet(Overpass.peaksUrl(place.latitude, place.longitude, server = server)))
+                return Overpass.parsePeaks(overpassGet(Overpass.peaksUrl(place.latitude, place.longitude, server = server)))
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {

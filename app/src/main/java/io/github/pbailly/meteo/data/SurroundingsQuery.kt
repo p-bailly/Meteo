@@ -11,6 +11,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.io.File
 import java.io.IOException
@@ -85,8 +86,10 @@ object SurroundingsQuery {
             }
         }
         fun count(k: Int) = counts.getOrElse(k) { 0 } > 0
+        val (settlement, population) = place(nodes)
         return Surroundings(
-            settlement = settlement(nodes),
+            settlement = settlement,
+            population = population,
             forest = count(0) || count(4),
             river = count(1),
             lake = count(2),
@@ -100,7 +103,10 @@ object SurroundingsQuery {
      * Le plus grand lieu habité qui couvre le lieu : une ville s'étend d'autant plus loin de son centre qu'elle est
      * peuplée (Paris sur 8 km, une ville de 50 000 habitants sur 2 km, un village sur 700 m).
      */
-    fun settlement(nodes: List<SettlementNode>): Settlement {
+    fun settlement(nodes: List<SettlementNode>): Settlement = place(nodes).first
+
+    /** Le lieu habité et sa population (estimée d'après son type quand OpenStreetMap ne la donne pas). */
+    fun place(nodes: List<SettlementNode>): Pair<Settlement, Long?> {
         val best = nodes.mapNotNull { n ->
             val people = n.population ?: when (n.kind) {
                 "city" -> 150_000L
@@ -110,20 +116,23 @@ object SurroundingsQuery {
                 else -> 5L
             }
             people.takeIf { n.distanceKm <= 0.6 + sqrt(people.toDouble()) / 180 }
-        }.maxOrNull() ?: return Settlement.NONE
-        return when {
+        }.maxOrNull() ?: return Settlement.NONE to null
+        val kind = when {
             best >= 50_000 -> Settlement.CITY
             best >= 2_000 -> Settlement.TOWN
             best >= 150 -> Settlement.VILLAGE
             else -> Settlement.HAMLET
         }
+        return kind to best
     }
 
     /**
      * Le lieu habité d'après le géocodeur d'Open-Meteo (recherche par nom, avec la population), quand OpenStreetMap ne
      * répond pas : le même calcul que pour les nœuds d'OpenStreetMap, sur les résultats proches du lieu.
      */
-    fun geocodedSettlement(body: String, latitude: Double, longitude: Double): Settlement? {
+    fun geocodedSettlement(body: String, latitude: Double, longitude: Double): Settlement? = geocoded(body, latitude, longitude)?.first
+
+    fun geocoded(body: String, latitude: Double, longitude: Double): Pair<Settlement, Long?>? {
         val results = Json.parseToJsonElement(body).jsonObject["results"] as? JsonArray ?: return null
         val nodes = results.mapNotNull { e ->
             val o = e.jsonObject
@@ -139,7 +148,7 @@ object SurroundingsQuery {
             }
             SettlementNode(kind, population, Terrain.distanceKm(latitude, longitude, lat, lon))
         }.filter { it.distanceKm <= 30 }
-        return if (nodes.isEmpty()) null else settlement(nodes)
+        return if (nodes.isEmpty()) null else place(nodes)
     }
 
     /** « 2165423 », « 2 165 423 », « 12,345 », « ~5000 » : le nombre d'habitants, ou null. */
@@ -153,22 +162,41 @@ object SurroundingsQuery {
 class SurroundingsRepository(
     private val cacheDir: File,
     private val httpGet: (String) -> String,
+    private val overpassGet: (String) -> String = httpGet,
 ) {
-    suspend fun of(place: Place): Surroundings = withContext(Dispatchers.IO) {
-        val file = File(cacheDir, "surroundings2_${place.id}.json")
-        if (file.exists()) {
-            val cached = runCatching { decode(file.readText()) }.getOrNull()
-            // Un repli (OpenStreetMap n'avait pas répondu) se garde quelques heures, puis on redemande.
-            if (cached != null && (!cached.second || System.currentTimeMillis() - file.lastModified() < PARTIAL_MAX_AGE_MS)) {
-                return@withContext cached.first
-            }
+    private fun file(place: Place) = File(cacheDir, "surroundings2_${place.id}.json")
+
+    /**
+     * Les environs déjà gardés, et s'il faut encore demander à OpenStreetMap : oui pour un repli (seulement la taille de
+     * la ville) de plus de quelques heures.
+     */
+    suspend fun cached(place: Place): Pair<Surroundings, Boolean>? = withContext(Dispatchers.IO) {
+        val file = file(place)
+        if (!file.exists()) return@withContext null
+        val (found, partial) = runCatching { decode(file.readText()) }.getOrNull() ?: return@withContext null
+        found to (partial && System.currentTimeMillis() - file.lastModified() >= PARTIAL_MAX_AGE_MS)
+    }
+
+    /** Vite, d'après le géocodeur d'Open-Meteo : seulement la taille de la ville (sa population). */
+    suspend fun quick(place: Place): Surroundings = withContext(Dispatchers.IO) {
+        val (settlement, population) = SurroundingsQuery.geocoded(httpGet(OpenMeteoApi.searchUrl(place.name)), place.latitude, place.longitude)
+            ?: throw IOException("Lieu inconnu du géocodeur")
+        val partial = Surroundings(settlement, population = population)
+        if (!file(place).exists()) {
+            cacheDir.mkdirs()
+            file(place).writeText(encode(partial, partial = true))
         }
+        partial
+    }
+
+    /** Tout, d'après OpenStreetMap (lent : 15 à 25 s), sur le premier serveur qui répond ; gardé sur le téléphone. */
+    suspend fun full(place: Place): Surroundings = withContext(Dispatchers.IO) {
         var failure: Exception = IOException("Aucun serveur Overpass ne répond")
         for (server in Overpass.SERVERS) {
             try {
-                val found = SurroundingsQuery.parse(httpGet(SurroundingsQuery.url(place.latitude, place.longitude, server)), place.latitude, place.longitude)
+                val found = SurroundingsQuery.parse(overpassGet(SurroundingsQuery.url(place.latitude, place.longitude, server)), place.latitude, place.longitude)
                 cacheDir.mkdirs()
-                file.writeText(encode(found, partial = false))
+                file(place).writeText(encode(found, partial = false))
                 return@withContext found
             } catch (e: CancellationException) {
                 throw e
@@ -176,18 +204,9 @@ class SurroundingsRepository(
                 failure = e
             }
         }
-        // OpenStreetMap ne répond pas : au moins la taille de la ville, d'après le géocodeur d'Open-Meteo.
-        val settlement = try {
-            SurroundingsQuery.geocodedSettlement(httpGet(OpenMeteoApi.searchUrl(place.name)), place.latitude, place.longitude)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (_: Exception) {
-            null
-        } ?: throw failure
-        val partial = Surroundings(settlement)
-        cacheDir.mkdirs()
-        file.writeText(encode(partial, partial = true))
-        partial
+        // Le repli est redemandé plus tard : on rafraîchit sa date.
+        file(place).takeIf { it.exists() }?.setLastModified(System.currentTimeMillis())
+        throw failure
     }
 
     private fun encode(s: Surroundings, partial: Boolean): String = buildJsonObject {
@@ -199,6 +218,7 @@ class SurroundingsRepository(
         put("coast", s.coast)
         put("island", s.island)
         put("ski", s.ski)
+        s.population?.let { put("population", it) }
     }.toString()
 
     /** Les environs gardés, et s'ils viennent du repli. */
@@ -213,6 +233,7 @@ class SurroundingsRepository(
             coast = flag("coast"),
             island = flag("island"),
             ski = flag("ski"),
+            population = o["population"]?.jsonPrimitive?.longOrNull,
         ) to flag("partial")
     }
 

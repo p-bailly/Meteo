@@ -51,7 +51,8 @@ class SketchSceneTest {
         assertEquals(a.surprises, b.surprises)
         assertTrue(SketchScenes.scene(0, true, time, placeSeed = 42, variant = 1).seed != a.seed)
         // Au fil des jours, le décor change (village, sapins…), sans sortir de ce que le relief permet.
-        val decors = (0L until 60L).map { SketchScenes.scene(0, true, time.plusDays(it), placeSeed = 42).decor }.toSet()
+        val plain = SketchTerrains.from(profile("paris"), 10, snowing = false)
+        val decors = (0L until 60L).map { SketchScenes.scene(0, true, time.plusDays(it), placeSeed = 42, terrain = plain).decor }.toSet()
         assertTrue(decors.size >= 2)
     }
 
@@ -85,8 +86,12 @@ class SketchSceneTest {
         // Le Mont Blanc monte presque en haut du dessin ; Paris reste plat.
         assertTrue(terrain("chamonix").ridge.maxOf { it.second } > 0.25f)
         assertTrue(terrain("paris").ridge.maxOf { it.second } < 0.05f)
-        // Sans coupe (pas encore chargée), des collines.
-        assertEquals(Relief.LOW, SketchTerrains.from(null, 10, snowing = false).relief)
+        // Sans coupe (pas encore chargée), un sol plat, sans décor inventé.
+        val unknown = SketchTerrains.from(null, 10, snowing = false)
+        assertEquals(Relief.PLAIN, unknown.relief)
+        assertTrue(SketchScenes.scene(0, true, LocalDateTime.of(2026, 6, 1, 14, 0), 3, unknown).decor.isEmpty())
+        // Asnans-Beauvoisin, dans la plaine du Doubs : la coupe va jusqu'au Jura, à 57 km, mais on est en plaine.
+        assertEquals(Relief.PLAIN, terrain("asnans").relief)
     }
 
     /** Une coupe inventée : un sommet pointu au lieu même, les vallées 900 m plus bas des deux côtés. */
@@ -278,6 +283,17 @@ class SketchSceneTest {
     }
 
     @Test
+    fun `the bigger the population the bigger the town`() {
+        val day = LocalDateTime.of(2026, 6, 10, 14, 0)
+        val plain = SketchTerrains.from(profile("paris"), 6, snowing = false)
+        fun half(settlement: Settlement, people: Long) =
+            SketchScenes.scene(0, true, day, 3, plain, around = Surroundings(settlement, population = people)).layout!!.half
+        assertTrue(half(Settlement.CITY, 8_800_000) > half(Settlement.CITY, 60_000))
+        assertTrue(half(Settlement.TOWN, 40_000) > half(Settlement.TOWN, 2_500))
+        assertTrue(half(Settlement.VILLAGE, 1_800) > half(Settlement.VILLAGE, 200))
+    }
+
+    @Test
     fun `light follows sunrise and sunset`() {
         val rise = LocalDateTime.of(2026, 10, 20, 7, 30)
         val set = LocalDateTime.of(2026, 10, 20, 18, 30)
@@ -326,9 +342,10 @@ class SketchSceneTest {
         assertEquals(Landmark.EIFFEL_TOWER, Landmark.near(48.8566, 2.3522))
         assertEquals(Landmark.FOURVIERE, Landmark.near(45.7640, 4.8357))
         assertEquals(null, Landmark.near(47.0577, 6.5664))
-        val paris = SketchScenes.scene(0, true, days[0], 3, around = Surroundings(Settlement.CITY), landmark = Landmark.EIFFEL_TOWER)
+        val plain = SketchTerrains.from(profile("paris"), 7, false)
+        val paris = SketchScenes.scene(0, true, days[0], 3, plain, around = Surroundings(Settlement.CITY), landmark = Landmark.EIFFEL_TOWER)
         assertEquals(Landmark.EIFFEL_TOWER, paris.landmark)
-        assertEquals(null, SketchScenes.scene(0, true, days[0], 3, around = Surroundings(Settlement.VILLAGE), landmark = Landmark.EIFFEL_TOWER).landmark)
+        assertEquals(null, SketchScenes.scene(0, true, days[0], 3, plain, around = Surroundings(Settlement.VILLAGE), landmark = Landmark.EIFFEL_TOWER).landmark)
     }
 
     @Test

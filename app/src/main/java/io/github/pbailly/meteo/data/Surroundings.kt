@@ -16,4 +16,6 @@ data class Surroundings(
     val island: Boolean = false,
     /** Une station de ski : remontées mécaniques ou pistes de descente tout près. */
     val ski: Boolean = false,
+    /** Habitants du lieu habité (la taille de la ville dessinée en dépend). */
+    val population: Long? = null,
 )

@@ -92,8 +92,8 @@ data class MeteoUiState(
 class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = WeatherRepository(File(app.cacheDir, "openmeteo"))
     // Overpass répond lentement : ces deux-là attendent plus longtemps (slowHttpGet).
-    private val terrainRepository = TerrainRepository(File(app.filesDir, "terrain"), ::slowHttpGet)
-    private val surroundingsRepository = SurroundingsRepository(File(app.filesDir, "terrain"), ::slowHttpGet)
+    private val terrainRepository = TerrainRepository(File(app.filesDir, "terrain"), repository.httpGet, ::slowHttpGet)
+    private val surroundingsRepository = SurroundingsRepository(File(app.filesDir, "terrain"), repository.httpGet, ::slowHttpGet)
     private val airRepository = AirQualityRepository(File(app.cacheDir, "air"), repository.httpGet)
     private val store = PlacesStore(app)
     private val settings = SettingsStore(app)
@@ -329,29 +329,44 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Le relief ne change pas : la coupe est gardée sur le téléphone après le premier téléchargement. */
+    /**
+     * Le relief et les environs, pour le dessin. Ils ne changent pas : gardés sur le téléphone. La première fois, une
+     * coupe rapide et la taille de la ville (Open-Meteo, une seconde) dessinent tout de suite ; OpenStreetMap, lent,
+     * complète ensuite (sommets nommés, forêt, rivière, ski…). Les deux demandes à OpenStreetMap partent en même temps.
+     */
     private fun loadTerrain(place: Place) {
         terrainJob?.cancel()
         _state.update { it.copy(terrain = it.terrain.copy(loading = true, error = null)) }
+        fun setTerrain(result: Result<TerrainProfile>) = _state.update { state ->
+            if (state.place?.id != place.id) return@update state
+            result.fold(
+                onSuccess = { state.copy(terrain = Remote(it, System.currentTimeMillis())) },
+                onFailure = { if (state.terrain.data != null) state else state.copy(terrain = Remote(error = (it as Exception).userMessage())) },
+            )
+        }
+        fun setSurroundings(result: Result<Surroundings>) = _state.update { state ->
+            if (state.place?.id != place.id) return@update state
+            result.fold(
+                onSuccess = { state.copy(surroundings = Remote(it, System.currentTimeMillis())) },
+                onFailure = { if (state.surroundings.data != null) state else state.copy(surroundings = Remote(error = (it as Exception).userMessage())) },
+            )
+        }
         terrainJob = viewModelScope.launch {
-            val result = runLoading { terrainRepository.profile(place) }
-            _state.update { state ->
-                if (state.place?.id != place.id) return@update state
-                result.fold(
-                    onSuccess = { state.copy(terrain = Remote(it, System.currentTimeMillis())) },
-                    onFailure = { state.copy(terrain = Remote(error = (it as Exception).userMessage())) },
-                )
+            launch {
+                val cached = runCatching { surroundingsRepository.cached(place) }.getOrNull()
+                if (cached != null) setSurroundings(Result.success(cached.first))
+                if (cached != null && !cached.second) return@launch
+                if (cached == null) setSurroundings(runLoading { surroundingsRepository.quick(place) })
+                setSurroundings(runLoading { surroundingsRepository.full(place) })
             }
-            // Puis ce qui entoure le lieu, aussi d'OpenStreetMap : après la coupe, pour ne pas charger Overpass deux fois
-            // en même temps. Sans lui, le dessin choisit son décor d'après le seul relief.
-            val around = runLoading { surroundingsRepository.of(place) }
-            _state.update { state ->
-                if (state.place?.id != place.id) return@update state
-                around.fold(
-                    onSuccess = { state.copy(surroundings = Remote(it, System.currentTimeMillis())) },
-                    onFailure = { state.copy(surroundings = Remote(error = (it as Exception).userMessage())) },
-                )
+            val cached = runCatching { terrainRepository.cached(place) }.getOrNull()
+            if (cached != null) {
+                setTerrain(Result.success(cached))
+                return@launch
             }
+            val quick = runLoading { terrainRepository.quick(place) }
+            setTerrain(quick)
+            setTerrain(runLoading { terrainRepository.profile(place, quick.getOrNull()) })
         }
     }
 
