@@ -36,6 +36,22 @@ internal fun DrawScope.drawScene(pencil: Pencil, scene: SketchScene, isDay: Bool
     val celestial = Offset(w * 0.57f, h * 0.47f)
     fun light(at: Offset, radius: Float, rays: Rays = Rays.STRAIGHT) =
         if (isDay) sun(pencil, at, radius, rays) else moon(pencil, at, radius, moonAge, southern)
+    // Les nuages à leur hauteur : plus bas quand ce sont des nuages bas (ils accrochent les sommets).
+    val drop = scene.cloudDrop
+    fun cloudAt(x: Float, y: Float, width: Float, shade: Float) = cloud(pencil, Offset(w * x, h * (y + drop)), width * u, shade)
+    // Au sommet, les nuages bas sont en dessous : une mer de nuages.
+    val belowSummit = scene.terrain.relief == Relief.SUMMIT && scene.lowClouds && (scene.clouds?.mid ?: 1f) < 0.3f &&
+        scene.sky in setOf(SketchSky.PARTLY, SketchSky.CLOUDY)
+    // Des cirrus très haut, par beau temps.
+    if ((scene.clouds?.high ?: 0f) >= 0.4f && scene.sky in setOf(SketchSky.CLEAR, SketchSky.PARTLY)) {
+        cirrus(pencil, Offset(w * 0.66f, h * 0.38f), w * 0.13f)
+    }
+    if (belowSummit) {
+        seaOfClouds(pencil, scene.terrain, w, h)
+        light(celestial + Offset(0f, -6f * u), 14f * u)
+        surprises(pencil, scene, w, h)
+        return
+    }
     when (scene.sky) {
         SketchSky.CLEAR -> if (isDay) {
             when (v) {
@@ -53,34 +69,39 @@ internal fun DrawScope.drawScene(pencil: Pencil, scene: SketchScene, isDay: Bool
         SketchSky.PARTLY -> when (v) {
             0 -> {
                 light(celestial + Offset(-12f * u, -6f * u), 14f * u)
-                cloud(pencil, Offset(w * 0.61f, h * 0.55f), 68f * u, shade = 0.5f)
+                cloudAt(0.61f, 0.55f, 68f, shade = 0.5f)
             }
             // Le nuage passe devant, à gauche.
             1 -> {
                 light(celestial + Offset(14f * u, -5f * u), 14f * u)
-                cloud(pencil, Offset(w * 0.52f, h * 0.56f), 60f * u, shade = 0.45f)
+                cloudAt(0.52f, 0.56f, 60f, shade = 0.45f)
             }
             // Deux petits cumulus de beau temps, le soleil entre eux.
             else -> {
                 light(celestial + Offset(0f, -3f * u), 13f * u)
-                cloud(pencil, Offset(w * 0.45f, h * 0.55f), 44f * u, shade = 0.35f)
-                cloud(pencil, Offset(w * 0.70f, h * 0.53f), 52f * u, shade = 0.45f)
+                cloudAt(0.45f, 0.55f, 44f, shade = 0.35f)
+                cloudAt(0.70f, 0.53f, 52f, shade = 0.45f)
             }
         }
-        SketchSky.CLOUDY -> when (v) {
+        // Un voile de nuages hauts : le soleil pâle au travers, une couche fine tout en haut.
+        SketchSky.CLOUDY -> if (scene.highVeil) {
+            light(celestial + Offset(0f, 4f * u), 13f * u, Rays.NONE)
+            stratus(pencil, w * 0.39f, w * 0.80f, h * 0.40f, 6f * u)
+            cirrus(pencil, Offset(w * 0.42f, h * 0.55f), w * 0.12f)
+        } else when (v) {
             0 -> {
-                cloud(pencil, Offset(w * 0.50f, h * 0.47f), 72f * u, shade = 0.7f)
-                cloud(pencil, Offset(w * 0.64f, h * 0.56f), 84f * u, shade = 0.9f)
+                cloudAt(0.50f, 0.47f, 72f, shade = 0.7f)
+                cloudAt(0.64f, 0.56f, 84f, shade = 0.9f)
             }
             1 -> {
-                cloud(pencil, Offset(w * 0.45f, h * 0.47f), 58f * u, shade = 0.6f)
-                cloud(pencil, Offset(w * 0.71f, h * 0.46f), 64f * u, shade = 0.7f)
-                cloud(pencil, Offset(w * 0.58f, h * 0.56f), 86f * u, shade = 0.95f)
+                cloudAt(0.45f, 0.47f, 58f, shade = 0.6f)
+                cloudAt(0.71f, 0.46f, 64f, shade = 0.7f)
+                cloudAt(0.58f, 0.56f, 86f, shade = 0.95f)
             }
             // Ciel couvert : une couche grise d'un bord à l'autre, et un nuage plus bas devant.
             else -> {
-                stratus(pencil, w * 0.39f, w * 0.80f, h * 0.45f, 9f * u)
-                cloud(pencil, Offset(w * 0.60f, h * 0.57f), 70f * u, shade = 0.8f)
+                stratus(pencil, w * 0.39f, w * 0.80f, h * (0.45f + drop), 9f * u)
+                cloudAt(0.60f, 0.57f, 70f, shade = 0.8f)
             }
         }
         SketchSky.FOG -> {
@@ -113,6 +134,9 @@ private fun DrawScope.precipitation(pencil: Pencil, scene: SketchScene, isDay: B
     val wx = scene.weather
     val storm = scene.sky == SketchSky.STORM
     val dense = if (storm) 1.6f else 0.75f + 0.3f * wx.intensity
+    // Nuages bas : nuages, pluie et éclairs descendent ensemble (pas pour l'averse et son arc-en-ciel).
+    val drop = if (Surprise.RAINBOW in scene.surprises) 0f else scene.cloudDrop
+    fun cloudAt(x: Float, y: Float, width: Float, shade: Float) = cloud(pencil, Offset(w * x, h * (y + drop)), width * u, shade)
     var from = 0.42f
     var to = 0.66f
     when {
@@ -123,39 +147,39 @@ private fun DrawScope.precipitation(pencil: Pencil, scene: SketchScene, isDay: B
             to = 0.58f
         }
         storm && v == 2 -> {
-            cumulonimbus(pencil, Offset(w * 0.57f, h * 0.57f), 88f * u)
+            cumulonimbus(pencil, Offset(w * 0.57f, h * (0.57f + drop)), 88f * u)
             from = 0.47f
             to = 0.68f
         }
         wx.showers && !storm -> {
             // Averse : un gros nuage, et le soleil (ou la lune) qui perce à côté.
             if (v != 2) {
-                if (isDay) sun(pencil, Offset(w * 0.70f, h * 0.45f), 11f * u, Rays.SHORT) else moon(pencil, Offset(w * 0.71f, h * 0.45f), 11f * u, moonAge, southern)
+                if (isDay) sun(pencil, Offset(w * 0.70f, h * (0.45f + drop)), 11f * u, Rays.SHORT) else moon(pencil, Offset(w * 0.71f, h * (0.45f + drop)), 11f * u, moonAge, southern)
             }
-            cloud(pencil, Offset(w * 0.53f, h * 0.47f), 80f * u, shade = dense)
+            cloudAt(0.53f, 0.47f, 80f, shade = dense)
             from = 0.44f
             to = 0.62f
         }
         else -> {
-            cloud(pencil, Offset(w * 0.50f, h * 0.44f), 72f * u, shade = dense)
-            cloud(pencil, Offset(w * 0.64f, h * 0.50f), 84f * u, shade = dense)
-            if (wx.intensity == 2 && v == 1) cloud(pencil, Offset(w * 0.42f, h * 0.52f), 50f * u, shade = dense)
+            cloudAt(0.50f, 0.44f, 72f, shade = dense)
+            cloudAt(0.64f, 0.50f, 84f, shade = dense)
+            if (wx.intensity == 2 && v == 1) cloudAt(0.42f, 0.52f, 50f, shade = dense)
         }
     }
     when (scene.sky) {
-        SketchSky.SNOW -> snow(pencil, w, h, from, to, wx, v)
+        SketchSky.SNOW -> snow(pencil, w, h, from, to, wx, v, drop)
         SketchSky.STORM -> {
-            rain(pencil, w, h, from, to, wx, style = if (v == 1) 1 else 0)
+            rain(pencil, w, h, from, to, wx, style = if (v == 1) 1 else 0, drop = drop)
             when (v) {
-                0 -> lightning(pencil, Offset(w * 0.58f, h * 0.60f), 34f * u)
+                0 -> lightning(pencil, Offset(w * 0.58f, h * (0.60f + drop)), 34f * u)
                 1 -> {
-                    lightning(pencil, Offset(w * 0.50f, h * 0.58f), 28f * u)
-                    lightning(pencil, Offset(w * 0.68f, h * 0.62f), 32f * u)
+                    lightning(pencil, Offset(w * 0.50f, h * (0.58f + drop)), 28f * u)
+                    lightning(pencil, Offset(w * 0.68f, h * (0.62f + drop)), 32f * u)
                 }
-                else -> lightning(pencil, Offset(w * 0.57f, h * 0.62f), 38f * u, forked = true)
+                else -> lightning(pencil, Offset(w * 0.57f, h * (0.62f + drop)), 38f * u, forked = true)
             }
         }
-        else -> rain(pencil, w, h, from, to, wx, style = v)
+        else -> rain(pencil, w, h, from, to, wx, style = v, drop = drop)
     }
 }
 
@@ -462,7 +486,7 @@ private fun DrawScope.cumulonimbus(pencil: Pencil, center: Offset, width: Float)
  * Pluie, de la bruine à la pluie forte : [style] 0 en traits obliques, 1 chassée par le vent, 2 en gouttes avec des
  * ronds dans les flaques. Verglaçante : quelques cristaux de glace parmi les gouttes.
  */
-private fun DrawScope.rain(pencil: Pencil, w: Float, h: Float, from: Float, to: Float, wx: SketchWeather, style: Int) {
+private fun DrawScope.rain(pencil: Pencil, w: Float, h: Float, from: Float, to: Float, wx: SketchWeather, style: Int, drop: Float = 0f) {
     val u = density
     val blue = pencil.ink(Crayon.RAIN)
     if (wx.drizzle) {
@@ -471,14 +495,14 @@ private fun DrawScope.rain(pencil: Pencil, w: Float, h: Float, from: Float, to: 
         var x = from
         while (x <= to) {
             for (row in 0..2) {
-                val y = h * (0.61f + 0.045f * row + if (k % 2 == 0) 0f else 0.02f)
+                val y = h * (0.61f + drop + 0.045f * row + if (k % 2 == 0) 0f else 0.02f)
                 val p = Offset(w * x + pencil.jitter(2f), y)
                 blue.line(p, p + Offset(-1f * u, 3f * u), width = 1f, passes = 1, wobble = 0.1f)
             }
             x += 0.018f
             k++
         }
-        if (wx.freezing) iceCrystals(pencil, w, h, from, to)
+        if (wx.freezing) iceCrystals(pencil, w, h, from, to, drop)
         return
     }
     val spacing = listOf(0.032f, 0.024f, 0.018f)[wx.intensity]
@@ -490,7 +514,7 @@ private fun DrawScope.rain(pencil: Pencil, w: Float, h: Float, from: Float, to: 
     while (x <= to) {
         for (row in 0 until rows) {
             if ((row + k) % 2 == 1 && rows == 2) continue
-            val p = Offset(w * x + pencil.jitter(3f), h * (0.61f + 0.065f * row))
+            val p = Offset(w * x + pencil.jitter(3f), h * (0.61f + drop + 0.065f * row))
             if (style == 2) drop(pencil, p, (1.8f + 0.4f * wx.intensity) * u) else blue.line(p, p + Offset(-slant, length), passes = 1, width = 1.2f)
         }
         x += spacing
@@ -518,7 +542,7 @@ private fun DrawScope.rain(pencil: Pencil, w: Float, h: Float, from: Float, to: 
             blue.outline(Path().apply { addOval(Rect(c.x - 2.4f * u, c.y - 0.7f * u, c.x + 2.4f * u, c.y + 0.7f * u)) }, width = 0.6f, passes = 1)
         }
     }
-    if (wx.freezing) iceCrystals(pencil, w, h, from, to)
+    if (wx.freezing) iceCrystals(pencil, w, h, from, to, drop)
 }
 
 /** Une goutte d'eau : pointue en haut, ronde en bas. */
@@ -535,11 +559,11 @@ private fun DrawScope.drop(pencil: Pencil, top: Offset, r: Float) {
 }
 
 /** Pluie verglaçante : de petits cristaux de glace parmi les gouttes. */
-private fun DrawScope.iceCrystals(pencil: Pencil, w: Float, h: Float, from: Float, to: Float) {
+private fun DrawScope.iceCrystals(pencil: Pencil, w: Float, h: Float, from: Float, to: Float, drop: Float) {
     var x = from + 0.012f
     var k = 0
     while (x < to) {
-        flake(pencil, Offset(w * x, h * (0.70f + if (k % 2 == 0) 0f else 0.04f)), 2.4f * density, branches = false)
+        flake(pencil, Offset(w * x, h * (0.70f + drop + if (k % 2 == 0) 0f else 0.04f)), 2.4f * density, branches = false)
         x += 0.06f
         k++
     }
@@ -567,12 +591,12 @@ private fun DrawScope.flake(pencil: Pencil, c: Offset, r: Float, branches: Boole
  * Neige : [variant] 0 en petits flocons étoilés, 1 en gros flocons à branches, 2 en flocons ronds ; plus ou moins
  * serrée selon l'intensité. Neige en grains : des points.
  */
-private fun DrawScope.snow(pencil: Pencil, w: Float, h: Float, from: Float, to: Float, wx: SketchWeather, variant: Int) {
+private fun DrawScope.snow(pencil: Pencil, w: Float, h: Float, from: Float, to: Float, wx: SketchWeather, variant: Int, drop: Float = 0f) {
     val u = density
     val count = listOf(7, 10, 15)[wx.intensity] + if (variant == 2) 4 else if (variant == 1) -3 else 0
     val step = (to - from) / count
     for (k in 0 until count) {
-        val c = Offset(w * (from + step * (k + 0.5f)) + pencil.jitter(4f), h * (0.63f + (k % 3) * 0.045f) + pencil.jitter(2f))
+        val c = Offset(w * (from + step * (k + 0.5f)) + pencil.jitter(4f), h * (0.63f + drop + (k % 3) * 0.045f) + pencil.jitter(2f))
         when {
             wx.grains -> pencil.ink(Crayon.SNOW).dot(c, 1.1f)
             variant == 1 -> flake(pencil, c, 5.2f * u, branches = true)

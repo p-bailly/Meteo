@@ -18,7 +18,7 @@ ACCENT = HexColor("#E8711C")
 MARGIN = 36
 GAP = 14
 COLUMNS = 2
-IMAGE_RATIO = 215 / 411
+IMAGE_RATIO = 259 / 411
 
 
 def main(source: str, target: str) -> None:
@@ -46,6 +46,8 @@ def main(source: str, target: str) -> None:
         ("5 à 8. Le temps", "chaque ciel en trois versions (une autre chaque jour, et à chaque fois qu'on touche le dessin), "
          "plus ou moins fort selon le code météo : bruine, pluie faible à forte, verglaçante, averses, neige en petits ou "
          "gros flocons, en grains, orage simple, double ou sous un cumulonimbus, brouillard de vallée, mer de nuages."),
+        ("6 bis. Les nuages", "à leur hauteur d'après la prévision de l'heure : les nuages bas coiffent les sommets (ou "
+         "font une mer de nuages sous le sommet), les moyens restent à leur place, les hauts ne sont qu'un voile ou des cirrus."),
         ("9. Les surprises", "fêtes et petits clins d'œil, comme avant."),
         ("10. Thème sombre", "et les cas où l'appli ne connaît pas encore les environs, ou pas le relief."),
     ]

@@ -31,7 +31,7 @@ import kotlin.random.Random
 
 /** Taille du haut d'Aujourd'hui sur un téléphone courant, en dp, et finesse des images. */
 private const val WIDTH_DP = 411
-private const val HEIGHT_DP = 215
+private const val HEIGHT_DP = 259
 private const val DENSITY = 2.5f
 
 private class Spot(val name: String, val label: String, val profile: TerrainProfile?, val latitude: Double, val around: Surroundings?)
@@ -47,6 +47,7 @@ private class Item(
     val dark: Boolean = false,
     val temperature: Int = 12,
     val taps: Int = 0,
+    val clouds: SketchClouds? = null,
 )
 
 /** Lecture des coupes de test (format simple, sans bibliothèque JSON). */
@@ -114,8 +115,8 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
     val winter = LocalDateTime.of(2027, 1, 19, 14, 0)
     val spring = LocalDateTime.of(2027, 4, 22, 11, 0)
     val nightTime = LocalDateTime.of(2026, 10, 22, 22, 0)
-    fun add(section: String, caption: String, spot: String, code: Int, time: LocalDateTime = summer, isDay: Boolean = time.hour in 8..19, sky: Int? = null, dark: Boolean = !isDay, temperature: Int = 12, taps: Int = 0) {
-        items += Item(section, caption, s.getValue(spot), code, time, isDay, sky, dark, temperature, taps)
+    fun add(section: String, caption: String, spot: String, code: Int, time: LocalDateTime = summer, isDay: Boolean = time.hour in 8..19, sky: Int? = null, dark: Boolean = !isDay, temperature: Int = 12, taps: Int = 0, clouds: SketchClouds? = null) {
+        items += Item(section, caption, s.getValue(spot), code, time, isDay, sky, dark, temperature, taps, clouds)
     }
 
     var section = "1. Le relief : de la plaine au sommet"
@@ -175,6 +176,21 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
     add(section, "Brouillard de vallée en montagne", "chamonix", 45, autumn, sky = 1, temperature = 3)
     add(section, "Mer de nuages, vue du sommet", "sommet", 45, autumn, sky = 0, temperature = 8)
 
+    section = "6 bis. La hauteur des nuages (prévision bas, moyens, hauts)"
+    val low = SketchClouds(0.9f, 0.2f, 0f)
+    val middle = SketchClouds(0.1f, 0.9f, 0.2f)
+    val high = SketchClouds(0f, 0.1f, 0.9f)
+    add(section, "Couvert, nuages moyens : à leur place", "chamonix", 3, autumn, sky = 0, clouds = middle)
+    add(section, "Couvert, nuages bas : ils coiffent les sommets", "chamonix", 3, autumn, sky = 0, clouds = low)
+    add(section, "Pluie sous des nuages moyens", "haute", 63, autumn, sky = 0, clouds = middle)
+    add(section, "Pluie sous des nuages bas accrochés aux sommets", "haute", 63, autumn, sky = 0, clouds = low)
+    add(section, "Neige, nuages bas sur le Jura", "jura", 73, winter, sky = 0, temperature = -2, clouds = low)
+    add(section, "Nuages bas en plaine : un peu plus bas", "paris", 3, autumn, sky = 1, clouds = low)
+    add(section, "Voile de nuages hauts : le soleil pâle au travers", "bourg", 3, autumn, clouds = high)
+    add(section, "Beau temps et cirrus très haut", "morvan", 1, summer, sky = 0, clouds = SketchClouds(0f, 0f, 0.6f), temperature = 25)
+    add(section, "Au sommet, nuages bas : la mer de nuages en dessous", "sommet", 3, autumn, sky = 0, clouds = low, temperature = 4)
+    add(section, "Au sommet, nuages moyens : au-dessus de la croix", "sommet", 3, autumn, sky = 1, clouds = middle, temperature = 2)
+
     section = "7. Pluie et neige, de faible à forte"
     add(section, "Bruine", "paris", 53, autumn, sky = 0)
     add(section, "Pluie verglaçante", "jura", 66, winter, sky = 0, temperature = -1)
@@ -221,7 +237,7 @@ private fun sceneOf(item: Item): Pair<SketchTerrain, SketchScene> {
     val snowing = SketchSky.of(item.code) == SketchSky.SNOW
     val terrain = SketchTerrains.from(item.spot.profile, month, snowing, item.spot.latitude, item.spot.around)
     val seed = item.spot.name.hashCode()
-    fun at(taps: Int) = SketchScenes.scene(item.code, item.isDay, item.time, seed, terrain, taps, item.spot.around)
+    fun at(taps: Int) = SketchScenes.scene(item.code, item.isDay, item.time, seed, terrain, taps, item.spot.around, item.clouds)
     val scene = if (item.sky == null) {
         at(item.taps)
     } else {
@@ -232,6 +248,9 @@ private fun sceneOf(item: Item): Pair<SketchTerrain, SketchScene> {
 
 private val fontDir = File("../../app/src/main/res/font")
 private fun font(name: String, size: Float) = Font(FontMgr.default.makeFromFile(File(fontDir, "$name.ttf").path), size * DENSITY)
+
+/** Les symboles de la maquette (la montagne de la pastille, l'étoile), absents des polices de l'appli. */
+private fun symbols(size: Float) = Font(FontMgr.default.matchFamilyStyle("DejaVu Sans", org.jetbrains.skia.FontStyle.NORMAL), size * DENSITY)
 
 /** Faux texte de l'écran, aux places et tailles de l'appli : le lieu, la grande température, le ciel, les extrêmes. */
 private fun overlay(canvas: Canvas, item: Item, width: Float) {
@@ -244,6 +263,15 @@ private fun overlay(canvas: Canvas, item: Item, width: Float) {
     c.drawString(item.spot.label.substringBefore(" :"), dp(18), dp(30), font("archivo_semibold", 22f), ink)
     c.drawString(item.spot.label.substringAfter(": ", "").substringBefore(",").substringBefore(" ·"), dp(18), dp(47), font("archivo_regular", 12f), soft)
     c.drawString("Mis à jour il y a 5 min", dp(18), dp(66), font("martian_mono_condensed_regular", 10f), soft)
+    // La pastille Neige & altitude, à gauche de l'étoile des favoris (à la saison de la neige).
+    if (item.time.monthValue !in 4..9) {
+        val chip = org.jetbrains.skia.Rect.makeXYWH(width - dp(168), dp(18), dp(102), dp(30))
+        val line = org.jetbrains.skia.Paint().apply { color = soft.color; mode = org.jetbrains.skia.PaintMode.STROKE; strokeWidth = dp(1); isAntiAlias = true }
+        c.drawRRect(org.jetbrains.skia.RRect.makeLTRB(chip.left, chip.top, chip.right, chip.bottom, dp(14)), line)
+        c.drawString("▲", chip.left + dp(8), chip.top + dp(20), symbols(13f), blue)
+        c.drawString("0° 1 800 m", chip.left + dp(25), chip.top + dp(20), font("martian_mono_condensed_medium", 11f), blue)
+    }
+    c.drawString("☆", width - dp(50), dp(44), symbols(28f), soft)
     val big = font("archivo_condensed_light", 112f)
     val temp = item.temperature.toString().replace("-", "−")
     c.drawString(temp, dp(18), dp(168), big, ink)

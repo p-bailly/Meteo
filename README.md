@@ -25,7 +25,7 @@ la carte) :
   (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel en toutes
   lettres (sans pictogramme), les extrêmes du jour (maxi en orange, mini en bleu) et leur **écart aux normales** de
   saison (« +2° vs normales », moyennes 1991-2020) ; en fond, un **dessin aux crayons de couleur** du lieu tel qu'il
-  est, puis du temps qu'il fait. D'abord **où l'on est**, d'après la coupe du terrain vers le sommet qui domine le lieu :
+  est, puis du temps qu'il fait, qui descend sous le texte pour qu'on voie bien le village, la rivière ou les champs. D'abord **où l'on est**, d'après la coupe du terrain vers le sommet qui domine le lieu :
   en plaine (champs en parcelles selon la saison, haies), en basse montagne (sommets sous 1 200 m : croupes de feuillus,
   vertes, rousses à l'automne, nues l'hiver), en moyenne montagne (jusqu'à 2 500 m, ou un lieu déjà à 700 m : prés,
   sapins, alpages), en haute montagne (jusqu'à 3 500 m : forêt, roche, neige), en très haute montagne (aiguilles,
@@ -36,12 +36,13 @@ la carte) :
   fenêtres allumées la nuit), petite ville, village (clocher comtois ou à flèche), hameau, ferme isolée, chalet, ou
   refuge au-dessus des arbres. Enfin **le temps**, chaque ciel en trois versions et plus ou moins fort selon la
   prévision : soleil, lune dans sa vraie phase et étoiles (ou la Grande Ourse, ou la Voie lactée), éclaircies, ciel
-  couvert, brouillard (ou brouillard de vallée, mer de nuages vue du sommet), bruine, pluie faible à forte (en traits,
+  couvert, les nuages à leur hauteur d'après la prévision (les nuages bas coiffent les sommets, ou font une mer de
+  nuages sous le sommet ; les hauts ne sont qu'un voile ou des cirrus), brouillard (ou brouillard de vallée), bruine, pluie faible à forte (en traits,
   chassée par le vent, ou en gouttes et flaques), pluie verglaçante, averses, neige en petits ou gros flocons ou en
   grains, orage (un ou deux éclairs, ou un cumulonimbus) ; parfois une petite surprise selon le temps ou certains jours
   de fête — et toucher le dessin en montre une autre version (toutes les combinaisons : `design/dessins/coloriages.pdf`) ;
-  de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
-  (avec l'iso 0 °C actuel) qui ouvre la page du même nom ; vent, rafales, humidité, pression (et sa tendance),
+  de la mi-octobre à la mi-mars, une pastille **Neige & altitude** dans l'en-tête, à côté de l'étoile (une montagne et
+  l'iso 0 °C actuel), qui ouvre la page du même nom ; vent, rafales, humidité, pression (et sa tendance),
   indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
   qui reste (pictogramme, courbe de température, probabilité et barres de pluie).
 - **Prévisions** (14 jours) : pour chaque jour, le pictogramme, la barre mini-maxi (du bleu à l'orange), et l'un
@@ -58,7 +59,7 @@ la carte) :
 
   En très grand texte, les graphiques s'agrandissent avec lui (rangées plus hautes, journées plus larges, dates
   raccourcies si besoin) pour que rien ne se chevauche.
-- **Neige & altitude** (depuis la ligne du même nom dans Aujourd'hui), par jour ou par tranche de 3 heures : une
+- **Neige & altitude** (depuis la pastille de l'en-tête d'Aujourd'hui), par jour ou par tranche de 3 heures : une
   coupe du relief de la vallée vers le sommet qui domine le lieu (le Mont Vouillot pour Morteau, le Grand Veymont pour
   Valence) avec la température à chaque altitude, l'iso 0, la limite pluie-neige, les
   sommets nommés, la neige attendue à 2 000 et 3 000 m et les pentes enneigées, puis le ressenti et le vent à
