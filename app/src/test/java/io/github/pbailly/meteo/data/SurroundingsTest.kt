@@ -96,7 +96,7 @@ class SurroundingsTest {
         val url = java.net.URLDecoder.decode(SurroundingsQuery.url(47.0577, 6.5664), "UTF-8")
         assertTrue(url.startsWith(Overpass.SERVERS.first()))
         assertTrue("around:15000,47.05770,6.56640" in url)
-        assertEquals(6, Regex("out count;").findAll(url).count())
+        assertEquals(15, Regex("out count;").findAll(url).count())
         assertTrue("is_in(47.05770,6.56640)" in url)
     }
 

@@ -43,6 +43,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -113,13 +117,23 @@ fun TodayScreen(
                         // pour que ses repères tombent au même endroit du texte sur tous les téléphones).
                         Box {
                             f.current?.let {
-                                WeatherSketch(
-                                    it.weatherCode, it.isDay, it.time, place.latitude, place.longitude, place.id.hashCode(),
-                                    state.terrain.data, state.surroundings.data, sketchConditions(f, state.airQuality.data),
-                                    style = state.sketchStyle,
-                                    motion = state.sketchMotion,
-                                    modifier = Modifier.matchParentSize().statusBarsPadding(),
-                                )
+                                var postcard by remember { mutableStateOf(false) }
+                                val conditions = sketchConditions(f, state.airQuality.data, state.kp)
+                                val sketch = @Composable { modifier: Modifier, onLongPress: (() -> Unit)? ->
+                                    WeatherSketch(
+                                        it.weatherCode, it.isDay, it.time, place.latitude, place.longitude, place.id.hashCode(),
+                                        state.terrain.data, state.surroundings.data, conditions,
+                                        style = state.sketchStyle,
+                                        motion = state.sketchMotion,
+                                        modifier = modifier,
+                                        onLongPress = onLongPress,
+                                    )
+                                }
+                                sketch(Modifier.matchParentSize().statusBarsPadding()) { postcard = true }
+                                // Appui long : le dessin en carte postale, en grand.
+                                if (postcard) {
+                                    SketchPostcard(place.name, it.time, it.temperature, it.weatherCode, onDismiss = { postcard = false }) { m -> sketch(m, null) }
+                                }
                             }
                             Column {
                                 // Neige & altitude (à la saison de la neige) : une pastille dans l'en-tête, pour laisser la
@@ -147,7 +161,7 @@ private val SKETCH_GROUND = 72.dp
  * Ce que la prévision de l'heure ajoute au dessin : les nuages bas, moyens et hauts (pour les dessiner à leur hauteur),
  * le vent, le lever et le coucher du soleil, la neige au sol, un froid durable qui gèle les lacs, l'air du moment.
  */
-private fun sketchConditions(f: Forecast, air: AirQuality?): SketchConditions {
+internal fun sketchConditions(f: Forecast, air: AirQuality?, kp: Double? = null): SketchConditions {
     val h = f.hourly
     val c = f.current
     val i = Outlook.nowIndex(f)
@@ -164,6 +178,10 @@ private fun sketchConditions(f: Forecast, air: AirQuality?): SketchConditions {
     // Les lacs gèlent après des jours sans dégel : aujourd'hui et demain sous 0 °C, et une nuit sous −6 °C.
     val maxes = (today..today + 1).map { d.temperatureMax.getOrElse(it) { Double.NaN } }
     val frozen = maxes.none { it.isNaN() || it > 0 } && d.temperatureMin.getOrElse(today) { Double.NaN } <= -6
+    // La limite de la neige sur les montagnes : l'isotherme 0 °C de la prévision (maintenant quand il tombe quelque
+    // chose, sinon le plus bas des prochaines 24 heures).
+    val precipitating = h.precipitation.getOrElse(i) { 0.0 }.let { !it.isNaN() && it >= 0.2 }
+    val freezing = (i..i + 24).map { h.freezingLevel.getOrElse(it) { Double.NaN } }.filter { !it.isNaN() }
     return SketchConditions(
         clouds = clouds,
         windKmh = c?.windSpeed?.takeIf { !it.isNaN() } ?: 0.0,
@@ -174,6 +192,11 @@ private fun sketchConditions(f: Forecast, air: AirQuality?): SketchConditions {
         frozen = frozen,
         dust = air?.saharanDust == true,
         haze = air?.haze == true,
+        temperature = c?.temperature?.takeIf { !it.isNaN() },
+        freezingLevel = if (precipitating) freezing.firstOrNull() else freezing.minOrNull(),
+        precipitating = precipitating,
+        kp = kp,
+        utcOffsetSeconds = f.utcOffsetSeconds,
     )
 }
 

@@ -100,6 +100,59 @@ object Terrain {
         }
     }
 
+    /** La deuxième chaîne : au moins 60° à côté de la première, et 300 m au-dessus du lieu. */
+    private const val BACKDROP_MIN_ANGLE = 60.0
+    private const val BACKDROP_MIN_GAIN = 300.0
+
+    /**
+     * Le point de la grille qui domine le lieu dans une autre direction que [mainBearing] (la deuxième chaîne qu'on voit
+     * au loin : le Massif central depuis Valence, quand la coupe va vers le Vercors), ou null.
+     */
+    fun secondPoint(latitude: Double, longitude: Double, ground: Double, grid: List<Pair<Double, Double>>, heights: DoubleArray, mainBearing: Double): Pair<Double, Double>? {
+        if (ground.isNaN()) return null
+        return grid.indices.filter { i ->
+            val h = heights.getOrElse(i) { Double.NaN }
+            !h.isNaN() && h - ground >= BACKDROP_MIN_GAIN && distanceKm(latitude, longitude, grid[i].first, grid[i].second) >= MIN_VIEW_KM &&
+                angleBetween(bearing(latitude, longitude, grid[i].first, grid[i].second), mainBearing) >= BACKDROP_MIN_ANGLE
+        }.maxByOrNull { i -> (heights[i] - ground) / (distanceKm(latitude, longitude, grid[i].first, grid[i].second) + DOMINANCE_OFFSET_KM) }?.let { grid[it] }
+    }
+
+    /** Le sommet nommé qui domine le lieu dans une autre direction que [mainBearing], ou null. */
+    fun secondPeak(latitude: Double, longitude: Double, ground: Double, peaks: List<Peak>, mainBearing: Double): Peak? =
+        dominantPeak(
+            latitude,
+            longitude,
+            ground,
+            peaks.filter { angleBetween(bearing(latitude, longitude, it.latitude, it.longitude), mainBearing) >= BACKDROP_MIN_ANGLE && it.elevation - ground >= BACKDROP_MIN_GAIN },
+        )
+
+    /** Points de la deuxième coupe : du lieu jusqu'à 10 % au-delà du sommet. */
+    fun backdropLine(latitude: Double, longitude: Double, toLatitude: Double, toLongitude: Double): List<Pair<Double, Double>> =
+        (0 until SAMPLES).map { k ->
+            val u = 1.1 * k / (SAMPLES - 1)
+            (latitude + (toLatitude - latitude) * u) to (longitude + (toLongitude - longitude) * u)
+        }
+
+    fun backdrop(line: List<Pair<Double, Double>>, elevations: DoubleArray): Backdrop? {
+        if (elevations.size != line.size || elevations.any { it.isNaN() }) return null
+        val first = line.first()
+        val last = line.last()
+        return Backdrop(elevations, distanceKm(first.first, first.second, last.first, last.second), bearing(first.first, first.second, last.first, last.second))
+    }
+
+    /** Direction de [lat2], [lon2] vue de [lat1], [lon1], en degrés depuis le nord, dans le sens des aiguilles d'une montre. */
+    fun bearing(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val dx = (lon2 - lon1) * cos((lat1 + lat2) / 2 * PI / 180)
+        val dy = lat2 - lat1
+        return (Math.toDegrees(kotlin.math.atan2(dx, dy)) + 360) % 360
+    }
+
+    /** Écart entre deux directions, de 0 à 180°. */
+    fun angleBetween(a: Double, b: Double): Double {
+        val d = abs(a - b) % 360
+        return if (d > 180) 360 - d else d
+    }
+
     fun placeIndex(): Int = (BEFORE / (1 + BEFORE + AFTER) * (SAMPLES - 1)).roundToInt()
 
     fun targetIndex(): Int = ((1 + BEFORE) / (1 + BEFORE + AFTER) * (SAMPLES - 1)).roundToInt()
@@ -140,7 +193,7 @@ object Terrain {
             if (peak.elevation - values[near] > 300) continue
             labels += ProfileLabel(near, peak.name, peak.elevation)
         }
-        return TerrainProfile(values, length, placeIndex(), labels, corridor)
+        return TerrainProfile(values, length, placeIndex(), labels, corridor, bearing(first.first, first.second, last.first, last.second))
     }
 
     /** Position d'un point le long du segment (0 au début, 1 à la fin) et sa distance au segment, en km. */
@@ -218,7 +271,7 @@ class TerrainRepository(
     private val httpGet: (String) -> String,
     private val overpassGet: (String) -> String = httpGet,
 ) {
-    private fun file(place: Place) = File(cacheDir, "terrain2_${place.id}.json")
+    private fun file(place: Place) = File(cacheDir, "terrain3_${place.id}.json")
 
     /** La coupe déjà gardée (une coupe de moins d'un kilomètre, vers le lieu lui-même, est refaite). */
     suspend fun cached(place: Place): TerrainProfile? = withContext(Dispatchers.IO) {
@@ -241,7 +294,19 @@ class TerrainRepository(
         val heights = OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(grid)))
         val (toLat, toLon) = Terrain.dominantPoint(place.latitude, place.longitude, ground, grid, heights) ?: grid.first()
         val line = Terrain.line(place.latitude, place.longitude, toLat, toLon)
-        Terrain.build(line, OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line))), null, emptyList())
+        val profile = Terrain.build(line, OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line))), null, emptyList())
+        val second = Terrain.secondPoint(place.latitude, place.longitude, ground, grid, heights, profile.bearing ?: 0.0)
+        profile.with(second?.let { backdrop(place, it.first, it.second) })
+    }
+
+    /** La deuxième chaîne, vers [toLat], [toLon] : un appel de plus à l'API d'altitude ; rien si elle ne répond pas. */
+    private fun backdrop(place: Place, toLat: Double, toLon: Double): Backdrop? = try {
+        val line = Terrain.backdropLine(place.latitude, place.longitude, toLat, toLon)
+        Terrain.backdrop(line, OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line))))
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
     }
 
     /**
@@ -257,10 +322,14 @@ class TerrainRepository(
             fallback ?: quick(place)
         } else {
             val line = Terrain.line(place.latitude, place.longitude, target.latitude, target.longitude)
-            Terrain.build(line, OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line))), target, peaks)
+            val built = Terrain.build(line, OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line))), target, peaks)
+            // La deuxième chaîne : celle de la coupe rapide, sinon vers un sommet nommé dans une autre direction.
+            val second = fallback?.backdrop?.takeIf { Terrain.angleBetween(it.bearing, built.bearing ?: 0.0) >= 60 }
+                ?: Terrain.secondPeak(place.latitude, place.longitude, ground, peaks, built.bearing ?: 0.0)?.let { backdrop(place, it.latitude, it.longitude) }
+            built.with(second)
         }
         cacheDir.mkdirs()
-        cacheDir.listFiles { f -> f.name.startsWith("terrain_") }?.forEach { it.delete() }
+        cacheDir.listFiles { f -> f.name.startsWith("terrain_") || f.name.startsWith("terrain2_") }?.forEach { it.delete() }
         file(place).writeText(encode(profile))
         profile
     }
@@ -302,6 +371,14 @@ class TerrainRepository(
                 })
             }
         })
+        p.bearing?.let { put("bearing", it) }
+        p.backdrop?.let { b ->
+            put("backdrop", buildJsonObject {
+                put("lengthKm", b.lengthKm)
+                put("bearing", b.bearing)
+                put("elevations", buildJsonArray { b.elevations.forEach { add(JsonPrimitive(it)) } })
+            })
+        }
     }.toString()
 
     private fun decode(raw: String): TerrainProfile {
@@ -328,6 +405,14 @@ class TerrainRepository(
                     k["ele"]!!.jsonPrimitive.doubleOrNull ?: 0.0,
                 )
             }.orEmpty(),
+            bearing = o["bearing"]?.jsonPrimitive?.doubleOrNull,
+            backdrop = (o["backdrop"] as? JsonObject)?.let { b ->
+                Backdrop(
+                    b["elevations"]!!.jsonArray.map { it.jsonPrimitive.doubleOrNull ?: 0.0 }.toDoubleArray(),
+                    b["lengthKm"]!!.jsonPrimitive.doubleOrNull ?: 0.0,
+                    b["bearing"]!!.jsonPrimitive.doubleOrNull ?: 0.0,
+                )
+            },
         )
     }
 }

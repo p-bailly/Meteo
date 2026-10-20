@@ -1,6 +1,7 @@
 package io.github.pbailly.meteo.ui
 
 import io.github.pbailly.meteo.data.Settlement
+import io.github.pbailly.meteo.data.Backdrop
 import io.github.pbailly.meteo.data.Surroundings
 import io.github.pbailly.meteo.data.TerrainProfile
 import java.time.DayOfWeek
@@ -10,12 +11,16 @@ import java.time.MonthDay
 import java.time.temporal.ChronoUnit
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.asin
 import kotlin.math.atan
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.max
+import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tan
 import kotlin.random.Random
 
 /** Grandes familles de ciel, d'après le code météo WMO. */
@@ -71,6 +76,14 @@ internal enum class Decor {
     SKI,
     // La manche à air, quand il y a du vent.
     WINDSOCK,
+    // Les cultures : vignes, vergers, lavande de Provence en été, tournesols du Sud-Ouest.
+    VINES, ORCHARD, LAVENDER, SUNFLOWERS,
+    // Le patrimoine : un château, des ruines, une abbaye.
+    CASTLE, RUINS, ABBEY,
+    // Des éoliennes qui tournent avec le vent, le train dans la vallée, le port et ses bateaux.
+    TURBINES, TRAIN, HARBOUR,
+    // Les guirlandes et le sapin de décembre, les réverbères du soir.
+    GARLANDS, LAMPS,
 }
 
 /** Les monuments de quelques grandes villes, dessinés parmi les immeubles. */
@@ -98,7 +111,8 @@ internal enum class Light { NIGHT, DAWN, SUNRISE, DAY, SUNSET, DUSK }
 /**
  * Ce que la prévision de l'heure ajoute au dessin, en plus du code météo : la hauteur des nuages, le vent (km/h, et
  * d'où il vient en degrés), le lever et le coucher du soleil, la neige au sol, un froid qui gèle les lacs, le sable du
- * Sahara ou la pollution.
+ * Sahara ou la pollution ; la température (canicule, grand froid), l'isotherme 0 °C (la limite de la neige sur les
+ * montagnes), l'activité magnétique (aurores) et le décalage horaire du lieu (le soleil et la lune à leur place).
  */
 data class SketchConditions(
     val clouds: SketchClouds? = null,
@@ -110,6 +124,14 @@ data class SketchConditions(
     val frozen: Boolean = false,
     val dust: Boolean = false,
     val haze: Boolean = false,
+    val temperature: Double? = null,
+    /** Altitude de l'isotherme 0 °C : maintenant s'il pleut ou neige ([precipitating]), sinon la plus basse des 24 h. */
+    val freezingLevel: Double? = null,
+    val precipitating: Boolean = false,
+    /** Indice Kp (0 à 9). */
+    val kp: Double? = null,
+    /** Décalage de l'heure du lieu sur le temps universel, en secondes. */
+    val utcOffsetSeconds: Int? = null,
 )
 
 /** Petites surprises du dessin : certaines selon le temps, d'autres seulement certains jours. */
@@ -122,6 +144,9 @@ internal enum class Surprise {
     SUMMIT_CROSS, SAILBOAT, NESSIE, SMOKE,
     // Arc-en-ciel d'averse, et la soucoupe qui emporte un mouton (à force de toucher le dessin).
     RAINBOW, ABDUCTION,
+    // Le ciel rare : aurores, pluie d'étoiles filantes ; l'air qui tremble de chaleur, le givre des grands froids ;
+    // les feuilles mortes qui s'envolent.
+    AURORA, METEORS, HEAT, FROST, LEAVES,
 }
 
 /**
@@ -154,7 +179,14 @@ internal class SketchTerrain(
     val onWater: Boolean = false,
     /** Faux tant que la coupe du relief n'est pas arrivée : un sol plat, sans décor inventé. */
     val known: Boolean = true,
+    /** Direction de la coupe (la droite du dessin), en degrés depuis le nord : on regarde 90° à gauche de celle-ci. */
+    val bearing: Double = 90.0,
+    /** Une autre chaîne, au loin, derrière le relief : (x, hauteur) comme [ridge], vide s'il n'y en a pas. */
+    val backdrop: List<Pair<Float, Float>> = emptyList(),
 ) {
+    /** La direction où l'on regarde (le fond du dessin), en degrés depuis le nord. */
+    val view: Double get() = ((bearing - 90) % 360 + 360) % 360
+
     fun heightAt(x: Float): Float {
         val k = ridge.indexOfFirst { it.first >= x }
         if (k < 0) return ridge.last().second
@@ -190,7 +222,7 @@ internal class SketchTerrain(
         sea: Boolean = this.sea,
         river: Boolean = this.river,
         island: Boolean = this.island,
-    ) = SketchTerrain(ridge, relief, water, sea, treeline, snowline, rockline, glacierline, placeX, farX, river, island, onWater, known)
+    ) = SketchTerrain(ridge, relief, water, sea, treeline, snowline, rockline, glacierline, placeX, farX, river, island, onWater, known, bearing, backdrop)
 }
 
 internal object SketchTerrains {
@@ -207,6 +239,13 @@ internal object SketchTerrains {
     private const val LOCAL_KM = 15.0
     /** Sur un sommet : rien de plus haut à 2,5 km, et le terrain qui tombe des deux côtés. */
     private const val SUMMIT_KM = 2.5
+    /**
+     * La perspective : ce qui est près paraît plus grand. Les hauteurs varient comme 1 / (distance + 12 km), de 0,75 à
+     * 1,3 fois celle du sommet (en plaine, jamais plus grand : une butte voisine ne devient pas une colline).
+     */
+    private const val PERSPECTIVE_KM = 12.0
+    /** Abscisses plus serrées vers le loin : t^0,75. */
+    private const val PERSPECTIVE_X = 0.75
 
     /** Altitude de la neige selon le mois : basse en hiver, sur les plus hauts sommets en été (vers 45° de latitude). */
     fun snowAltitude(month: Int): Double = when (month) {
@@ -278,10 +317,26 @@ internal object SketchTerrains {
      * Le relief de la coupe [profile], la neige du mois [month] (jusqu'au lieu quand il neige, [snowing]), à la
      * [latitude] du lieu ; puis ce qui l'entoure ([around]) : un lac, la mer, une rivière, une île.
      */
-    fun from(profile: TerrainProfile?, month: Int, snowing: Boolean, latitude: Double = 45.0, around: Surroundings? = null): SketchTerrain =
-        shape(profile, month, snowing, latitude).with(around)
+    fun from(
+        profile: TerrainProfile?,
+        month: Int,
+        snowing: Boolean,
+        latitude: Double = 45.0,
+        around: Surroundings? = null,
+        conditions: SketchConditions? = null,
+    ): SketchTerrain = shape(profile, month, snowing, latitude, conditions).with(around)
 
-    private fun shape(profile: TerrainProfile?, month: Int, snowing: Boolean, latitude: Double): SketchTerrain {
+    /**
+     * Altitude de la neige sur les montagnes : celle du mois, rapprochée de l'isotherme 0 °C de la prévision (300 m
+     * dessous, à 600 m au plus de celle du mois) ; quand il tombe quelque chose, la neige fraîche juste sous l'isotherme.
+     */
+    fun snowAltitude(month: Int, latitude: Double, conditions: SketchConditions?): Double {
+        val seasonal = snowAltitude(month) - latitudeShift(latitude)
+        val freezing = conditions?.freezingLevel ?: return seasonal
+        return if (conditions.precipitating) freezing - 300 else (freezing - 300).coerceIn(seasonal - 600, seasonal + 600)
+    }
+
+    private fun shape(profile: TerrainProfile?, month: Int, snowing: Boolean, latitude: Double, conditions: SketchConditions?): SketchTerrain {
         val e = profile?.elevations ?: return DEFAULT
         val n = e.size
         if (n < 10 || e.any { it.isNaN() }) return DEFAULT
@@ -310,9 +365,18 @@ internal object SketchTerrains {
         }
         val smooth = DoubleArray(n) { k -> (k - window..k + window).filter { it in 0 until n }.map { e[it] }.average() }
         val place = if (summit) SUMMIT_PLACE else PLACE
-        fun x(k: Int) = if (k < p) place - (place - LEFT) * (p - k) / p else place + (RIGHT - place) * (k - p) / max(n - 1 - p, 1)
-        fun lift(v: Double) = ((v - base) * perMeter).toFloat().coerceIn(-0.05f, MAX_LIFT * 1.05f)
-        val profilePoints = (0 until n).map { k -> x(k) to lift(smooth[k]) * envelope(x(k)) }
+        // En perspective (pas au sommet, d'où tout est en dessous) : le près s'étale et grandit, le loin se resserre.
+        val bend = if (summit) 1.0 else PERSPECTIVE_X
+        fun x(k: Int): Float = if (k < p) {
+            place - (place - LEFT) * ((p - k).toDouble() / p).pow(bend).toFloat()
+        } else {
+            place + (RIGHT - place) * ((k - p).toDouble() / max(n - 1 - p, 1)).pow(bend).toFloat()
+        }
+        val topKm = distanceKm
+        val nearest = if (relief == Relief.PLAIN) 1.0 else 1.3
+        fun perspective(k: Int): Double = if (summit) 1.0 else ((topKm + PERSPECTIVE_KM) / (abs(k - p) * kmPerSample + PERSPECTIVE_KM)).coerceIn(0.75, nearest)
+        fun lift(v: Double, k: Int = p) = ((v - base) * perMeter * if (v > base) perspective(k) else 1.0).toFloat().coerceIn(-0.05f, MAX_LIFT * 1.05f)
+        val profilePoints = (0 until n).map { k -> x(k) to lift(smooth[k], k) * envelope(x(k)) }
         // Au-delà de la coupe, le relief redescend doucement vers les bords (sous le texte).
         val first = profilePoints.first().second
         val last = profilePoints.last().second
@@ -322,7 +386,7 @@ internal object SketchTerrains {
         val water = runs.map { (a, b) -> (if (a == 0) 0f else x(a))..x(b) }
         val sea = runs.any { (a, _) -> e[a] <= 1.0 }
         val shift = latitudeShift(latitude)
-        val snowAltitude = if (snowing) ground - 50 else snowAltitude(month) - shift
+        val snowAltitude = if (snowing) ground - 50 else snowAltitude(month, latitude, conditions)
         val treeline = treelineAltitude(latitude)
         val far = (p until n).firstOrNull { (it - p) * kmPerSample > FAR_KM }
         fun at(altitude: Double) = ((altitude - base) * perMeter).toFloat()
@@ -340,7 +404,28 @@ internal object SketchTerrains {
             placeX = x(p),
             farX = far?.let { x(it) } ?: 2f,
             onWater = runs.any { (a, b) -> p in a..b },
+            bearing = profile.bearing ?: 90.0,
+            backdrop = profile.backdrop?.let { backdrop(it, ground) }.orEmpty(),
         )
+    }
+
+    /**
+     * La deuxième chaîne, vue du lieu : chaque point aussi haut que l'angle sous lequel on le voit (la même loi que pour
+     * le sommet de la coupe), un peu tassée par l'éloignement, étalée sur toute la largeur. Rien si elle ne dépasse pas
+     * l'horizon de plus de 1 % de la hauteur du dessin.
+     */
+    private fun backdrop(b: Backdrop, ground: Double): List<Pair<Float, Float>> {
+        val e = b.elevations
+        val n = e.size
+        if (n < 10) return emptyList()
+        val kmPerSample = b.lengthKm / (n - 1)
+        val lifts = (1 until n).map { k ->
+            val angle = Math.toDegrees(atan((e[k] - ground) / (k * kmPerSample * 1000)))
+            val x = 0.30f + 0.66f * (k - 1) / (n - 2)
+            x to if (angle <= 0) 0f else (MAX_LIFT * 0.85 * (1 - exp(-angle / 3.5))).toFloat() * envelope(x)
+        }
+        val smooth = lifts.indices.map { k -> lifts[k].first to (k - 1..k + 1).filter { it in lifts.indices }.map { lifts[it].second }.average().toFloat() }
+        return if (smooth.maxOf { it.second } < 0.01f) emptyList() else smooth
     }
 
     /** Ce que la coupe ne montre pas toujours : un lac tout près, la mer, la rivière qui passe, l'île. */
@@ -420,6 +505,8 @@ internal class SketchWeather(
     val showers: Boolean,
     /** Neige en grains : des points plutôt que des flocons. */
     val grains: Boolean = false,
+    /** Orage de grêle : des grêlons parmi la pluie, et sur le sol. */
+    val hail: Boolean = false,
 ) {
     companion object {
         fun of(code: Int) = SketchWeather(
@@ -432,6 +519,7 @@ internal class SketchWeather(
             freezing = code in setOf(56, 57, 66, 67),
             showers = code in 80..86,
             grains = code == 77,
+            hail = code == 96 || code == 99,
         )
     }
 }
@@ -458,17 +546,27 @@ internal class SketchScene(
     val layout: Layout? = null,
     /** Habitants du lieu habité : sa taille dessinée en dépend. */
     val population: Long? = null,
+    /** Le soleil et la lune à leur vraie place dans le ciel, quand on connaît le lieu et l'heure. */
+    val sun: SkyPoint? = null,
+    val moon: SkyPoint? = null,
+    /** Part des fenêtres allumées : aucune le jour, de plus en plus au crépuscule, moins au cœur de la nuit. */
+    val lit: Float = 0f,
 ) {
     val clouds: SketchClouds? get() = conditions.clouds
 
+    /** Ce que le paysage fixe laisse à la couche animée (cheminées, éoliennes, voie ferrée…), rempli en le dessinant. */
+    val anchors = SketchAnchors()
+
     /**
-     * Les arbres, la fumée et la pluie penchent avec le vent : de 0 (sous 15 km/h) à 1 (60 km/h et plus), vers la
-     * droite quand il vient de l'ouest (on regarde vers le nord), vers la gauche quand il vient de l'est.
+     * Les arbres, la fumée et la pluie penchent avec le vent : de 0 (sous 15 km/h) à 1 (60 km/h et plus), du côté où il
+     * souffle dans le dessin (d'après la direction où l'on regarde) ; pas du tout quand il souffle vers nous ou dans
+     * notre dos.
      */
     val lean: Float get() {
         val strength = ((conditions.windKmh - 15) / 45).coerceIn(0.0, 1.0).toFloat()
-        val toward = -sin(Math.toRadians(conditions.windFrom))
-        return if (toward >= 0) strength else -strength
+        // Le vent va vers windFrom + 180 ; la droite du dessin est la direction de la coupe.
+        val toward = -cos(Math.toRadians(conditions.windFrom - terrain.bearing)).toFloat()
+        return strength * toward
     }
 
     /** Surtout des nuages bas : ils descendent sur le relief. */
@@ -488,6 +586,92 @@ internal class SketchScene(
     }
 }
 
+/** Un astre dans le ciel : sa direction (depuis le nord, vers l'est) et sa hauteur au-dessus de l'horizon, en degrés. */
+internal class SkyPosition(val azimuth: Double, val elevation: Double)
+
+/** Un astre dans le dessin : [x] en fraction de la largeur, et sa hauteur au-dessus de l'horizon (degrés). */
+internal class SkyPoint(val x: Float, val elevation: Double)
+
+/** Le ciel vrai : le soleil, la lune, les aurores et les pluies d'étoiles filantes. */
+internal object SketchSkies {
+    private val J2000 = LocalDateTime.of(2000, 1, 1, 12, 0)
+
+    /** Pôle nord géomagnétique (modèle du dipôle). */
+    private const val POLE_LATITUDE = 80.7
+    private const val POLE_LONGITUDE = -72.7
+
+    private fun days(utc: LocalDateTime) = ChronoUnit.SECONDS.between(J2000, utc) / 86_400.0
+
+    private fun rad(deg: Double) = deg * PI / 180
+
+    /** Le soleil à [utc] (temps universel), vu du lieu ; à un dixième de degré près. */
+    fun sun(utc: LocalDateTime, latitude: Double, longitude: Double): SkyPosition {
+        val d = days(utc)
+        val g = rad(357.529 + 0.98560028 * d)
+        val q = 280.459 + 0.98564736 * d
+        return horizontal(d, rad(q + 1.915 * sin(g) + 0.020 * sin(2 * g)), 0.0, latitude, longitude)
+    }
+
+    /** La lune, à un degré près (sans la parallaxe, qui ne se voit pas au crayon). */
+    fun moon(utc: LocalDateTime, latitude: Double, longitude: Double): SkyPosition {
+        val d = days(utc)
+        val l = 218.316 + 13.176396 * d
+        val m = rad(134.963 + 13.064993 * d)
+        val f = rad(93.272 + 13.229350 * d)
+        return horizontal(d, rad(l + 6.289 * sin(m)), rad(5.128 * sin(f)), latitude, longitude)
+    }
+
+    /** Coordonnées écliptiques → hauteur et azimut au lieu. */
+    private fun horizontal(d: Double, lambda: Double, beta: Double, latitude: Double, longitude: Double): SkyPosition {
+        val e = rad(23.4393 - 0.0000004 * d)
+        val ra = atan2(sin(lambda) * cos(e) - tan(beta) * sin(e), cos(lambda))
+        val dec = asin(sin(beta) * cos(e) + cos(beta) * sin(e) * sin(lambda))
+        val hourAngle = rad(280.46061837 + 360.98564736629 * d + longitude) - ra
+        val phi = rad(latitude)
+        val altitude = asin(sin(phi) * sin(dec) + cos(phi) * cos(dec) * cos(hourAngle))
+        val azimuth = atan2(-sin(hourAngle) * cos(dec), sin(dec) * cos(phi) - cos(dec) * cos(hourAngle) * sin(phi))
+        return SkyPosition((Math.toDegrees(azimuth) + 360) % 360, Math.toDegrees(altitude))
+    }
+
+    /**
+     * Où mettre l'astre dans le dessin, quand on regarde vers [view] : droit devant au milieu du ciel libre (x 0,59),
+     * à 90° sur les côtés (0,40 et 0,78) ; derrière soi, contre le bord le plus proche.
+     */
+    fun onScreen(position: SkyPosition, view: Double): SkyPoint {
+        val relative = ((position.azimuth - view) % 360 + 540) % 360 - 180
+        return SkyPoint((0.59 + 0.19 * relative / 90).toFloat().coerceIn(0.42f, 0.78f), position.elevation)
+    }
+
+    /** Latitude géomagnétique du lieu, en degrés (positive au nord comme au sud). */
+    fun magneticLatitude(latitude: Double, longitude: Double): Double {
+        val s = sin(rad(latitude)) * sin(rad(POLE_LATITUDE)) + cos(rad(latitude)) * cos(rad(POLE_LATITUDE)) * cos(rad(longitude - POLE_LONGITUDE))
+        return abs(Math.toDegrees(asin(s.coerceIn(-1.0, 1.0))))
+    }
+
+    /**
+     * Les aurores sont visibles depuis le lieu : à 66° de latitude magnétique par temps calme (Kp 0, Tromsø), vers 45°
+     * pour une grande tempête (Kp 9 : toute la France en mai 2024).
+     */
+    fun auroraVisible(latitude: Double, longitude: Double, kp: Double): Boolean = magneticLatitude(latitude, longitude) >= 66.5 - 2.3 * kp
+
+    /** Les grandes pluies d'étoiles filantes : leur nuit de maximum, et combien de jours autour. */
+    private val SHOWERS = listOf(
+        MonthDay.of(1, 3) to 1, // Quadrantides
+        MonthDay.of(4, 22) to 1, // Lyrides
+        MonthDay.of(5, 6) to 2, // Êta Aquarides
+        MonthDay.of(8, 12) to 2, // Perséides
+        MonthDay.of(10, 21) to 2, // Orionides
+        MonthDay.of(11, 17) to 1, // Léonides
+        MonthDay.of(12, 14) to 2, // Géminides
+    )
+
+    /** La nuit du [night] (le soir où elle commence) tombe pendant une pluie d'étoiles filantes. */
+    fun meteorShower(night: LocalDate): Boolean = SHOWERS.any { (peak, days) ->
+        val date = peak.atYear(night.year)
+        abs(ChronoUnit.DAYS.between(date, night)) <= days
+    }
+}
+
 internal object SketchScenes {
     private const val SYNODIC_MONTH = 29.530588853
 
@@ -500,8 +684,31 @@ internal object SketchScenes {
     /** Durée d'un tour de l'animation (pluie, neige, nuages). */
     const val CYCLE_MS = 20_000L
 
-    /** Quelque chose bouge dans la scène : des nuages, de la pluie, de la neige. */
-    fun moves(scene: SketchScene): Boolean = scene.sky != SketchSky.CLEAR && scene.sky != SketchSky.FOG
+    /**
+     * Quelque chose bouge dans la scène : des nuages, de la pluie, de la neige ; des oiseaux, un avion, un bateau, la
+     * fumée, les éoliennes, le train, les aurores, les étoiles filantes, l'air chaud, les feuilles mortes.
+     */
+    fun moves(scene: SketchScene): Boolean = scene.sky != SketchSky.CLEAR && scene.sky != SketchSky.FOG ||
+        scene.surprises.any { it in ANIMATED } || scene.decor.any { it in ANIMATED_DECOR }
+
+    private val ANIMATED = setOf(
+        Surprise.BIRDS, Surprise.PLANE, Surprise.BALLOON, Surprise.SAILBOAT, Surprise.SMOKE, Surprise.AURORA,
+        Surprise.METEORS, Surprise.HEAT, Surprise.LEAVES,
+    )
+    private val ANIMATED_DECOR = setOf(Decor.TURBINES, Decor.TRAIN, Decor.HARBOUR, Decor.GULLS)
+
+    /**
+     * Part des fenêtres allumées selon la lumière : quelques-unes au coucher, la moitié au crépuscule, la plupart le
+     * soir, beaucoup moins au cœur de la nuit ; quelques-unes en plein jour sous l'orage ou le brouillard.
+     */
+    fun litWindows(light: Light, time: LocalDateTime, sky: SketchSky): Float = when (light) {
+        Light.NIGHT -> if (time.hour in 1..5) 0.2f else 0.65f
+        Light.DUSK -> 0.45f
+        Light.SUNSET -> 0.15f
+        Light.DAWN -> 0.3f
+        Light.SUNRISE -> 0.1f
+        Light.DAY -> if (sky == SketchSky.STORM || sky == SketchSky.FOG) 0.1f else 0f
+    }
 
     /** Chaque ciel a trois versions : une autre chaque jour, et à chaque fois qu'on touche le dessin. */
     const val SKY_VARIANTS = 3
@@ -567,6 +774,8 @@ internal object SketchScenes {
         around: Surroundings? = null,
         conditions: SketchConditions = SketchConditions(),
         landmark: Landmark? = null,
+        latitude: Double? = null,
+        longitude: Double? = null,
     ): SketchScene {
         val sky = SketchSky.of(code)
         val date = time.toLocalDate()
@@ -577,7 +786,8 @@ internal object SketchScenes {
         val relief = terrain.relief
         val mountains = relief.mountains
         val skyVariant = rnd.nextInt(SKY_VARIANTS)
-        val decor = decorFor(terrain, around, rnd).toMutableSet()
+        val season = seasonMonth(date.monthValue, latitude ?: 45.0)
+        val decor = decorFor(terrain, around, rnd, season, latitude, longitude).toMutableSet()
         val surprises = mutableSetOf<Surprise>()
         val clearish = sky == SketchSky.CLEAR || sky == SketchSky.PARTLY
         val wet = sky == SketchSky.RAIN || sky == SketchSky.STORM || sky == SketchSky.SNOW
@@ -629,8 +839,14 @@ internal object SketchScenes {
         }
         groundThing?.let(surprises::add)
 
-        // Une averse en plein jour : souvent un arc-en-ciel.
-        if (isDay && code in 80..82 && rnd.nextFloat() < 0.7f) surprises += Surprise.RAINBOW
+        // Le soleil et la lune à leur place, vus dans la direction où l'on regarde (l'heure du lieu ramenée au temps
+        // universel).
+        val utc = conditions.utcOffsetSeconds?.let { time.minusSeconds(it.toLong()) }
+        val sun = if (utc != null && latitude != null && longitude != null) SketchSkies.onScreen(SketchSkies.sun(utc, latitude, longitude), terrain.view) else null
+        val moon = if (utc != null && latitude != null && longitude != null) SketchSkies.onScreen(SketchSkies.moon(utc, latitude, longitude), terrain.view) else null
+        // Une averse en plein jour : souvent un arc-en-ciel (seulement quand le soleil est à moins de 42° : l'arc est
+        // à 42° de l'ombre de notre tête).
+        if (isDay && code in 80..82 && rnd.nextFloat() < 0.7f && (sun == null || sun.elevation < 42)) surprises += Surprise.RAINBOW
 
         // Au sommet, toujours la croix (dessinée sur le lieu) ; ailleurs en montagne, parfois sur le plus haut.
         if (relief == Relief.SUMMIT || mountains && rnd.nextFloat() < 0.35f) surprises += Surprise.SUMMIT_CROSS
@@ -660,6 +876,28 @@ internal object SketchScenes {
         if (chimneys && (!wet || sky == SketchSky.SNOW) && rnd.nextFloat() < 0.6f) surprises += Surprise.SMOKE
         val light = lightAt(time, isDay, conditions.sunrise, conditions.sunset)
         val weather = SketchWeather.of(code)
+        // Le ciel rare de la nuit noire : les aurores quand l'activité magnétique les descend jusqu'au lieu, la pluie
+        // d'étoiles filantes de la saison (à la place de l'étoile filante du hasard).
+        val dark = !isDay && light == Light.NIGHT
+        val kp = conditions.kp
+        if (dark && clearish && kp != null && latitude != null && longitude != null && SketchSkies.auroraVisible(latitude, longitude, kp)) {
+            surprises += Surprise.AURORA
+        }
+        if (dark && sky == SketchSky.CLEAR && SketchSkies.meteorShower(night)) {
+            surprises -= Surprise.SHOOTING_STAR
+            surprises += Surprise.METEORS
+        }
+        // Canicule et grand froid.
+        val temperature = conditions.temperature
+        if (temperature != null && temperature >= 32 && isDay) surprises += Surprise.HEAT
+        if (temperature != null && temperature <= -10) surprises += Surprise.FROST
+        // À l'automne, les feuilles mortes s'envolent (toujours par grand vent).
+        val leafy = decor.any { it == Decor.TREES || it == Decor.FOREST || it == Decor.ORCHARD }
+        if (leafy && season in 10..11 && sky != SketchSky.SNOW && (conditions.windKmh >= 12 || rnd.nextFloat() < 0.4f)) surprises += Surprise.LEAVES
+        // Décembre : les guirlandes et le sapin illuminé ; le soir, les réverbères.
+        val inhabited = decor.any { it == Decor.HAMLET || it == Decor.VILLAGE || it == Decor.TOWN || it == Decor.CITY }
+        if (inhabited && date.monthValue == 12 && relief != Relief.SUMMIT) decor += Decor.GARLANDS
+        if (decor.any { it == Decor.VILLAGE || it == Decor.TOWN || it == Decor.CITY }) decor += Decor.LAMPS
         // Le lieu habité au niveau du lieu : le sol est aplani sous lui.
         val population = around?.population
         val layout = layoutOf(SketchScene(sky, terrain, decor, surprises, seed, skyVariant, weather, conditions, light, monument, population = population))
@@ -667,7 +905,12 @@ internal object SketchScenes {
         val ground = layout.settlement?.takeIf { built }?.let { x ->
             terrain.flattened(x - layout.half - 0.015f, x + layout.half + 0.015f, terrain.heightAt(terrain.placeX).coerceAtLeast(0f))
         } ?: terrain
-        return SketchScene(sky, ground, decor, surprises, seed, skyVariant, weather, conditions, light, monument, layout, population)
+        return SketchScene(
+            sky, ground, decor, surprises, seed, skyVariant, weather, conditions, light, monument, layout, population,
+            sun = sun,
+            moon = moon,
+            lit = litWindows(light, time, sky),
+        )
     }
 
     /** Les lieux habités dont le sol est aplani (pas le chalet ni le refuge, posés sur la pente). */
@@ -681,7 +924,14 @@ internal object SketchScenes {
      * relief permet (champs en plaine, feuillus en basse montagne, sapins plus haut). Sans [around] (pas encore chargé,
      * ou sans réseau), un peu de variété d'un jour à l'autre, d'après le seul relief.
      */
-    private fun decorFor(terrain: SketchTerrain, around: Surroundings?, rnd: Random): Set<Decor> {
+    private fun decorFor(
+        terrain: SketchTerrain,
+        around: Surroundings?,
+        rnd: Random,
+        month: Int = 6,
+        latitude: Double? = null,
+        longitude: Double? = null,
+    ): Set<Decor> {
         val relief = terrain.relief
         val decor = mutableSetOf<Decor>()
         // Au-dessus de la limite des arbres, ni forêt ni ferme : un refuge.
@@ -726,7 +976,25 @@ internal object SketchScenes {
                 else -> if (!around.forest && rnd.nextFloat() < 0.6f) decor += Decor.FIRS
             }
         }
-        if ((terrain.sea || terrain.island) && around.settlement != Settlement.CITY && rnd.nextFloat() < 0.5f) decor += Decor.LIGHTHOUSE
+        // Le phare, seulement là où il y en a un vrai.
+        if ((terrain.sea || terrain.island) && around.lighthouse) decor += Decor.LIGHTHOUSE
+        // Les cultures que l'on voit vraiment autour (vignes, vergers), et celles de la saison et de la région.
+        val farmland = !aboveTrees && relief <= Relief.MEDIUM && around.settlement != Settlement.CITY
+        if (farmland && around.vineyard) decor += Decor.VINES
+        if (farmland && around.orchard) decor += Decor.ORCHARD
+        val lat = latitude ?: 0.0
+        val lon = longitude ?: 0.0
+        // La lavande en fleur en Provence, de juin à juillet ; les tournesols des plaines du Sud-Ouest l'été.
+        if (farmland && !terrain.sea && month in 6..7 && lat in 43.2..44.7 && lon in 4.6..7.2) decor += Decor.LAVENDER
+        if (Decor.FIELDS in decor && month in 7..8 && lat in 42.5..47.5 && lon in -1.5..5.0 && rnd.nextFloat() < 0.6f) decor += Decor.SUNFLOWERS
+        // Le patrimoine des environs : un château (ou des ruines) sur une hauteur, une abbaye au fond du vallon.
+        if (relief != Relief.SUMMIT) {
+            if (around.castle) decor += Decor.CASTLE else if (around.ruins) decor += Decor.RUINS
+            if (around.abbey) decor += Decor.ABBEY
+        }
+        if (around.windTurbines && relief != Relief.SUMMIT) decor += Decor.TURBINES
+        if (around.railway && !terrain.sea && !terrain.island && relief != Relief.SUMMIT) decor += Decor.TRAIN
+        if (around.harbour && (terrain.sea || terrain.water.isNotEmpty())) decor += Decor.HARBOUR
         return decor
     }
 }

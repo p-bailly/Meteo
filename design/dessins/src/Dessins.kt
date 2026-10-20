@@ -430,7 +430,7 @@ fun main(args: Array<String>) {
         val (terrain, scene) = sceneOf(item)
         val name = "%03d.png".format(k)
         render(item, File(dir, name))
-        val decor = scene.decor.sortedBy { it.ordinal }.joinToString(", ") { DECOR.getValue(it) }
+        val decor = scene.decor.sortedBy { it.ordinal }.joinToString(", ") { DECOR[it] ?: it.name.lowercase() }
         val water = listOfNotNull("lac".takeIf { terrain.water.isNotEmpty() }, "mer".takeIf { terrain.sea }, "rivière".takeIf { terrain.river }, "île".takeIf { terrain.island })
         val detail = (listOf(RELIEF.getValue(terrain.relief)) + listOf(decor).filter { it.isNotEmpty() } + water + "ciel, version ${scene.skyVariant + 1}").joinToString(" · ")
         index.append(item.section).append('\t').append(name).append('\t').append(item.caption).append('\t').append(detail).append('\n')

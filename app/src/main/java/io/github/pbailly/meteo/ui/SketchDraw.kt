@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.lerp
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
@@ -68,17 +69,33 @@ internal fun DrawScope.drawScene(
         skyLight(pencil, scene, w, h)
         landscape(pencil, scene, w, h, month, isDay)
         if (scene.conditions.haze) haze(pencil, w, h)
+        if (Surprise.FROST in scene.surprises) frost(pencil, w, h)
+    }
+    if (moving) {
+        // Les aurores et les étoiles filantes derrière tout ; l'air qui tremble au-dessus du sol ; ce qui bouge dans le
+        // paysage (fumée, éoliennes, train, bateaux, oiseaux).
+        if (Surprise.AURORA in scene.surprises) aurora(pencil, w, sh, phase)
+        if (Surprise.METEORS in scene.surprises) meteors(pencil, w, sh, phase)
+        if (Surprise.HEAT in scene.surprises) shimmer(pencil, w, h, phase)
+        animated(pencil, scene, w, h, sh, phase)
     }
     // Le dessin occupe l'espace libre : entre la grande température (à gauche) et le ciel en toutes lettres (à
-    // droite), sous la ligne du lieu et au-dessus du ressenti. À l'heure dorée, le soleil est bas et passe derrière
-    // le relief : à gauche le matin, à droite le soir.
+    // droite), sous la ligne du lieu et au-dessus du ressenti. Le soleil (ou la lune) à sa vraie place quand on la
+    // connaît : à gauche, au milieu ou à droite selon la direction où l'on regarde, plus haut ou plus bas selon
+    // l'heure ; à l'heure dorée, il est bas et passe derrière le relief.
     val low = scene.light == Light.SUNRISE || scene.light == Light.SUNSET
-    val celestial = when (scene.light) {
-        Light.SUNRISE -> Offset(w * 0.47f, h * 0.64f)
-        Light.SUNSET -> Offset(w * 0.56f, h * 0.64f)
+    val body = if (isDay) scene.sun else scene.moon
+    val celestial = when {
+        body != null && low && isDay -> Offset(w * body.x, h * 0.64f)
+        body != null -> Offset(w * body.x, sh * (0.62f - 0.22f * ((body.elevation - 6) / 40).toFloat().coerceIn(0f, 1f)))
+        scene.light == Light.SUNRISE -> Offset(w * 0.47f, h * 0.64f)
+        scene.light == Light.SUNSET -> Offset(w * 0.56f, h * 0.64f)
         else -> Offset(w * 0.57f, sh * 0.47f)
     }
+    // La lune couchée ne se dessine pas.
+    val moonUp = scene.moon?.let { it.elevation > -1 } ?: true
     val sunColor = when {
+        Surprise.HEAT in scene.surprises -> Crayon.RED
         low -> Crayon.ORANGE
         scene.conditions.dust -> Crayon.WHEAT
         else -> Crayon.SUN
@@ -93,8 +110,10 @@ internal fun DrawScope.drawScene(
     }
     fun light(at: Offset, radius: Float, rays: Rays = Rays.STRAIGHT) {
         if (!still) return
-        if (isDay) sunAt(at, radius, rays) else moon(pencil, at, radius, moonAge, southern)
+        if (isDay) sunAt(at, radius, rays) else if (moonUp) moon(pencil, at, radius, moonAge, southern)
     }
+    // Les nuages de beau temps se placent par rapport au soleil.
+    val cx = celestial.x / w
     // Les nuages à leur hauteur : plus bas quand ce sont des nuages bas (ils accrochent les sommets). Ils glissent
     // doucement d'un côté à l'autre, d'autant plus qu'il y a du vent.
     val drop = scene.cloudDrop * h
@@ -129,23 +148,23 @@ internal fun DrawScope.drawScene(
                 }
             }
         } else if (still) {
-            night(pencil, celestial, w, sh, moonAge, southern, v, twilight = scene.light == Light.DAWN || scene.light == Light.DUSK)
+            night(pencil, celestial, w, sh, moonAge, southern, v, twilight = scene.light == Light.DAWN || scene.light == Light.DUSK, moonUp = moonUp)
         }
         SketchSky.PARTLY -> when (v) {
             0 -> {
                 light(celestial + Offset(-12f * u, -6f * u), 14f * u)
-                cloudAt(0.61f, 0.55f, 68f, shade = 0.5f)
+                cloudAt((cx + 0.04f).coerceIn(0.44f, 0.74f), 0.55f, 68f, shade = 0.5f)
             }
             // Le nuage passe devant, à gauche.
             1 -> {
                 light(celestial + Offset(14f * u, -5f * u), 14f * u)
-                cloudAt(0.52f, 0.56f, 60f, shade = 0.45f)
+                cloudAt((cx - 0.05f).coerceIn(0.44f, 0.74f), 0.56f, 60f, shade = 0.45f)
             }
             // Deux petits cumulus de beau temps, le soleil entre eux.
             else -> {
                 light(celestial + Offset(0f, -3f * u), 13f * u)
-                cloudAt(0.45f, 0.55f, 44f, shade = 0.35f)
-                cloudAt(0.70f, 0.53f, 52f, shade = 0.45f)
+                cloudAt((cx - 0.12f).coerceAtLeast(0.43f), 0.55f, 44f, shade = 0.35f)
+                cloudAt((cx + 0.13f).coerceAtMost(0.76f), 0.53f, 52f, shade = 0.45f)
             }
         }
         // Un voile de nuages hauts : le soleil pâle au travers, une couche fine tout en haut.
@@ -225,7 +244,10 @@ private fun DrawScope.precipitation(
     when {
         Surprise.RAINBOW in scene.surprises -> {
             // Averse : un seul nuage, et l'arc-en-ciel à côté.
-            if (still) rainbow(pencil, Offset(w * 0.69f, h * 0.88f), w * 0.12f)
+            // À l'opposé du soleil, d'autant plus bas que le soleil est haut.
+            val opposite = scene.sun?.let { if (it.x >= 0.59f) 0.46f else 0.69f } ?: 0.69f
+            val sunk = scene.sun?.let { (it.elevation / 42).toFloat().coerceIn(0f, 0.8f) } ?: 0f
+            if (still) rainbow(pencil, Offset(w * opposite, h * (0.88f + 0.06f * sunk)), w * 0.12f)
             if (moving) cloud(pencil, Offset(w * (0.50f + drift), sh * 0.45f), 70f * u, shade = 0.9f)
             to = 0.58f
         }
@@ -256,6 +278,7 @@ private fun DrawScope.precipitation(
         SketchSky.SNOW -> snow(pencil, w, sh, from, to, wx, v, drop / sh, phase, scene.lean, ground = h)
         SketchSky.STORM -> {
             rain(pencil, w, sh, from, to, wx, style = if (v == 1) 1 else 0, drop = drop / sh, phase = phase, lean = scene.lean, ground = h)
+            if (wx.hail) hail(pencil, w, sh, from, to, drop / sh, phase, ground = h)
             // L'éclair claque par moments (toujours là sur une image fixe, quand la phase vaut 0).
             if ((phase * 5) % 1f < 0.14f) {
                 when (v) {
@@ -531,10 +554,24 @@ private fun star(gold: Pencil, c: Offset, r: Float) {
 }
 
 /** La nuit claire : la Lune, et des étoiles en croix, la Grande Ourse, ou une poussière d'étoiles (la Voie lactée). */
-private fun DrawScope.night(pencil: Pencil, center: Offset, w: Float, h: Float, moonAge: Double, southern: Boolean, variant: Int, twilight: Boolean = false) {
+private fun DrawScope.night(
+    pencil: Pencil,
+    center: Offset,
+    w: Float,
+    h: Float,
+    moonAge: Double,
+    southern: Boolean,
+    variant: Int,
+    twilight: Boolean = false,
+    moonUp: Boolean = true,
+) {
     val u = density
     val gold = pencil.ink(Crayon.MOON)
-    val noMoon = SketchScenes.moonIllumination(moonAge) < 0.03
+    val noMoon = !moonUp || SketchScenes.moonIllumination(moonAge) < 0.03
+    // La lune couchée : seulement les étoiles.
+    fun moon(pencil: Pencil, center: Offset, radius: Float, age: Double, southern: Boolean) {
+        if (moonUp) this.moon(pencil, center, radius, age, southern)
+    }
     // À l'aube et au crépuscule, seulement les premières étoiles, en haut du ciel.
     if (twilight) {
         moon(pencil, center, 14f * u, moonAge, southern)
@@ -929,5 +966,127 @@ private fun DrawScope.rainbow(pencil: Pencil, center: Offset, radius: Float) {
             Offset(center.x + (r * cos(a)).toFloat(), center.y + (r * sin(a)).toFloat())
         }
         pencil.ink(color).stroke(points, width = 2f, passes = 1)
+    }
+}
+
+/**
+ * Grêle d'orage : des grêlons ronds et blancs qui tombent parmi la pluie et rebondissent sur le sol, où d'autres
+ * restent posés.
+ */
+private fun DrawScope.hail(pencil: Pencil, w: Float, h: Float, from: Float, to: Float, drop: Float, phase: Float, ground: Float) {
+    val u = density
+    val ice = pencil.ink(Crayon.SNOW)
+    val top = 0.63f + drop
+    val rows = ((ground * 0.84f / h - top) / 0.06f).toInt().coerceAtLeast(2)
+    val span = 0.06f * rows
+    var x = from + 0.01f
+    var k = 0
+    while (x < to) {
+        val y = fallen(top + 0.06f * (k % rows) + if (k % 2 == 0) 0f else 0.03f, top, span, phase * 30 * 0.06f)
+        val c = Offset(w * x + pencil.jitter(2f), h * y)
+        if (!(c.x > w * 0.60f && c.y > h * 0.66f)) {
+            val r = (2f + (k % 3) * 0.5f) * u
+            val stone = Path().apply { addOval(Rect(c, r)) }
+            pencil.erase(stone)
+            pencil.outline(stone, width = 0.9f, passes = 1)
+            ice.hatch(stone, Rect(c, r), spacing = 1.1f, width = 0.5f)
+        }
+        x += 0.022f
+        k++
+    }
+    // Ceux qui rebondissent, et ceux qui sont tombés.
+    listOf(0.44f, 0.52f, 0.58f, 0.66f, 0.71f).forEachIndexed { i, px ->
+        val bounce = abs(sin(2 * PI * (phase * 8 + i * 0.23))).toFloat() * 4f * u
+        val c = Offset(w * px, ground * 0.985f - 2f * u - if (i % 2 == 0) bounce else 0f)
+        val stone = Path().apply { addOval(Rect(c, 2f * u)) }
+        pencil.erase(stone)
+        pencil.outline(stone, width = 0.8f, passes = 1)
+    }
+}
+
+/**
+ * Les aurores boréales : des rideaux verts qui ondulent en haut du ciel, frangés de rose ; elles bougent doucement
+ * au fil de l'animation.
+ */
+internal fun DrawScope.aurora(pencil: Pencil, w: Float, sh: Float, phase: Float) {
+    val u = density
+    val green = pencil.ink(Crayon.GREEN)
+    val pink = pencil.ink(Crayon.PINK)
+    val left = w * 0.38f
+    val width = w * 0.44f
+    var x = left
+    var k = 0
+    while (x < left + width) {
+        val f = (x - left) / width
+        val wave = sin(2 * PI * (f * 1.5 + phase)).toFloat()
+        val base = sh * (0.60f - 0.12f * f + 0.03f * wave)
+        val height = sh * (0.08f + 0.07f * abs(sin(2 * PI * (f * 3 - phase * 2))).toFloat())
+        green.line(Offset(x, base), Offset(x + wave * 1.5f * u, base - height), width = 0.9f, passes = 1, wobble = 0.2f)
+        if (k % 3 == 0) pink.line(Offset(x + wave * 1.5f * u, base - height), Offset(x + wave * 2f * u, base - height * 1.3f), width = 0.8f, passes = 1, wobble = 0.2f)
+        x += 2.6f * u
+        k++
+    }
+}
+
+/**
+ * Une pluie d'étoiles filantes (Perséides, Géminides…) : elles partent toutes du même point du ciel, à gauche, et
+ * filent l'une après l'autre ; sur une image fixe, toutes à la fois.
+ */
+internal fun DrawScope.meteors(pencil: Pencil, w: Float, sh: Float, phase: Float) {
+    val u = density
+    val gold = pencil.ink(Crayon.MOON)
+    val radiant = Offset(w * 0.34f, sh * 0.30f)
+    listOf(0.10 to 0.30f, 0.32 to 0.22f, 0.55 to 0.34f, 0.78 to 0.26f, 0.20 to 0.42f).forEachIndexed { k, (angle, start) ->
+        val dir = Offset(cos(angle).toFloat(), sin(angle).toFloat())
+        val t = (phase * 5 + k * 0.2f) % 1f
+        val progress = if (phase == 0f) 1f else if (t < 0.3f) t / 0.3f else return@forEachIndexed
+        val from = radiant + dir * (w * start)
+        val head = from + dir * (w * 0.10f * progress)
+        val tail = head - dir * (w * 0.06f * minOf(progress * 2, 1f))
+        gold.line(tail, head, width = 0.9f, passes = 1, wobble = 0.1f)
+        gold.dot(head, 1.1f)
+    }
+}
+
+/** La canicule : l'air qui tremble au-dessus du sol, en traits ondulés qui bougent. */
+internal fun DrawScope.shimmer(pencil: Pencil, w: Float, h: Float, phase: Float) {
+    val u = density
+    val ink = pencil.ink(Crayon.ORANGE)
+    for (row in 0 until 3) {
+        val y = h * (0.80f + 0.035f * row)
+        var x = w * (0.34f + 0.03f * row)
+        while (x < w * 0.74f) {
+            val points = (0..6).map { i ->
+                val px = x + i * 2f * u
+                Offset(px, y + (sin(px / (4f * u) + 2 * PI * phase * 4 + row) * 1.2 * u).toFloat())
+            }
+            ink.stroke(points, width = 0.6f, passes = 1, shake = 0.1f)
+            x += 26f * u
+        }
+    }
+}
+
+/** Le grand froid : du givre en fougères dans les coins du bas, comme sur une vitre. */
+private fun DrawScope.frost(pencil: Pencil, w: Float, h: Float) {
+    val u = density
+    val ice = pencil.ink(Crayon.SNOW)
+    listOf(Offset(0f, h) to 1f, Offset(w, h) to -1f).forEach { (corner, side) ->
+        for (k in 0 until 5) {
+            val a = Math.toRadians(-10.0 - k * 18.0)
+            val dir = Offset(side * cos(a).toFloat(), sin(a).toFloat())
+            val length = (26f + 8f * (k % 2)) * u
+            ice.line(corner, corner + dir * length, width = 0.7f, passes = 1, wobble = 0.3f)
+            // Les petites branches, de chaque côté.
+            var d = 5f * u
+            while (d < length) {
+                val p = corner + dir * d
+                val twig = (length - d) * 0.22f
+                listOf(0.7, -0.7).forEach { da ->
+                    val b = a + if (side > 0) da else -da
+                    ice.line(p, p + Offset(side * cos(b).toFloat(), sin(b).toFloat()) * twig, width = 0.5f, passes = 1, wobble = 0.1f)
+                }
+                d += 4.5f * u
+            }
+        }
     }
 }
