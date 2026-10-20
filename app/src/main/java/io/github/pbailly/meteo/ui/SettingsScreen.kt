@@ -2,6 +2,7 @@ package io.github.pbailly.meteo.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,11 +26,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -38,6 +40,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,10 +50,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
+import io.github.pbailly.meteo.BuildConfig
+import io.github.pbailly.meteo.data.AppUpdate
+import io.github.pbailly.meteo.data.Release
 import io.github.pbailly.meteo.data.WeatherModel
+import io.github.pbailly.meteo.data.networkMessage
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
+import java.io.File
+import java.io.IOException
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
@@ -85,6 +102,8 @@ fun SettingsScreen(
                 MonoText("Plus grand, certains écrans cachent des détails secondaires", size = 10.5.sp, maxLines = 2, modifier = Modifier.padding(top = 6.dp))
             }
         }
+        SectionLabel("Application")
+        BorderedCard { UpdateSettings() }
         SectionLabel("Modèles de la comparaison")
         BorderedCard {
             WeatherModel.entries.forEachIndexed { i, model ->
@@ -191,6 +210,110 @@ private fun KeySettings(
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Button(onClick = { onSave(key) }, enabled = key != current.orEmpty(), shape = RoundedCornerShape(12.dp)) { Text("Enregistrer") }
+        }
+    }
+}
+
+/** Où en est la mise à jour de l'appli. */
+private sealed interface UpdateState {
+    data object Idle : UpdateState
+    data object Checking : UpdateState
+    data object UpToDate : UpdateState
+    class Available(val release: Release) : UpdateState
+    class Downloading(val progress: Float) : UpdateState
+    class Ready(val apk: File) : UpdateState
+    class Failed(val message: String) : UpdateState
+}
+
+/**
+ * Version installée et mise à jour : on compare le commit de l'appli à celui de la dernière version publiée, on
+ * télécharge l'APK puis l'installeur d'Android prend le relais (il demande la permission la première fois).
+ */
+@Composable
+private fun UpdateSettings() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var state by remember { mutableStateOf<UpdateState>(UpdateState.Idle) }
+    val commit = BuildConfig.GIT_SHA.take(7)
+    fun install(apk: File) {
+        if (!context.packageManager.canRequestPackageInstalls()) {
+            // Première fois : Android demande d'autoriser l'appli à installer des mises à jour.
+            context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")))
+            return
+        }
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", apk)
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+    fun check() {
+        state = UpdateState.Checking
+        scope.launch {
+            state = try {
+                val release = AppUpdate.latest()
+                if (AppUpdate.isNewer(release, BuildConfig.GIT_SHA)) UpdateState.Available(release) else UpdateState.UpToDate
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                UpdateState.Failed(if (e is IOException) e.networkMessage() else "Vérification impossible")
+            }
+        }
+    }
+    fun download(release: Release) {
+        state = UpdateState.Downloading(0f)
+        scope.launch {
+            state = try {
+                val apk = AppUpdate.download(release, File(context.cacheDir, "updates")) { p ->
+                    scope.launch { if (state is UpdateState.Downloading) state = UpdateState.Downloading(p) }
+                }
+                install(apk)
+                UpdateState.Ready(apk)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                UpdateState.Failed(if (e is IOException) e.networkMessage() else "Téléchargement impossible")
+            }
+        }
+    }
+    Column(Modifier.padding(14.dp)) {
+        Text("Version ${BuildConfig.VERSION_NAME}", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+        MonoText(if (commit.isEmpty()) "compilée hors de GitHub" else "commit $commit", size = 10.5.sp)
+        Spacer(Modifier.height(10.dp))
+        when (val s = state) {
+            UpdateState.Checking -> Row(verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(10.dp))
+                Text("Recherche d'une mise à jour…", style = MaterialTheme.typography.bodyMedium)
+            }
+            is UpdateState.Available -> {
+                val date = s.release.publishedAt?.let {
+                    DateTimeFormatter.ofPattern("d MMMM 'à' HH:mm", Locale.FRANCE).format(it.atZone(ZoneId.systemDefault()))
+                }
+                Text(
+                    "Nouvelle version" + (date?.let { " du $it" } ?: "") +
+                        (if (s.release.size > 0) " (${s.release.size / 1_000_000} Mo)" else ""),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Button(onClick = { download(s.release) }, modifier = Modifier.padding(top = 8.dp)) { Text("Télécharger et installer") }
+            }
+            is UpdateState.Downloading -> {
+                Text("Téléchargement… ${(s.progress * 100).toInt()} %", style = MaterialTheme.typography.bodyMedium)
+                LinearProgressIndicator(progress = { s.progress }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+            }
+            is UpdateState.Ready -> {
+                Text("Mise à jour téléchargée. Si l'installation ne s'est pas ouverte, autorise Météo à installer des applis puis touche Installer.", style = MaterialTheme.typography.bodySmall)
+                Button(onClick = { install(s.apk) }, modifier = Modifier.padding(top = 8.dp)) { Text("Installer") }
+            }
+            else -> {
+                when (s) {
+                    UpdateState.UpToDate -> Text("L'appli est à jour.", style = MaterialTheme.typography.bodyMedium)
+                    is UpdateState.Failed -> Text(s.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    else -> Unit
+                }
+                Button(onClick = { check() }, modifier = Modifier.padding(top = 6.dp)) { Text("Rechercher une mise à jour") }
+            }
         }
     }
 }

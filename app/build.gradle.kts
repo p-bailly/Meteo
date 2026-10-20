@@ -14,6 +14,8 @@ android {
         // Sur GitHub Actions, chaque build a un numéro plus grand : le téléphone accepte la mise à jour.
         versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
         versionName = "0.1.$versionCode"
+        // Commit de ce build (sur GitHub Actions) : les Réglages le comparent à la dernière version publiée.
+        buildConfigField("String", "GIT_SHA", "\"${System.getenv("GITHUB_SHA") ?: ""}\"")
         // Bibliothèques natives de la carte : seulement les processeurs des téléphones, pour un APK plus léger.
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
@@ -46,6 +48,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -70,6 +73,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.maplibre.android)
     implementation(libs.jhdf)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.work.runtime)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
 }

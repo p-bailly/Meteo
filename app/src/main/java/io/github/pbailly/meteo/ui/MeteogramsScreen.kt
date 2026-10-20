@@ -38,7 +38,7 @@ fun MeteogramsScreen(
     LaunchedEffect(Unit) { onMultiModelNeeded() }
     Column(Modifier.fillMaxSize()) {
         if (onBack != null) DetailHeader("Météogramme", onBack) else ScreenHeader("Météogramme")
-        state.place?.let { PlaceLine(it.name, it.elevation ?: state.forecast.data?.elevation) }
+        state.place?.let { PlaceLine(it.name, elevation = null) }
         SegmentedToggle(TABS, tab, { tab = it }, Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), fill = true)
         val data = state.forecast.data
         if (data == null) {

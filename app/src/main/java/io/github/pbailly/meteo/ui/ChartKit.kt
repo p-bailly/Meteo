@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -78,6 +79,13 @@ fun DrawScope.drawSeries(
         ),
     )
 }
+
+/**
+ * Agrandissement du texte (1 en taille normale, 1,3 en très grand) : les graphiques dessinés au canevas l'appliquent
+ * à leurs hauteurs et à leurs marges pour que les étiquettes ne se marchent pas dessus.
+ */
+@Composable
+fun textScale(): Float = with(LocalDensity.current) { 12.sp.toDp().value / 12f }.coerceAtLeast(1f)
 
 /** Texte de graphique, en Martian Mono : [anchor] désigne le point d'ancrage (0 = gauche/haut, 0,5 = centre, 1 = droite/bas). */
 fun DrawScope.drawLabel(

@@ -9,8 +9,9 @@ Application Android de météo, sans publicité, inspirée de Meteoblue. Les pr�
    **https://github.com/p-bailly/Meteo/releases/latest/download/meteo.apk**
 2. Ouvrir le fichier téléchargé. Android demande d'autoriser l'installation depuis le navigateur
    (« sources inconnues ») : accepter pour cette fois.
-3. Pour mettre à jour, refaire la même chose : la nouvelle version s'installe par-dessus l'ancienne
-   et garde les favoris.
+3. Pour mettre à jour : Réglages → Application → « Rechercher une mise à jour », puis « Télécharger et
+   installer » (la première fois, Android demande d'autoriser Météo à installer des applis). Ou refaire la même
+   chose qu'au 1. La nouvelle version s'installe par-dessus l'ancienne et garde les favoris.
 
 L'APK est recompilé automatiquement par GitHub Actions à chaque modification du code, et publié
 seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`).
@@ -21,10 +22,15 @@ Cinq onglets dans la barre du bas, ou en glissant d'une page à l'autre (sauf su
 la carte) :
 
 - **Aujourd'hui**, sur un seul écran sans défiler : le lieu, son département et son altitude, l'étoile des favoris
-  (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel, les
-  extrêmes du jour (maxi en orange, mini en bleu) et leur **écart aux normales** de saison (« +2° vs normales »,
-  moyennes 1991-2020) ; en fond, un **dessin au crayon** du temps qu'il fait (soleil, lune et étoiles, nuages, pluie,
-  neige, orage ou brouillard au-dessus des montagnes) ; de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
+  (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel en toutes
+  lettres (sans pictogramme), les extrêmes du jour (maxi en orange, mini en bleu) et leur **écart aux normales** de
+  saison (« +2° vs normales », moyennes 1991-2020) ; en fond, un **dessin aux crayons de couleur** du temps qu'il
+  fait (soleil, lune dans sa vraie phase et étoiles, nuages, pluie, neige, orage ou brouillard) devant **le relief
+  du lieu tel qu'il est** : la coupe du terrain vers le sommet qui le domine (plaine et ses champs, collines,
+  montagnes, haute montagne), avec ses prés et ses forêts, sa roche et sa neige selon la saison, le relief lointain
+  bleuté, et le lac ou la mer quand il y en a ; un village au clocher comtois, un chalet, des sapins ou des arbres
+  selon le jour ; parfois une petite surprise selon le temps ou certains jours de fête — et toucher le dessin en
+  montre une autre version ; de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
   (avec l'iso 0 °C actuel) qui ouvre la page du même nom ; vent, rafales, humidité, pression (et sa tendance),
   indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
   qui reste (pictogramme, courbe de température, probabilité et barres de pluie).
@@ -39,11 +45,16 @@ la carte) :
   - **14 jours**, en grand, à faire glisser du doigt : pictogramme, indice de confiance,
     mini-maxi, cumul de pluie et vent du jour (flèche de la direction dominante et vitesse maximale) ;
   - **Modèles** : comparaison de 8 modèles avec leur moyenne.
+
+  En très grand texte, les graphiques s'agrandissent avec lui (rangées plus hautes, journées plus larges, dates
+  raccourcies si besoin) pour que rien ne se chevauche.
 - **Neige & altitude** (depuis la ligne du même nom dans Aujourd'hui), par jour ou par tranche de 3 heures : une
-  coupe du relief vallée → sommets avec la température à chaque altitude, l'iso 0, la limite pluie-neige, les
+  coupe du relief de la vallée vers le sommet qui domine le lieu (le Mont Vouillot pour Morteau, le Grand Veymont pour
+  Valence) avec la température à chaque altitude, l'iso 0, la limite pluie-neige, les
   sommets nommés, la neige attendue à 2 000 et 3 000 m et les pentes enneigées, puis le ressenti et le vent à
   2 000 m ; ensuite l'iso 0 et la limite pluie-neige jour par jour, avec la neige à 2 000 m.
-- **Radar** : les cartes, avec frise des heures et animation :
+- **Radar** : les cartes, avec frise des heures et animation ; le menu posé en haut à droite de la carte choisit la
+  couche, le bouton « Webcams » de l'en-tête affiche les webcams ; le lieu est un point noir cerclé de blanc :
   - **Pluie** : radar Météo-France et sa prévision (voir ci-dessous pour la clé) ;
   - **Température** à 2 m maintenant : modèle ICON-EU du DWD (sans clé, fichier GRIB2 d'environ 1 Mo du serveur de
     données ouvertes du DWD, plus fiable que son serveur de cartes), colorée comme les cases de température de
@@ -62,7 +73,23 @@ la carte) :
   et ses extrêmes. L'étoile de chaque ligne ajoute ou retire un favori. **Comparer** met tous ces lieux côte à côte
   sur 8 jours (pictogramme, maxi et mini, pluie) ; l'engrenage ouvre les **Réglages** : thème (comme le téléphone,
   jour ou nuit), taille du texte (100, 115 ou 130 % : plus grand, certains écrans cachent des détails secondaires),
-  modèles de la comparaison, clés Météo-France et Windy.
+  modèles de la comparaison, clés Météo-France et Windy, et la **mise à jour de l'appli** (version installée,
+  téléchargement et installation de la dernière version publiée).
+
+**Widgets** de l'écran d'accueil (appui long sur l'écran d'accueil → Widgets → Météo), sur le lieu ouvert dans
+l'app, aux couleurs Glacier (clair ou sombre comme les Réglages) ; les toucher ouvre l'app :
+
+- **Maintenant** (2 × 2, de 2 × 1 à plus large) : température, pictogramme et ciel, maxi (orange) et mini (bleu)
+  du jour ; en large, le ressenti et l'arrivée de la pluie ;
+- **Prévisions** (4 × 2) : le temps actuel puis les prochains jours (pictogramme qui résume la journée, maxi et mini,
+  cumul de pluie s'il y a la place), de 3 à 7 jours selon la largeur ; en 4 × 3, une ligne des prochaines heures ;
+- **Prochaines heures** (4 × 2) : la phrase qui compte (« Pluie vers 15h · 2,4 mm », « Neige jusqu'à 18h »,
+  « Pas de pluie d'ici 24 h ») puis le graphique des 24 prochaines heures (12 en étroit) : pictogrammes,
+  courbe de température et barres de pluie.
+
+Ils se mettent à jour toutes les 30 minutes (le minimum d'Android) et à chaque téléchargement dans l'app ; ils
+réutilisent son cache, donc n'ajoutent un appel à Open-Meteo que si l'app n'a pas été ouverte entre-temps. Une heure
+compte comme pluvieuse à partir de 0,2 mm.
 
 Comment la prévision est résumée :
 
@@ -92,8 +119,11 @@ Comment l'altitude est calculée :
   −0,65 °C par 100 m. Ressenti en altitude : formule du refroidissement éolien d'Environnement Canada.
 - **Limite pluie-neige** : 300 m sous l'iso 0 °C. **Neige à une altitude** : la pluie prévue sur le lieu, quand
   elle tombe au-dessus de la limite pluie-neige (1 mm d'eau ≈ 1 cm de neige fraîche).
-- **Coupe du relief** : sommets nommés d'OpenStreetMap (API Overpass, sans clé) et altitudes du terrain
-  (modèle Copernicus à 90 m, via l'API d'altitude d'Open-Meteo), téléchargées une seule fois par lieu.
+- **Coupe du relief** (aussi pour le dessin d'Aujourd'hui : le modèle de terrain rend les lacs et la mer parfaitement
+  plats, ce qui suffit à les reconnaître) : sommets nommés d'OpenStreetMap (API Overpass, sans clé, avec deux serveurs de secours) et
+  altitudes du terrain (modèle Copernicus à 90 m, via l'API d'altitude d'Open-Meteo), téléchargées une seule fois
+  par lieu. La coupe va vers le sommet qui domine le lieu, cherché jusqu'à 60 km : le plus grand dénivelé rapporté à
+  la distance plus 10 km (une colline voisine ne passe pas devant une montagne) ; les sommets traversés sont nommés.
 
 Thème clair et sombre (au choix dans les Réglages), identité « Glacier » (voir `design/`) avec l'orange en couleur d'accent, cache local (pas de
 nouvel appel pendant 30 min, affichage hors ligne). Une connexion coupée en plein téléchargement (réseau mobile
@@ -150,7 +180,7 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 
 - `data/` : appels Open-Meteo et lecture des réponses (`OpenMeteoApi`), cache (`WeatherRepository`),
   favoris (`PlacesStore`), position (`DeviceLocation`), nouvelles tentatives et messages d'erreur réseau
-  (`Http`), décompression bzip2 (`Bzip2`) ; indice de confiance (`Predictability`), normales de saison
+  (`Http`), décompression bzip2 (`Bzip2`), mise à jour de l'appli (`AppUpdate`) ; indice de confiance (`Predictability`), normales de saison
   (`Climate`) ; météo en altitude, limite pluie-neige et neige (`Altitude`), pictogramme du jour et moment de la pluie
   (`Outlook`), coupe du relief (`Terrain`, avec Overpass pour les sommets).
 - `data/maps/` : couches des cartes (`MapLayers`), lecture des fichiers GRIB2 du DWD avec leur compression CCSDS
@@ -163,9 +193,12 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 - `ui/` : navigation et barre du bas (`MeteoApp`, `Glacier`), onglets (`TodayScreen`, `DaysScreen`,
   `AltitudeScreen`, `radar/RadarScreen`, `PlacesScreen`), comparaison des lieux (`CompareScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
   (`MeteogramsScreen`, `DaysTab`, `MeteogramTab`, `MultiModelTab`), réglages (`SettingsScreen`), pictogrammes
-  dessinés au trait (`WeatherIcon`), dessin au crayon d'Aujourd'hui (`WeatherSketch`), outils de graphique
+  dessinés au trait (`WeatherIcon`), dessin au crayon d'Aujourd'hui (`WeatherSketch`, son décor et ses surprises dans `SketchScene` et
+  `SketchDecor`), outils de graphique
   (`ChartKit`, dont la jauge de confiance), carte MapLibre
   (`radar/RadarMap`).
+- `widget/` : widgets de l'écran d'accueil avec Jetpack Glance (`NowWidget`, `ForecastWidget`, `HoursWidget`),
+  chargement et couleurs (`WidgetData`), pictogrammes et graphique dessinés en images (`WidgetDrawing`).
 - `ui/theme/` : couleurs (`Theme`) et polices Archivo et Martian Mono (`Type`, fichiers dans `res/font/`).
 
 La clé de signature `app/meteo-perso.jks` est volontairement dans le dépôt pour que chaque APK compilé

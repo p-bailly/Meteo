@@ -7,10 +7,17 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.pbailly.meteo.ui.CrashDialog
 import io.github.pbailly.meteo.ui.MeteoApp
 import io.github.pbailly.meteo.ui.MeteoViewModel
 import io.github.pbailly.meteo.ui.theme.MeteoTheme
@@ -20,6 +27,20 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
+            // Après un plantage, d'abord sa trace, à copier ; le reste de l'appli (qui a peut-être planté au
+            // démarrage) ne se lance qu'ensuite.
+            var crash by remember { mutableStateOf(CrashLog.read(this)) }
+            crash?.let { report ->
+                MeteoTheme {
+                    Surface(Modifier.fillMaxSize()) {
+                        CrashDialog(report) {
+                            CrashLog.clear(this)
+                            crash = null
+                        }
+                    }
+                }
+                return@setContent
+            }
             val viewModel: MeteoViewModel = viewModel()
             val state by viewModel.state.collectAsStateWithLifecycle()
             val dark = when (state.theme) {

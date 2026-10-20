@@ -3,22 +3,19 @@ package io.github.pbailly.meteo.ui.radar
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.HorizontalDivider
-import io.github.pbailly.meteo.ui.DetailHeader
-import io.github.pbailly.meteo.ui.ScreenHeader
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,22 +28,33 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,55 +62,55 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.Outlook
+import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.maps.Measure
 import io.github.pbailly.meteo.data.maps.ObservationSource
 import io.github.pbailly.meteo.data.maps.StationReading
-import io.github.pbailly.meteo.ui.Fmt
-import io.github.pbailly.meteo.ui.drawLabel
-import io.github.pbailly.meteo.ui.theme.LocalChartColors
-import androidx.compose.foundation.Canvas
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.CardDefaults
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextOverflow
 import io.github.pbailly.meteo.data.maps.TileLayer
 import io.github.pbailly.meteo.data.maps.WindyWebcams
 import io.github.pbailly.meteo.data.radar.RainClass
-import io.github.pbailly.meteo.ui.theme.HeaderBlue
-import io.github.pbailly.meteo.ui.theme.OnTemperature
+import io.github.pbailly.meteo.ui.DetailHeader
+import io.github.pbailly.meteo.ui.Fmt
+import io.github.pbailly.meteo.ui.ScreenHeader
+import io.github.pbailly.meteo.ui.drawLabel
 import io.github.pbailly.meteo.ui.theme.AppMono
+import io.github.pbailly.meteo.ui.theme.HeaderBlue
+import io.github.pbailly.meteo.ui.theme.LocalChartColors
+import io.github.pbailly.meteo.ui.theme.OnTemperature
 import io.github.pbailly.meteo.ui.theme.temperatureColor
-import kotlinx.coroutines.delay
-import org.maplibre.android.geometry.LatLng
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import org.maplibre.android.geometry.LatLng
 
 private const val REFRESH_MS = 2 * 60 * 1000L
 
@@ -192,6 +200,8 @@ fun RadarScreen(
 
     val actions: @Composable RowScope.() -> Unit = {
         val tint = MaterialTheme.colorScheme.onSurfaceVariant
+        // Les webcams ont leur bouton ; les couches météo sont dans le menu posé sur la carte.
+        WebcamsButton(active = layer == MapLayer.WEBCAMS, onClick = { onLayer(if (layer == MapLayer.WEBCAMS) MapLayer.RAIN else MapLayer.WEBCAMS) })
         if (rain) {
             IconButton(onClick = { editingKey = true }) { Icon(Icons.Filled.Key, contentDescription = "Clé Météo-France", tint = tint) }
         }
@@ -199,8 +209,7 @@ fun RadarScreen(
     }
     Column(Modifier.fillMaxSize()) {
         if (onBack != null) DetailHeader("Cartes", onBack, trailing = actions) else ScreenHeader("Cartes", trailing = actions)
-        LayerTabs(layer, onLayer)
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Box(Modifier.weight(1f).fillMaxWidth().padding(top = 6.dp)) {
             WeatherMap(
                 overlay = if (rain) MapOverlay.Image(state.currentImage, state.bounds) else layerState.overlay,
                 center = LatLng(place.latitude, place.longitude),
@@ -217,6 +226,7 @@ fun RadarScreen(
             }
             // Décalée à droite des légendes pour ne pas les recouvrir.
             Attribution(layer, Modifier.align(Alignment.BottomEnd).padding(start = 110.dp))
+            LayerMenu(layer, onLayer, Modifier.align(Alignment.TopEnd).padding(8.dp))
             if (state.loading && rain || layerState.loading && !rain) {
                 CircularProgressIndicator(
                     Modifier.align(Alignment.TopCenter).padding(top = 16.dp).size(28.dp),
@@ -250,7 +260,7 @@ fun RadarScreen(
                 )
                 layer == MapLayer.TEMPERATURE && layerState.observationNote != null && error == null -> Column(
                     Modifier
-                        .align(Alignment.TopEnd)
+                        .align(Alignment.TopStart)
                         .padding(8.dp)
                         .clip(RoundedCornerShape(6.dp))
                         .background(HeaderBlue.copy(alpha = 0.8f))
@@ -295,31 +305,61 @@ fun RadarScreen(
     }
 }
 
-/** Choix de la couche : pastilles, l'active en nuit. */
+/** Bouton des webcams, dans l'en-tête : plein quand elles sont affichées. */
 @Composable
-private fun LayerTabs(selected: MapLayer, onLayer: (MapLayer) -> Unit) {
+private fun WebcamsButton(active: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (active) colors.onBackground else colors.surfaceContainerLowest,
+        border = BorderStroke(1.dp, if (active) colors.onBackground else colors.outlineVariant),
+        modifier = Modifier.padding(end = 4.dp),
     ) {
-        MapLayer.entries.forEach { layer ->
-            val active = layer == selected
-            Text(
-                layer.label,
-                color = if (active) colors.background else colors.onSurfaceVariant,
-                fontWeight = if (active) FontWeight.SemiBold else null,
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (active) colors.onBackground else colors.surfaceContainerLowest)
-                    .border(1.dp, if (active) colors.onBackground else colors.outlineVariant, RoundedCornerShape(12.dp))
-                    .clickable { onLayer(layer) }
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-            )
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Videocam, contentDescription = null, tint = if (active) colors.background else colors.primary, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Webcams", color = if (active) colors.background else colors.primary, style = MaterialTheme.typography.titleSmall)
+        }
+    }
+}
+
+/** Choix de la couche météo (pluie, température, satellite, foudre) : un menu déroulant posé sur la carte. */
+@Composable
+private fun LayerMenu(selected: MapLayer, onLayer: (MapLayer) -> Unit, modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    val colors = MaterialTheme.colorScheme
+    Box(modifier) {
+        Surface(
+            onClick = { open = true },
+            shape = RoundedCornerShape(12.dp),
+            color = colors.surfaceContainerLowest,
+            border = BorderStroke(1.dp, colors.outlineVariant),
+            shadowElevation = 3.dp,
+        ) {
+            Row(Modifier.padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Layers, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    if (selected == MapLayer.WEBCAMS) "Couches" else selected.label,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = "Choisir la carte", tint = colors.onSurfaceVariant)
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            MapLayer.entries.filter { it != MapLayer.WEBCAMS }.forEach { layer ->
+                DropdownMenuItem(
+                    text = { Text(layer.label, fontWeight = if (layer == selected) FontWeight.SemiBold else null) },
+                    onClick = {
+                        open = false
+                        onLayer(layer)
+                    },
+                    trailingIcon = { if (layer == selected) Icon(Icons.Filled.Check, contentDescription = null, tint = colors.primary) },
+                )
+            }
         }
     }
 }

@@ -53,6 +53,10 @@ class TerrainProfile(
 /** Construction de la coupe : choix du sommet, points à échantillonner, repères. Sans réseau, pour les tests. */
 object Terrain {
     const val SEARCH_RADIUS_KM = 25.0
+    /** Sommets cherchés jusqu'à 60 km : le Grand Veymont domine Valence à 49 km. */
+    const val PEAK_RADIUS_KM = 60.0
+    /** Distance ajoutée au calcul de la domination : une colline voisine ne passe pas devant une montagne. */
+    private const val DOMINANCE_OFFSET_KM = 10.0
     const val SAMPLES = 100
     private const val BEFORE = 0.25
     private const val AFTER = 0.15
@@ -70,6 +74,19 @@ object Terrain {
                 (latitude - dLat + 2 * dLat * r / (GRID - 1)) to (longitude - dLon + 2 * dLon * c / (GRID - 1))
             }
         }
+    }
+
+    /**
+     * Le sommet qui domine le lieu : le plus grand dénivelé au-dessus de [ground] rapporté à la distance (plus 10 km),
+     * à moins de [radiusKm] et au moins 200 m plus haut. Le Mont Vouillot pour Morteau, le Grand Veymont pour Valence.
+     */
+    fun dominantPeak(latitude: Double, longitude: Double, ground: Double, peaks: List<Peak>, radiusKm: Double = PEAK_RADIUS_KM): Peak? {
+        if (ground.isNaN()) return null
+        return peaks.mapNotNull { peak ->
+            val d = distanceKm(latitude, longitude, peak.latitude, peak.longitude)
+            val gain = peak.elevation - ground
+            if (d > radiusKm || gain < 200) null else peak to gain / (d + DOMINANCE_OFFSET_KM)
+        }.maxByOrNull { it.second }?.first
     }
 
     /** Le plus haut sommet nommé à moins de [radiusKm] du lieu. */
@@ -117,10 +134,10 @@ object Terrain {
             val (u, offset) = project(first, last, peak.latitude, peak.longitude)
             if (u !in 0.0..1.0 || offset > NAME_CORRIDOR_KM) continue
             corridor += peak
-            if (peak == target || labels.size >= 3 || offset > LABEL_CORRIDOR_KM) continue
+            if (peak == target || labels.size >= 4 || offset > LABEL_CORRIDOR_KM) continue
             val index = (u * (SAMPLES - 1)).roundToInt()
             if (labels.any { abs(it.index - index) < 12 }) continue
-            if (peak.elevation < values[placeIndex()] + 300) continue
+            if (peak.elevation < values[placeIndex()] + 150) continue
             // Seulement un sommet que la coupe traverse vraiment : le terrain y est à moins de 300 m de son altitude.
             val near = (index - 2..index + 2).filter { it in values.indices }.maxByOrNull { values[it] } ?: index
             if (peak.elevation - values[near] > 300) continue
@@ -154,13 +171,18 @@ object Terrain {
 
 /** Sommets nommés d'OpenStreetMap, par l'API Overpass (gratuite, sans clé). */
 object Overpass {
-    private const val URL = "https://overpass-api.de/api/interpreter"
+    /** Le serveur principal, puis deux miroirs si celui-ci ne répond pas. */
+    val SERVERS = listOf(
+        "https://overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+    )
 
-    fun peaksUrl(latitude: Double, longitude: Double, radiusKm: Double = Terrain.SEARCH_RADIUS_KM): String {
-        val query = "[out:json][timeout:25];node[\"natural\"=\"peak\"][\"name\"][\"ele\"]" +
+    fun peaksUrl(latitude: Double, longitude: Double, radiusKm: Double = Terrain.PEAK_RADIUS_KM, server: String = SERVERS.first()): String {
+        val query = "[out:json][timeout:60];node[\"natural\"=\"peak\"][\"name\"][\"ele\"]" +
             "(around:${(radiusKm * 1000).roundToInt()},${"%.4f".format(java.util.Locale.ROOT, latitude)}," +
             "${"%.4f".format(java.util.Locale.ROOT, longitude)});out body;"
-        return "$URL?data=" + URLEncoder.encode(query, "UTF-8")
+        return "$server?data=" + URLEncoder.encode(query, "UTF-8")
     }
 
     fun parsePeaks(body: String): List<Peak> {
@@ -197,16 +219,19 @@ class TerrainRepository(
     private val httpGet: (String) -> String,
 ) {
     suspend fun profile(place: Place): TerrainProfile = withContext(Dispatchers.IO) {
-        val file = File(cacheDir, "terrain_${place.id}.json")
+        // « terrain2 » : coupes vers le sommet qui domine le lieu (avant : le plus haut à 25 km).
+        val file = File(cacheDir, "terrain2_${place.id}.json")
         if (file.exists()) runCatching { decode(file.readText()) }.getOrNull()?.let { return@withContext it }
-        val peaks = try {
-            Overpass.parsePeaks(httpGet(Overpass.peaksUrl(place.latitude, place.longitude)))
+        val peaks = peaks(place)
+        val ground = place.elevation ?: try {
+            OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(listOf(place.latitude to place.longitude)))).firstOrNull() ?: Double.NaN
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            emptyList()
+            Double.NaN
         }
-        val target = Terrain.highestPeak(place.latitude, place.longitude, peaks)
+        val target = Terrain.dominantPeak(place.latitude, place.longitude, ground, peaks)
+            ?: Terrain.highestPeak(place.latitude, place.longitude, peaks)
         val (toLat, toLon) = if (target != null) {
             target.latitude to target.longitude
         } else {
@@ -218,8 +243,23 @@ class TerrainRepository(
         val elevations = OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line)))
         val profile = Terrain.build(line, elevations, target, peaks)
         cacheDir.mkdirs()
+        cacheDir.listFiles { f -> f.name.startsWith("terrain_") }?.forEach { it.delete() }
         file.writeText(encode(profile))
         profile
+    }
+
+    /** Sommets nommés autour du lieu, du premier serveur Overpass qui répond ; aucun si tous échouent. */
+    private fun peaks(place: Place): List<Peak> {
+        for (server in Overpass.SERVERS) {
+            try {
+                return Overpass.parsePeaks(httpGet(Overpass.peaksUrl(place.latitude, place.longitude, server = server)))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                continue
+            }
+        }
+        return emptyList()
     }
 
     private fun encode(p: TerrainProfile): String = buildJsonObject {

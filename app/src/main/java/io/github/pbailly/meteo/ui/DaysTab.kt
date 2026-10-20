@@ -81,10 +81,12 @@ private fun FourteenDayChart(forecast: Forecast, confidence: List<Int?>, modifie
     val rainMax = remember(forecast) { max(5.0, d.precipitationSum.filter { !it.isNaN() }.maxOrNull() ?: 0.0) }
     val codes = remember(forecast) { d.date.map { Outlook.dayCode(forecast, it) } }
     val scroll = rememberScrollState()
+    // Texte agrandi : rangées plus hautes et journées plus larges, pour que les étiquettes ne se touchent pas.
+    val k = textScale()
 
     Row(modifier) {
-        Canvas(Modifier.size(AXIS_WIDTH, CHART_HEIGHT)) {
-            val dp = density
+        Canvas(Modifier.size(AXIS_WIDTH * k, CHART_HEIGHT * k)) {
+            val dp = density * k
             val right = size.width - 4f * dp
             val tScale = LinearScale(tempTicks.first(), tempTicks.last(), Rows.TEMPERATURE_TOP * dp, Rows.TEMPERATURE_BOTTOM * dp)
             tempTicks.forEach { t -> drawLabel(measurer, "${t.toInt()}°", Offset(right, tScale.y(t)), colors.muted, 10f, 1f, 0.5f) }
@@ -93,8 +95,8 @@ private fun FourteenDayChart(forecast: Forecast, confidence: List<Int?>, modifie
             drawLabel(measurer, "km/h", Offset(right, (Rows.WIND + 16f) * dp), colors.muted, 9f, 1f, 0.5f)
         }
         Box(Modifier.weight(1f).horizontalScroll(scroll)) {
-            Canvas(Modifier.width(DAY_WIDTH * n).height(CHART_HEIGHT)) {
-                val dp = density
+            Canvas(Modifier.width(DAY_WIDTH * k * n).height(CHART_HEIGHT * k)) {
+                val dp = density * k
                 val colWidth = size.width / n
                 val cx = { i: Int -> (i + 0.5f) * colWidth }
                 val tScale = LinearScale(tempTicks.first(), tempTicks.last(), Rows.TEMPERATURE_TOP * dp, Rows.TEMPERATURE_BOTTOM * dp)
