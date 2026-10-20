@@ -2,8 +2,9 @@
 
 Cinq propositions pour remplacer l'ancienne icône (soleil derrière un nuage sur bleu `#256ABF`).
 La direction **Glacier** (variante D1 de la piste Alpin, `logos/alpin-variantes/d1-glacier.svg`) est appliquée à
-l'app : icône (sommet enneigé au-dessus de l'iso 0 °C, balise rouge), palette neige, glace, glacier, ardoise et nuit,
-polices Archivo et Martian Mono, pictogrammes au trait recolorés, barre du haut claire et bloc « Altitude ».
+l'app : palette neige, glace, glacier, ardoise et nuit, polices Archivo et Martian Mono, pictogrammes au trait
+recolorés, barre du haut claire et bloc « Altitude ». L'icône de l'app est désormais le logo au crayon **C5 Montagne**
+(`logos/crayon/c5-montagne.svg`, voir plus bas), qui a remplacé celle de Glacier (sommet enneigé, balise rouge).
 Isobare, appliquée avant elle, et les autres directions restent des pistes.
 
 Les logos de `logos/` sont dessinés sur la grille de l'icône adaptative Android (108 × 108, motif
@@ -65,6 +66,9 @@ au hasard mais reproductible) : modifier le script puis le relancer.
 | C5 | **Montagne** | Rappelle le dessin de fond et le thème Glacier (sommet enneigé) |
 | C6 | **Nuit** | Lune, étoiles et nuage à la craie sur fond nuit |
 | C7 | **Craie** | Éclaircies à la craie blanche sur le bleu glacier actuel : garde la couleur de l'icône |
+
+`generer.py` écrit aussi les deux calques de l'icône de l'app (`ICONE`, aujourd'hui C5) :
+`res/drawable/ic_launcher_foreground.xml` et `ic_launcher_monochrome.xml`, sur le fond papier `launcher_background`.
 
 Les hachures et le tremblé passent en vector drawable Android (ce ne sont que des chemins), mais les fichiers sont
 plus lourds que ceux des autres pistes.

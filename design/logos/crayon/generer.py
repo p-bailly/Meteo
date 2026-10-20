@@ -3,8 +3,12 @@ hachures, comme le dessin de fond d'Aujourd'hui (ui/WeatherSketch.kt). Lancer : 
 import math
 import os
 import random
+import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+DRAWABLE = os.path.join(HERE, "..", "..", "..", "app", "src", "main", "res", "drawable")
+# Logo installé comme icône de l'app : ses calques Android sont régénérés avec les SVG.
+ICONE = "c5-montagne"
 
 PAPIER = "#F6F1E6"
 GRAPHITE = "#2E3644"
@@ -23,6 +27,8 @@ class Crayon:
         self.parts = []
         self.defs = []
         self.n = 0
+        # Le même dessin, en éléments de vector drawable Android : (sorte, chemin, couleur, alpha, épaisseur, clip).
+        self.vecteur = []
 
     def j(self, a):
         return (self.rnd.random() * 2 - 1) * a
@@ -35,6 +41,7 @@ class Crayon:
             w = width if p == 0 else width * 0.7
             self.parts.append(f'<path d="{d}" fill="none" stroke="{color}" stroke-opacity="{op}" '
                               f'stroke-width="{w:.2f}" stroke-linecap="round" stroke-linejoin="round"/>')
+            self.vecteur.append(("trait", d, color, op, f"{w:.2f}", None))
 
     def ligne(self, a, b, color, width=2.6, passes=2):
         pts = [(a[0] + (b[0] - a[0]) * t / 5, a[1] + (b[1] - a[1]) * t / 5) for t in range(6)]
@@ -43,6 +50,7 @@ class Crayon:
     def remplir(self, pts, color):
         d = "M" + " L".join(f"{x:.1f} {y:.1f}" for x, y in pts) + " Z"
         self.parts.append(f'<path d="{d}" fill="{color}"/>')
+        self.vecteur.append(("aplat", d, color, 1, None, None))
 
     def hachures(self, pts, color, spacing=4.0, angle=-35, width=1.5):
         self.n += 1
@@ -65,11 +73,40 @@ class Crayon:
             k += spacing + self.j(0.6)
         self.parts.append(f'<path d="{" ".join(lines)}" stroke="{color}" stroke-width="{width}" '
                           f'stroke-linecap="round" stroke-opacity="0.85" clip-path="url(#{cid})"/>')
+        self.vecteur.append(("trait", " ".join(lines), color, 0.85, width, d))
 
     def svg(self, fond, label):
         return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="{label}">\n'
                 f'  <defs>{"".join(self.defs)}</defs>\n  <rect width="108" height="108" fill="{fond}"/>\n  '
                 + "\n  ".join(self.parts) + "\n</svg>\n")
+
+    def drawable(self, commentaire, monochrome=False):
+        """Calque de premier plan de l'icône adaptative Android, sans le fond. En monochrome (icônes à thème
+        d'Android 13+), seul l'alpha compte : tout est tracé en noir et les aplats de papier, qui ne font que
+        masquer, sont omis."""
+        def vd(d):
+            return re.sub(r"(-?[\d.]+) (-?[\d.]+)", r"\1,\2", d).replace(" ", "")
+
+        out = []
+        for sorte, d, color, alpha, width, clip in self.vecteur:
+            if sorte == "aplat":
+                if not monochrome:
+                    out.append(f'    <path\n        android:fillColor="{color}"\n        android:pathData="{vd(d)}" />')
+                continue
+            path = (f'<path\n        android:strokeColor="{"#000000" if monochrome else color}"\n'
+                    f'        android:strokeAlpha="{alpha}"\n        android:strokeWidth="{width}"\n'
+                    f'        android:strokeLineCap="round"\n        android:strokeLineJoin="round"\n'
+                    f'        android:pathData="{vd(d)}" />')
+            if clip:
+                path = path.replace("\n        ", "\n            ")
+                out.append(f'    <group>\n        <clip-path android:pathData="{vd(clip)}" />\n        {path}\n    </group>')
+            else:
+                out.append("    " + path)
+        return ('<?xml version="1.0" encoding="utf-8"?>\n<!--\n' + commentaire + '\n-->\n'
+                '<vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
+                '    android:width="108dp"\n    android:height="108dp"\n'
+                '    android:viewportWidth="108"\n    android:viewportHeight="108">\n'
+                + "\n".join(out) + "\n</vector>\n")
 
 
 def cercle(cx, cy, r, n=36):
@@ -221,3 +258,10 @@ if __name__ == "__main__":
         fond = f(c)
         with open(os.path.join(HERE, nom + ".svg"), "w") as out:
             out.write(c.svg(fond, label))
+        if nom == ICONE:
+            note = (f"    Logo au crayon {nom} (design/logos/crayon/{nom}.svg), généré par\n"
+                    f"    design/logos/crayon/generer.py : ne pas modifier à la main. Fond : launcher_background {fond}.")
+            with open(os.path.join(DRAWABLE, "ic_launcher_foreground.xml"), "w") as out:
+                out.write(c.drawable(note))
+            with open(os.path.join(DRAWABLE, "ic_launcher_monochrome.xml"), "w") as out:
+                out.write(c.drawable(note + "\n    Calque monochrome des icônes à thème d'Android 13+.", monochrome=True))
