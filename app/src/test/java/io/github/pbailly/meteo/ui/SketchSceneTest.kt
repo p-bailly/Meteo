@@ -201,7 +201,7 @@ class SketchSceneTest {
         val time = LocalDateTime.of(2026, 10, 20, 15, 0)
         val chamonix = SketchTerrains.from(profile("chamonix"), 10, snowing = false)
         val paris = SketchTerrains.from(profile("paris"), 10, snowing = false)
-        fun drop(t: SketchTerrain, clouds: SketchClouds?) = SketchScenes.scene(3, true, time, 1, t, clouds = clouds).cloudDrop
+        fun drop(t: SketchTerrain, clouds: SketchClouds?) = SketchScenes.scene(3, true, time, 1, t, conditions = SketchConditions(clouds = clouds)).cloudDrop
         val low = SketchClouds(low = 0.9f, mid = 0.2f, high = 0f)
         val mid = SketchClouds(low = 0.1f, mid = 0.9f, high = 0.3f)
         // Nuages bas en montagne : ils descendent sur les sommets ; en plaine, un peu ; moyens : à leur place.
@@ -210,8 +210,69 @@ class SketchSceneTest {
         assertEquals(0f, drop(chamonix, mid), 0f)
         assertEquals(0f, drop(chamonix, null), 0f)
         // Seulement des nuages hauts : un voile.
-        assertTrue(SketchScenes.scene(3, true, time, 1, paris, clouds = SketchClouds(0.05f, 0.1f, 0.9f)).highVeil)
-        assertFalse(SketchScenes.scene(3, true, time, 1, paris, clouds = mid).highVeil)
+        assertTrue(SketchScenes.scene(3, true, time, 1, paris, conditions = SketchConditions(clouds = SketchClouds(0.05f, 0.1f, 0.9f))).highVeil)
+        assertFalse(SketchScenes.scene(3, true, time, 1, paris, conditions = SketchConditions(clouds = mid)).highVeil)
+    }
+
+    @Test
+    fun `light follows sunrise and sunset`() {
+        val rise = LocalDateTime.of(2026, 10, 20, 7, 30)
+        val set = LocalDateTime.of(2026, 10, 20, 18, 30)
+        fun at(h: Int, m: Int, day: Boolean = true) = SketchScenes.lightAt(LocalDateTime.of(2026, 10, 20, h, m), day, rise, set)
+        assertEquals(Light.NIGHT, at(5, 0, day = false))
+        assertEquals(Light.DAWN, at(7, 0, day = false))
+        assertEquals(Light.SUNRISE, at(7, 45))
+        assertEquals(Light.DAY, at(12, 0))
+        assertEquals(Light.SUNSET, at(18, 0))
+        assertEquals(Light.DUSK, at(18, 50, day = false))
+        assertEquals(Light.NIGHT, at(22, 0, day = false))
+        // Sans heures du soleil : le jour ou la nuit, simplement.
+        assertEquals(Light.DAY, SketchScenes.lightAt(rise, true, null, null))
+    }
+
+    @Test
+    fun `wind bends the drawing its way`() {
+        val time = LocalDateTime.of(2026, 10, 20, 15, 0)
+        fun lean(kmh: Double, from: Double) = SketchScenes.scene(0, true, time, 1, conditions = SketchConditions(windKmh = kmh, windFrom = from)).lean
+        assertEquals(1f, lean(70.0, 270.0), 0.01f)
+        assertEquals(-1f, lean(70.0, 90.0), 0.01f)
+        assertEquals(0f, lean(10.0, 270.0), 0f)
+        assertTrue(lean(35.0, 250.0) in 0.3f..0.6f)
+        val windy = SketchScenes.scene(0, true, time, 1, conditions = SketchConditions(windKmh = 30.0))
+        assertTrue(Decor.WINDSOCK in windy.decor)
+        assertFalse(Decor.WINDSOCK in SketchScenes.scene(0, true, time, 1).decor)
+    }
+
+    @Test
+    fun `animals ski and monuments fit the place`() {
+        val days = (0L until 60L).map { LocalDateTime.of(2026, 7, 1, 14, 0).plusDays(it) }
+        val alps = SketchTerrains.from(profile("annecy"), 7, snowing = false)
+        val chamonix = SketchTerrains.from(profile("chamonix"), 7, snowing = false)
+        val nice = SketchTerrains.from(profile("nice"), 7, snowing = false)
+        // Des vaches à l'alpage l'été, jamais l'hiver ni la nuit.
+        assertTrue(days.any { Decor.COWS in SketchScenes.scene(0, true, it, 3, alps).decor })
+        assertTrue(days.none { Decor.COWS in SketchScenes.scene(0, false, it.withHour(23), 3, alps).decor })
+        assertTrue(days.none { Decor.COWS in SketchScenes.scene(0, true, it.withMonth(1), 3, alps).decor })
+        assertTrue(days.any { Decor.CHAMOIS in SketchScenes.scene(0, true, it, 3, chamonix).decor })
+        assertTrue(days.all { Decor.GULLS in SketchScenes.scene(0, true, it, 3, nice).decor })
+        // Le télésiège seulement dans une station de ski de montagne.
+        val ski = Surroundings(Settlement.TOWN, ski = true)
+        assertTrue(Decor.SKI in SketchScenes.scene(0, true, days[0], 3, chamonix, around = ski).decor)
+        assertFalse(Decor.SKI in SketchScenes.scene(0, true, days[0], 3, SketchTerrains.from(profile("paris"), 7, false), around = ski).decor)
+        // Les monuments des grandes villes.
+        assertEquals(Landmark.EIFFEL_TOWER, Landmark.near(48.8566, 2.3522))
+        assertEquals(Landmark.FOURVIERE, Landmark.near(45.7640, 4.8357))
+        assertEquals(null, Landmark.near(47.0577, 6.5664))
+        val paris = SketchScenes.scene(0, true, days[0], 3, around = Surroundings(Settlement.CITY), landmark = Landmark.EIFFEL_TOWER)
+        assertEquals(Landmark.EIFFEL_TOWER, paris.landmark)
+        assertEquals(null, SketchScenes.scene(0, true, days[0], 3, around = Surroundings(Settlement.VILLAGE), landmark = Landmark.EIFFEL_TOWER).landmark)
+    }
+
+    @Test
+    fun `snow on the ground brings the snowman`() {
+        val days = (0L until 100L).map { LocalDateTime.of(2027, 1, 1, 13, 0).plusDays(it) }
+        assertTrue(days.any { Surprise.SNOWMAN in SketchScenes.scene(0, true, it, 3, conditions = SketchConditions(snowOnGround = true)).surprises })
+        assertTrue(days.none { Surprise.SNOWMAN in SketchScenes.scene(0, true, it, 3).surprises })
     }
 
     @Test

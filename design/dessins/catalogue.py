@@ -49,7 +49,15 @@ def main(source: str, target: str) -> None:
         ("6 bis. Les nuages", "à leur hauteur d'après la prévision de l'heure : les nuages bas coiffent les sommets (ou "
          "font une mer de nuages sous le sommet), les moyens restent à leur place, les hauts ne sont qu'un voile ou des cirrus."),
         ("9. Les surprises", "fêtes et petits clins d'œil, comme avant."),
-        ("10. Thème sombre", "et les cas où l'appli ne connaît pas encore les environs, ou pas le relief."),
+        ("10. La lumière", "aube et crépuscule violets, heure dorée au lever et au coucher : le soleil bas passe derrière "
+         "le relief, à gauche le matin, à droite le soir."),
+        ("11. Le vent, l'air", "arbres et fumée penchés, manche à air tendue, pluie chassée ; neige au sol (toits blancs, "
+         "bonhomme), lacs gelés par un froid durable, sable du Sahara (ciel jaune), pollution (lointain voilé)."),
+        ("12. Bêtes et lieux", "vaches à l'alpage, chamois, mouettes ; télésiège et pistes des stations de ski ; tour "
+         "Eiffel, Fourvière, Notre-Dame de la Garde, cathédrale de Strasbourg, jet d'eau de Genève."),
+        ("13. Les couleurs", "discret, normal ou coloré (Réglages) ; dans l'appli, la pluie et la neige tombent et les "
+         "nuages glissent (animation, réglable)."),
+        ("14. Thème sombre", "et les cas où l'appli ne connaît pas encore les environs, ou pas le relief."),
     ]
     y = height - 190
     indent = MARGIN + 110

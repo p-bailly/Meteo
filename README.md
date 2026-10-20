@@ -39,8 +39,15 @@ la carte) :
   couvert, les nuages à leur hauteur d'après la prévision (les nuages bas coiffent les sommets, ou font une mer de
   nuages sous le sommet ; les hauts ne sont qu'un voile ou des cirrus), brouillard (ou brouillard de vallée), bruine, pluie faible à forte (en traits,
   chassée par le vent, ou en gouttes et flaques), pluie verglaçante, averses, neige en petits ou gros flocons ou en
-  grains, orage (un ou deux éclairs, ou un cumulonimbus) ; parfois une petite surprise selon le temps ou certains jours
-  de fête — et toucher le dessin en montre une autre version (toutes les combinaisons : `design/dessins/coloriages.pdf`) ;
+  grains, orage (un ou deux éclairs, ou un cumulonimbus). Et ce que l'heure y ajoute : la lumière de l'aube, de l'heure
+  dorée (le soleil bas passe derrière le relief) et du crépuscule ; le vent qui couche les arbres et la fumée et tend la
+  manche à air ; la neige au sol (toits blancs, bonhomme de neige) ; les lacs gelés après des jours sans dégel ; le ciel
+  jauni par le sable du Sahara ou voilé par la pollution (qualité de l'air d'Open-Meteo) ; des vaches à l'alpage l'été,
+  des chamois dans les rochers, des mouettes au bord de la mer ; le télésiège et les pistes d'une station de ski ; la
+  tour Eiffel, Fourvière, Notre-Dame de la Garde, la cathédrale de Strasbourg ou le jet d'eau de Genève. Parfois une
+  petite surprise selon le temps ou certains jours de fête — et toucher le dessin en montre une autre version. La pluie
+  et la neige tombent, les nuages glissent (on peut l'arrêter dans les Réglages, où l'on choisit aussi un dessin
+  discret, normal ou coloré). Toutes les combinaisons : `design/dessins/coloriages.pdf` ;
   de la mi-octobre à la mi-mars, une pastille **Neige & altitude** dans l'en-tête, à côté de l'étoile (une montagne et
   l'iso 0 °C actuel), qui ouvre la page du même nom ; vent, rafales, humidité, pression (et sa tendance),
   indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
@@ -84,7 +91,7 @@ la carte) :
   et ses extrêmes. L'étoile de chaque ligne ajoute ou retire un favori. **Comparer** met tous ces lieux côte à côte
   sur 8 jours (pictogramme, maxi et mini, pluie) ; l'engrenage ouvre les **Réglages** : thème (comme le téléphone,
   jour ou nuit), taille du texte (100, 115 ou 130 % : plus grand, certains écrans cachent des détails secondaires),
-  modèles de la comparaison, clés Météo-France et Windy, et la **mise à jour de l'appli** (version installée,
+  dessin d'Aujourd'hui (discret, normal ou coloré, animé ou non), modèles de la comparaison, clés Météo-France et Windy, et la **mise à jour de l'appli** (version installée,
   téléchargement et installation de la dernière version publiée).
 
 **Widgets** de l'écran d'accueil (appui long sur l'écran d'accueil → Widgets → Météo), sur le lieu ouvert dans
@@ -135,7 +142,11 @@ Comment l'altitude est calculée :
   qu'elle est peuplée (Paris sur 8 km, 50 000 habitants sur 2 km, un village sur 700 m) : grande ville à partir de
   50 000 habitants, petite ville à partir de 2 000, village à partir de 150, sinon hameau. Forêt à moins de 1,5 km,
   rivière à moins de 1 km, lac à moins de 2 km, côte à moins de 3 km ; île si le lieu est sur une île de moins de 350 km
-  (la Corse, pas la Grande-Bretagne).
+  (la Corse, pas la Grande-Bretagne) ; station de ski si des remontées mécaniques ou des pistes sont à moins de 3 km.
+- **Air et neige au sol**, pour le dessin : sable du Sahara à partir de 80 µg/m³ de poussières, air pollué à partir de
+  l'indice européen 60 (ou 35 µg/m³ de particules fines), d'après l'API de qualité de l'air d'Open-Meteo (gardée une
+  heure) ; neige au sol à partir de 3 cm prévus ; lac gelé quand aujourd'hui et demain restent sous 0 °C après une nuit
+  sous −6 °C.
 - **Coupe du relief** (aussi pour le dessin d'Aujourd'hui : le modèle de terrain rend les lacs et la mer parfaitement
   plats, ce qui suffit à les reconnaître) : sommets nommés d'OpenStreetMap (API Overpass, sans clé, avec deux serveurs de secours) et
   altitudes du terrain (modèle Copernicus à 90 m, via l'API d'altitude d'Open-Meteo), téléchargées une seule fois

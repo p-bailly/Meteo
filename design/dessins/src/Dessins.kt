@@ -34,7 +34,14 @@ private const val WIDTH_DP = 411
 private const val HEIGHT_DP = 259
 private const val DENSITY = 2.5f
 
-private class Spot(val name: String, val label: String, val profile: TerrainProfile?, val latitude: Double, val around: Surroundings?)
+private class Spot(
+    val name: String,
+    val label: String,
+    val profile: TerrainProfile?,
+    val latitude: Double,
+    val around: Surroundings?,
+    val landmark: Landmark? = null,
+)
 
 private class Item(
     val section: String,
@@ -47,7 +54,10 @@ private class Item(
     val dark: Boolean = false,
     val temperature: Int = 12,
     val taps: Int = 0,
-    val clouds: SketchClouds? = null,
+    val conditions: SketchConditions = SketchConditions(),
+    val style: Int = 1,
+    /** Ce que la scène doit montrer : on touche le dessin jusqu'à l'obtenir (une bête, le bonhomme de neige…). */
+    val want: (SketchScene) -> Boolean = { true },
 )
 
 /** Lecture des coupes de test (format simple, sans bibliothèque JSON). */
@@ -77,12 +87,18 @@ private fun summit(top: Double): TerrainProfile {
 }
 
 private fun spots(p: Map<String, TerrainProfile>): Map<String, Spot> {
-    fun at(s: Settlement, forest: Boolean = false, river: Boolean = false, lake: Boolean = false, coast: Boolean = false, island: Boolean = false) =
-        Surroundings(s, forest, river, lake, coast, island)
+    fun at(s: Settlement, forest: Boolean = false, river: Boolean = false, lake: Boolean = false, coast: Boolean = false, island: Boolean = false, ski: Boolean = false) =
+        Surroundings(s, forest, river, lake, coast, island, ski)
     val low = p.getValue("morteau").remap { 300 + (it - 771) * 1.5 }
     val high = p.getValue("chamonix").remap { 1041 + (it - 1041) * 0.58 }
     return listOf(
-        Spot("paris", "Paris : plaine, grande ville, la Seine", p["paris"], 48.86, at(Settlement.CITY, river = true)),
+        Spot("paris", "Paris : plaine, grande ville, la Seine", p["paris"], 48.86, at(Settlement.CITY, river = true), Landmark.EIFFEL_TOWER),
+        Spot("lyon", "Lyon : Fourvière au-dessus de la ville", p["paris"], 45.76, at(Settlement.CITY, river = true), Landmark.FOURVIERE),
+        Spot("marseille", "Marseille : la Bonne Mère et la mer", p["nice"], 43.30, at(Settlement.CITY, coast = true), Landmark.BONNE_MERE),
+        Spot("strasbourg", "Strasbourg : la cathédrale", p["paris"], 48.58, at(Settlement.CITY, river = true), Landmark.STRASBOURG_CATHEDRAL),
+        Spot("geneve", "Genève : le jet d'eau sur le lac", p["annecy"], 46.20, at(Settlement.CITY), Landmark.JET_D_EAU),
+        Spot("station", "Station de ski : petite ville, télésiège", p["chamonix"], 45.92, at(Settlement.TOWN, forest = true, ski = true)),
+        Spot("alpage", "Alpage : chalet isolé", p["annecy"], 45.85, at(Settlement.NONE)),
         Spot("beauce", "Beauce : plaine, ferme isolée", p["paris"], 48.3, at(Settlement.NONE)),
         Spot("bourg", "Plaine : village, rivière, bois", p["paris"], 47.0, at(Settlement.VILLAGE, forest = true, river = true)),
         Spot("valence", "Valence : plaine du Rhône, le Vercors au loin", p["valence"], 44.93, at(Settlement.CITY, river = true)),
@@ -115,8 +131,8 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
     val winter = LocalDateTime.of(2027, 1, 19, 14, 0)
     val spring = LocalDateTime.of(2027, 4, 22, 11, 0)
     val nightTime = LocalDateTime.of(2026, 10, 22, 22, 0)
-    fun add(section: String, caption: String, spot: String, code: Int, time: LocalDateTime = summer, isDay: Boolean = time.hour in 8..19, sky: Int? = null, dark: Boolean = !isDay, temperature: Int = 12, taps: Int = 0, clouds: SketchClouds? = null) {
-        items += Item(section, caption, s.getValue(spot), code, time, isDay, sky, dark, temperature, taps, clouds)
+    fun add(section: String, caption: String, spot: String, code: Int, time: LocalDateTime = summer, isDay: Boolean = time.hour in 8..19, sky: Int? = null, dark: Boolean = !isDay, temperature: Int = 12, taps: Int = 0, clouds: SketchClouds? = null, conditions: SketchConditions = SketchConditions(clouds = clouds), style: Int = 1, want: (SketchScene) -> Boolean = { true }) {
+        items += Item(section, caption, s.getValue(spot), code, time, isDay, sky, dark, temperature, taps, conditions, style, want)
     }
 
     var section = "1. Le relief : de la plaine au sommet"
@@ -199,7 +215,7 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
     add(section, "Pluie modérée · gouttes et flaques", "bourg", 63, autumn, sky = 2)
     add(section, "Pluie forte · gros nuages", "valence", 65, autumn, sky = 1)
     add(section, "Averses, éclaircie", "morvan", 80, spring, sky = 0)
-    add(section, "Averse et arc-en-ciel", "talloires", 81, spring, sky = null)
+    add(section, "Averse et arc-en-ciel", "talloires", 81, spring, want = { Surprise.RAINBOW in it.surprises })
     for ((code, name) in listOf(71 to "faible", 73 to "modérée", 75 to "forte")) add(section, "Neige $name · petits flocons", "jura", code, winter, sky = 0, temperature = -2)
     add(section, "Neige · gros flocons étoilés", "chamonix", 73, winter, sky = 1, temperature = -4)
     add(section, "Neige · flocons ronds", "haute", 75, winter, sky = 2, temperature = -5)
@@ -220,10 +236,51 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
     add(section, "Pâques : les œufs", "bourg", 1, LocalDateTime.of(2027, 3, 28, 11, 0))
     add(section, "1er mai : le muguet", "morvan", 1, LocalDateTime.of(2027, 5, 1, 11, 0))
     add(section, "Saint-Valentin : le cœur", "annecy", 0, LocalDateTime.of(2027, 2, 14, 12, 0))
-    add(section, "Neige : bonhomme de neige (parfois)", "jura", 73, LocalDateTime.of(2027, 1, 10, 13, 0), sky = 0, temperature = -2)
+    add(section, "Neige : bonhomme de neige (parfois)", "jura", 73, LocalDateTime.of(2027, 1, 10, 13, 0), sky = 0, temperature = -2, want = { Surprise.SNOWMAN in it.surprises })
     add(section, "7 touches du dessin : la soucoupe", "beauce", 0, summer, taps = SketchScenes.ABDUCTION_TAPS)
 
-    section = "10. Thème sombre et cas limites"
+    section = "10. La lumière : aube, heure dorée, crépuscule"
+    val rise = LocalDateTime.of(2026, 7, 8, 6, 0)
+    val set = LocalDateTime.of(2026, 7, 8, 21, 30)
+    val sun = SketchConditions(sunrise = rise, sunset = set)
+    add(section, "Aube : le ciel violet et rose, les dernières étoiles", "jura", 0, LocalDateTime.of(2026, 7, 8, 5, 35), isDay = false, sky = 0, conditions = sun, temperature = 9)
+    add(section, "Lever du soleil : il sort de derrière le relief, à gauche", "chamonix", 0, LocalDateTime.of(2026, 7, 8, 6, 20), isDay = true, sky = 0, conditions = sun, temperature = 8)
+    add(section, "Heure dorée du soir en plaine", "beauce", 0, LocalDateTime.of(2026, 7, 8, 21, 0), isDay = true, sky = 1, conditions = sun, temperature = 23)
+    add(section, "Coucher de soleil derrière les montagnes", "haute", 1, LocalDateTime.of(2026, 7, 8, 21, 10), isDay = true, sky = 0, conditions = sun, temperature = 18)
+    add(section, "Coucher de soleil sur la mer, avec des nuages", "nice", 2, LocalDateTime.of(2026, 7, 8, 21, 5), isDay = true, sky = 0, conditions = sun, temperature = 26)
+    add(section, "Crépuscule en ville", "paris", 0, LocalDateTime.of(2026, 7, 8, 21, 50), isDay = false, sky = 0, conditions = sun, temperature = 20)
+
+    section = "11. Le vent, la neige au sol, le froid, l'air"
+    add(section, "Vent fort d'ouest (60 km/h) : arbres couchés, fumée à plat, manche à air tendue", "bourg", 2, autumn, sky = 0, conditions = SketchConditions(windKmh = 60.0, windFrom = 260.0))
+    add(section, "Vent d'est modéré (30 km/h)", "morteau", 1, autumn, sky = 0, conditions = SketchConditions(windKmh = 30.0, windFrom = 80.0))
+    add(section, "Tempête : pluie chassée par le vent", "beauce", 65, autumn, sky = 0, conditions = SketchConditions(windKmh = 75.0, windFrom = 250.0))
+    add(section, "Neige au sol, grand soleil : toits blancs, bonhomme de neige", "jura", 0, winter, sky = 0, temperature = -4, conditions = SketchConditions(snowOnGround = true), want = { Surprise.SNOWMAN in it.surprises })
+    add(section, "Neige au sol en plaine", "bourg", 3, winter, sky = 0, temperature = -1, conditions = SketchConditions(snowOnGround = true))
+    add(section, "Grand froid : le lac est gelé, on patine", "talloires", 0, winter, sky = 0, temperature = -9, conditions = SketchConditions(frozen = true, snowOnGround = true))
+    add(section, "Lac d'Annecy gelé (froid durable)", "talloires", 1, winter, sky = 1, temperature = -7, conditions = SketchConditions(frozen = true))
+    add(section, "Sable du Sahara : ciel jaune, soleil pâle", "valence", 1, spring, sky = 0, temperature = 21, conditions = SketchConditions(dust = true))
+    add(section, "Pollution : le lointain se voile", "paris", 1, summer, sky = 0, temperature = 31, conditions = SketchConditions(haze = true))
+
+    section = "12. Les bêtes, le ski, les monuments"
+    add(section, "Vaches à l'alpage, l'été", "alpage", 0, summer, sky = 0, temperature = 22, want = { Decor.COWS in it.decor })
+    add(section, "Chamois dans les rochers", "chamonix-hameau", 1, summer, sky = 1, temperature = 18, want = { Decor.CHAMOIS in it.decor })
+    add(section, "Mouettes au bord de la mer", "nice", 1, summer, sky = 2, temperature = 27)
+    add(section, "Station de ski l'hiver : télésiège et pistes", "station", 0, winter, sky = 0, temperature = -5, conditions = SketchConditions(snowOnGround = true))
+    add(section, "Station de ski l'été : le télésiège seul", "station", 2, summer, sky = 0, temperature = 19)
+    add(section, "Paris : la tour Eiffel", "paris", 1, summer, sky = 0, temperature = 24)
+    add(section, "Lyon : Fourvière", "lyon", 2, autumn, sky = 0)
+    add(section, "Marseille : Notre-Dame de la Garde", "marseille", 0, summer, sky = 1, temperature = 29)
+    add(section, "Strasbourg : la cathédrale", "strasbourg", 3, autumn, sky = 0)
+    add(section, "Genève : le jet d'eau", "geneve", 1, summer, sky = 0, temperature = 25)
+    add(section, "Paris la nuit", "paris", 0, nightTime, sky = 1)
+
+    section = "13. Les couleurs du dessin (réglage)"
+    for ((style, name) in listOf(0 to "discret", 1 to "normal", 2 to "coloré")) {
+        add(section, "Dessin $name", "chamonix", 2, summer, sky = 0, temperature = 21, style = style)
+    }
+    add(section, "Dessin coloré, thème sombre", "annecy", 0, nightTime, sky = 2, style = 2)
+
+    section = "14. Thème sombre et cas limites"
     add(section, "Thème sombre, de jour : Annecy", "annecy", 2, summer, isDay = true, sky = 2, dark = true)
     add(section, "Thème sombre, de jour : Chamonix sous la neige", "chamonix", 73, winter, isDay = true, sky = 0, dark = true)
     add(section, s.getValue("sans").label, "sans", 0, summer, sky = 0)
@@ -234,15 +291,13 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
 /** La scène de [item] ; avec [Item.sky], on touche le dessin jusqu'à tomber sur cette version du ciel. */
 private fun sceneOf(item: Item): Pair<SketchTerrain, SketchScene> {
     val month = SketchScenes.seasonMonth(item.time.monthValue, item.spot.latitude)
-    val snowing = SketchSky.of(item.code) == SketchSky.SNOW
+    val snowing = SketchSky.of(item.code) == SketchSky.SNOW || item.conditions.snowOnGround
     val terrain = SketchTerrains.from(item.spot.profile, month, snowing, item.spot.latitude, item.spot.around)
     val seed = item.spot.name.hashCode()
-    fun at(taps: Int) = SketchScenes.scene(item.code, item.isDay, item.time, seed, terrain, taps, item.spot.around, item.clouds)
-    val scene = if (item.sky == null) {
-        at(item.taps)
-    } else {
-        (item.taps until item.taps + 60).filter { it == 0 || it % SketchScenes.ABDUCTION_TAPS != 0 }.map(::at).first { it.skyVariant == item.sky }
-    }
+    fun at(taps: Int) = SketchScenes.scene(item.code, item.isDay, item.time, seed, terrain, taps, item.spot.around, item.conditions, item.spot.landmark)
+    val scene = (item.taps until item.taps + 200).filter { it == item.taps || it % SketchScenes.ABDUCTION_TAPS != 0 }.map(::at)
+        .firstOrNull { (item.sky == null || it.skyVariant == item.sky) && item.want(it) }
+        ?: error("Aucune version ne convient : ${item.caption}")
     return terrain to scene
 }
 
@@ -317,10 +372,11 @@ private fun render(item: Item, out: File) {
     val size = Size(w.toFloat(), h.toFloat())
     // Le dessin sur son propre calque transparent (comme dans l'appli), puis le fond, le dessin et le texte.
     val sketch = ImageBitmap(w, h)
-    val graphite = if (item.dark) Color(0xFFE6ECF4).copy(alpha = 0.22f) else Color(0xFF2E3644).copy(alpha = 0.26f)
+    val strength = sketchStrength(item.style)
+    val graphite = sketchGraphite(item.dark, strength)
     val month = SketchScenes.seasonMonth(item.time.monthValue, item.spot.latitude)
     CanvasDrawScope().draw(Density(DENSITY), LayoutDirection.Ltr, Canvas(sketch), size) {
-        val pencil = Pencil(this, graphite, Random(scene.seed * 31 + item.code), item.dark)
+        val pencil = Pencil(this, graphite, Random(scene.seed * 31 + item.code), item.dark, strength)
         drawScene(pencil, scene, item.isDay, SketchScenes.moonAge(item.time), southern = item.spot.latitude < 0, month = month)
     }
     val page = ImageBitmap(w, h)
@@ -340,7 +396,8 @@ private val RELIEF = mapOf(
 private val DECOR = mapOf(
     Decor.FARM to "ferme", Decor.CHALET to "chalet", Decor.REFUGE to "refuge", Decor.HAMLET to "hameau", Decor.VILLAGE to "village",
     Decor.TOWN to "petite ville", Decor.CITY to "grande ville", Decor.FIELDS to "champs", Decor.TREES to "arbres", Decor.FIRS to "sapins",
-    Decor.FOREST to "forêt", Decor.LIGHTHOUSE to "phare",
+    Decor.FOREST to "forêt", Decor.LIGHTHOUSE to "phare", Decor.COWS to "vaches", Decor.CHAMOIS to "chamois",
+    Decor.GULLS to "mouettes", Decor.SKI to "station de ski", Decor.WINDSOCK to "manche à air",
 )
 
 fun main(args: Array<String>) {

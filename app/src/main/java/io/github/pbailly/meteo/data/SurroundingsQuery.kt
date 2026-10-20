@@ -29,6 +29,7 @@ object SurroundingsQuery {
     const val RIVER_M = 1000
     const val LAKE_M = 2000
     const val COAST_M = 3000
+    const val SKI_M = 3000
 
     /** Une île plus grande que ça (Grande-Bretagne, Irlande) ne se dessine pas comme une île. */
     private const val MAX_ISLAND_KM = 350.0
@@ -36,7 +37,7 @@ object SurroundingsQuery {
     fun url(latitude: Double, longitude: Double, server: String = Overpass.SERVERS.first()): String {
         val at = "%.5f,%.5f".format(Locale.ROOT, latitude, longitude)
         fun around(m: Int) = "(around:$m,$at)"
-        // Les réponses arrivent dans l'ordre : lieux habités, puis un compte par question, puis les îles.
+        // Les réponses arrivent dans l'ordre : lieux habités, puis un compte par question, les îles, et le ski.
         val query = "[out:json][timeout:30];" +
             "(node[\"place\"~\"^(city|town)$\"]${around(15000)};node[\"place\"~\"^(village|hamlet|isolated_dwelling)$\"]${around(2500)};);out body;" +
             "(way[\"landuse\"=\"forest\"]${around(FOREST_M)};way[\"natural\"=\"wood\"]${around(FOREST_M)};" +
@@ -47,7 +48,9 @@ object SurroundingsQuery {
             "way[\"natural\"=\"coastline\"]${around(COAST_M)};out count;" +
             "is_in($at)->.a;" +
             "(area.a[\"landuse\"=\"forest\"];area.a[\"natural\"=\"wood\"];);out count;" +
-            "(way[\"place\"~\"^(island|islet)$\"](pivot.a);relation[\"place\"~\"^(island|islet)$\"](pivot.a););out tags bb;"
+            "(way[\"place\"~\"^(island|islet)$\"](pivot.a);relation[\"place\"~\"^(island|islet)$\"](pivot.a););out tags bb;" +
+            "(way[\"piste:type\"=\"downhill\"]${around(SKI_M)};way[\"landuse\"=\"winter_sports\"]${around(SKI_M)};" +
+            "way[\"aerialway\"~\"^(chair_lift|gondola|cable_car|mixed_lift|drag_lift|t-bar|j-bar|platter)$\"]${around(SKI_M)};);out count;"
         return "$server?data=" + URLEncoder.encode(query, "UTF-8")
     }
 
@@ -89,6 +92,7 @@ object SurroundingsQuery {
             lake = count(2),
             coast = count(3),
             island = island,
+            ski = count(5),
         )
     }
 
@@ -128,7 +132,7 @@ class SurroundingsRepository(
     private val httpGet: (String) -> String,
 ) {
     suspend fun of(place: Place): Surroundings = withContext(Dispatchers.IO) {
-        val file = File(cacheDir, "surroundings1_${place.id}.json")
+        val file = File(cacheDir, "surroundings2_${place.id}.json")
         if (file.exists()) runCatching { decode(file.readText()) }.getOrNull()?.let { return@withContext it }
         var failure: Exception = IOException("Aucun serveur Overpass ne répond")
         for (server in Overpass.SERVERS) {
@@ -153,6 +157,7 @@ class SurroundingsRepository(
         put("lake", s.lake)
         put("coast", s.coast)
         put("island", s.island)
+        put("ski", s.ski)
     }.toString()
 
     private fun decode(raw: String): Surroundings {
@@ -165,6 +170,7 @@ class SurroundingsRepository(
             lake = flag("lake"),
             coast = flag("coast"),
             island = flag("island"),
+            ski = flag("ski"),
         )
     }
 }

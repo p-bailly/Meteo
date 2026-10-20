@@ -43,6 +43,8 @@ object OpenMeteoApi {
         "precipitation", "snowfall", "precipitation_probability", "weather_code",
         "cloud_cover_low", "cloud_cover_mid", "cloud_cover_high",
         "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "pressure_msl", "is_day", "uv_index",
+        // Neige au sol (pour le dessin d'Aujourd'hui).
+        "snow_depth",
         // Altitude : iso 0 °C, puis température, altitude réelle et vent de chaque niveau de pression.
         "freezing_level_height",
     ) + PRESSURE_LEVELS.flatMap { p ->
@@ -182,6 +184,7 @@ object OpenMeteoApi {
             isDay = h.ints("is_day", n).let { codes -> BooleanArray(n) { codes[it] != 0 } },
             uvIndex = h.doubles("uv_index", n),
             freezingLevel = h.doubles("freezing_level_height", n),
+            snowDepth = h.doubles("snow_depth", n),
             levels = PRESSURE_LEVELS.filter { h.containsKey("temperature_${it}hPa") }.map { p ->
                 PressureLevel(
                     hPa = p,

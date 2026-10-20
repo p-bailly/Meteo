@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.pbailly.meteo.data.AirQuality
 import io.github.pbailly.meteo.data.Altitude
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.Normals
@@ -111,9 +112,11 @@ fun TodayScreen(
                         Box {
                             f.current?.let {
                                 WeatherSketch(
-                                    it.weatherCode, it.isDay, it.time, place.latitude, place.id.hashCode(), state.terrain.data, state.surroundings.data,
-                                    cloudLayers(f),
-                                    Modifier.matchParentSize().statusBarsPadding(),
+                                    it.weatherCode, it.isDay, it.time, place.latitude, place.longitude, place.id.hashCode(),
+                                    state.terrain.data, state.surroundings.data, sketchConditions(f, state.airQuality.data),
+                                    style = state.sketchStyle,
+                                    motion = state.sketchMotion,
+                                    modifier = Modifier.matchParentSize().statusBarsPadding(),
                                 )
                             }
                             Column {
@@ -138,15 +141,38 @@ fun TodayScreen(
 /** Hauteur du dessin laissée libre sous le texte d'Aujourd'hui. */
 private val SKETCH_GROUND = 44.dp
 
-/** Nuages bas, moyens et hauts de l'heure en cours, pour les dessiner à leur hauteur. */
-private fun cloudLayers(f: Forecast): SketchClouds? {
+/**
+ * Ce que la prévision de l'heure ajoute au dessin : les nuages bas, moyens et hauts (pour les dessiner à leur hauteur),
+ * le vent, le lever et le coucher du soleil, la neige au sol, un froid durable qui gèle les lacs, l'air du moment.
+ */
+private fun sketchConditions(f: Forecast, air: AirQuality?): SketchConditions {
     val h = f.hourly
+    val c = f.current
     val i = Outlook.nowIndex(f)
     val low = h.cloudCoverLow.getOrElse(i) { Double.NaN }
     val mid = h.cloudCoverMid.getOrElse(i) { Double.NaN }
     val high = h.cloudCoverHigh.getOrElse(i) { Double.NaN }
-    if (low.isNaN() || mid.isNaN() || high.isNaN()) return null
-    return SketchClouds((low / 100).toFloat(), (mid / 100).toFloat(), (high / 100).toFloat())
+    val clouds = if (low.isNaN() || mid.isNaN() || high.isNaN()) null else SketchClouds((low / 100).toFloat(), (mid / 100).toFloat(), (high / 100).toFloat())
+    val d = f.daily
+    val today = c?.time?.toLocalDate()?.let { d.date.indexOf(it) }?.takeIf { it >= 0 } ?: 0
+    // Neige au sol : l'épaisseur prévue (3 cm au moins), à défaut la neige tombée depuis minuit par temps froid.
+    val depth = h.snowDepth.getOrElse(i) { Double.NaN }
+    val fallen = (0..i).sumOf { k -> h.snowfall.getOrElse(k) { 0.0 }.takeIf { !it.isNaN() && h.time[k].toLocalDate() == h.time[i].toLocalDate() } ?: 0.0 }
+    val snowOnGround = if (!depth.isNaN()) depth >= 0.03 else fallen >= 1.0 && (c?.temperature ?: 9.0) <= 2
+    // Les lacs gèlent après des jours sans dégel : aujourd'hui et demain sous 0 °C, et une nuit sous −6 °C.
+    val maxes = (today..today + 1).map { d.temperatureMax.getOrElse(it) { Double.NaN } }
+    val frozen = maxes.none { it.isNaN() || it > 0 } && d.temperatureMin.getOrElse(today) { Double.NaN } <= -6
+    return SketchConditions(
+        clouds = clouds,
+        windKmh = c?.windSpeed?.takeIf { !it.isNaN() } ?: 0.0,
+        windFrom = c?.windDirection?.takeIf { !it.isNaN() } ?: 270.0,
+        sunrise = d.sunrise.getOrNull(today),
+        sunset = d.sunset.getOrNull(today),
+        snowOnGround = snowOnGround,
+        frozen = frozen,
+        dust = air?.saharanDust == true,
+        haze = air?.haze == true,
+    )
 }
 
 @Composable

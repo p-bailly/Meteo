@@ -71,6 +71,8 @@ class HourlySeries(
     val uvIndex: DoubleArray,
     /** Altitude de l'isotherme 0 °C, en mètres (NaN si le modèle ne la fournit pas). */
     val freezingLevel: DoubleArray,
+    /** Épaisseur de neige au sol, en mètres (NaN si le modèle ne la fournit pas). */
+    val snowDepth: DoubleArray = DoubleArray(0),
     /** Niveaux de pression, du plus bas (925 hPa, vers 750 m) au plus haut (500 hPa, vers 5 500 m). */
     val levels: List<PressureLevel> = emptyList(),
 ) {

@@ -14,6 +14,8 @@ import kotlin.math.atan
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.max
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 /** Grandes familles de ciel, d'après le code météo WMO. */
@@ -63,7 +65,51 @@ internal enum class Decor {
     FIELDS, TREES, FIRS, FOREST,
     // Au bord de la mer.
     LIGHTHOUSE,
+    // Les bêtes : vaches à l'alpage, chamois dans les rochers, mouettes sur la mer.
+    COWS, CHAMOIS, GULLS,
+    // Une station de ski : le télésiège, et les pistes quand il y a de la neige.
+    SKI,
+    // La manche à air, quand il y a du vent.
+    WINDSOCK,
 }
+
+/** Les monuments de quelques grandes villes, dessinés parmi les immeubles. */
+internal enum class Landmark(val latitude: Double, val longitude: Double, val radiusKm: Double) {
+    EIFFEL_TOWER(48.8584, 2.2945, 12.0),
+    FOURVIERE(45.7623, 4.8225, 8.0),
+    BONNE_MERE(43.2840, 5.3713, 9.0),
+    STRASBOURG_CATHEDRAL(48.5818, 7.7509, 7.0),
+    JET_D_EAU(46.2073, 6.1557, 7.0);
+
+    companion object {
+        fun near(latitude: Double, longitude: Double): Landmark? = entries.firstOrNull {
+            val k = cos(Math.toRadians((latitude + it.latitude) / 2)) * 111.2
+            val dx = (longitude - it.longitude) * k
+            val dy = (latitude - it.latitude) * 111.2
+            sqrt(dx * dx + dy * dy) <= it.radiusKm
+        }
+    }
+}
+
+/** La lumière du moment : la nuit, l'aube, le lever (heure dorée), le jour, le coucher, le crépuscule. */
+internal enum class Light { NIGHT, DAWN, SUNRISE, DAY, SUNSET, DUSK }
+
+/**
+ * Ce que la prévision de l'heure ajoute au dessin, en plus du code météo : la hauteur des nuages, le vent (km/h, et
+ * d'où il vient en degrés), le lever et le coucher du soleil, la neige au sol, un froid qui gèle les lacs, le sable du
+ * Sahara ou la pollution.
+ */
+data class SketchConditions(
+    val clouds: SketchClouds? = null,
+    val windKmh: Double = 0.0,
+    val windFrom: Double = 270.0,
+    val sunrise: LocalDateTime? = null,
+    val sunset: LocalDateTime? = null,
+    val snowOnGround: Boolean = false,
+    val frozen: Boolean = false,
+    val dust: Boolean = false,
+    val haze: Boolean = false,
+)
 
 /** Petites surprises du dessin : certaines selon le temps, d'autres seulement certains jours. */
 internal enum class Surprise {
@@ -374,13 +420,27 @@ internal class SketchScene(
     /** Quelle version du ciel : chaque temps se dessine de plusieurs façons ([SketchScenes.SKY_VARIANTS]). */
     val skyVariant: Int = 0,
     val weather: SketchWeather = SketchWeather.of(0),
-    val clouds: SketchClouds? = null,
+    val conditions: SketchConditions = SketchConditions(),
+    val light: Light = Light.DAY,
+    val landmark: Landmark? = null,
 ) {
+    val clouds: SketchClouds? get() = conditions.clouds
+
+    /**
+     * Les arbres, la fumée et la pluie penchent avec le vent : de 0 (sous 15 km/h) à 1 (60 km/h et plus), vers la
+     * droite quand il vient de l'ouest (on regarde vers le nord), vers la gauche quand il vient de l'est.
+     */
+    val lean: Float get() {
+        val strength = ((conditions.windKmh - 15) / 45).coerceIn(0.0, 1.0).toFloat()
+        val toward = -sin(Math.toRadians(conditions.windFrom))
+        return if (toward >= 0) strength else -strength
+    }
+
     /** Surtout des nuages bas : ils descendent sur le relief. */
-    val lowClouds: Boolean get() = clouds != null && clouds.low >= 0.4f && clouds.low >= clouds.mid
+    val lowClouds: Boolean get() = clouds?.let { it.low >= 0.4f && it.low >= it.mid } == true
 
     /** Seulement un voile de nuages hauts : le soleil passe au travers. */
-    val highVeil: Boolean get() = clouds != null && clouds.high >= 0.4f && clouds.low < 0.25f && clouds.mid < 0.25f
+    val highVeil: Boolean get() = clouds?.let { it.high >= 0.4f && it.low < 0.25f && it.mid < 0.25f } == true
 
     /**
      * De combien les nuages descendent (en fraction de la hauteur du dessin) : quand ils sont bas, ils accrochent le
@@ -402,6 +462,12 @@ internal object SketchScenes {
     /** Toucher le dessin autant de fois fait passer la soucoupe. */
     const val ABDUCTION_TAPS = 7
 
+    /** Durée d'un tour de l'animation (pluie, neige, nuages). */
+    const val CYCLE_MS = 20_000L
+
+    /** Quelque chose bouge dans la scène : des nuages, de la pluie, de la neige. */
+    fun moves(scene: SketchScene): Boolean = scene.sky != SketchSky.CLEAR && scene.sky != SketchSky.FOG
+
     /** Chaque ciel a trois versions : une autre chaque jour, et à chaque fois qu'on touche le dessin. */
     const val SKY_VARIANTS = 3
 
@@ -415,6 +481,20 @@ internal object SketchScenes {
     fun moonIllumination(age: Double): Double = (1 - cos(2 * PI * age / SYNODIC_MONTH)) / 2
 
     fun waxing(age: Double): Boolean = age < SYNODIC_MONTH / 2
+
+    /** La lumière à [time] : 40 min d'aube avant le lever, 50 min d'heure dorée après, de même au coucher. */
+    fun lightAt(time: LocalDateTime, isDay: Boolean, sunrise: LocalDateTime?, sunset: LocalDateTime?): Light {
+        if (sunrise == null || sunset == null) return if (isDay) Light.DAY else Light.NIGHT
+        return when {
+            time.isBefore(sunrise.minusMinutes(40)) -> Light.NIGHT
+            time.isBefore(sunrise) -> Light.DAWN
+            time.isBefore(sunrise.plusMinutes(50)) -> Light.SUNRISE
+            time.isBefore(sunset.minusMinutes(50)) -> Light.DAY
+            time.isBefore(sunset) -> Light.SUNSET
+            time.isBefore(sunset.plusMinutes(40)) -> Light.DUSK
+            else -> Light.NIGHT
+        }
+    }
 
     /** Le mois tel que la saison le vit : dans l'hémisphère sud, janvier est un mois d'été. */
     fun seasonMonth(month: Int, latitude: Double): Int = if (latitude < 0) (month + 5) % 12 + 1 else month
@@ -450,7 +530,8 @@ internal object SketchScenes {
         terrain: SketchTerrain = SketchTerrains.DEFAULT,
         variant: Int = 0,
         around: Surroundings? = null,
-        clouds: SketchClouds? = null,
+        conditions: SketchConditions = SketchConditions(),
+        landmark: Landmark? = null,
     ): SketchScene {
         val sky = SketchSky.of(code)
         val date = time.toLocalDate()
@@ -461,7 +542,7 @@ internal object SketchScenes {
         val relief = terrain.relief
         val mountains = relief.mountains
         val skyVariant = rnd.nextInt(SKY_VARIANTS)
-        val decor = decorFor(terrain, around, rnd)
+        val decor = decorFor(terrain, around, rnd).toMutableSet()
         val surprises = mutableSetOf<Surprise>()
         val clearish = sky == SketchSky.CLEAR || sky == SketchSky.PARTLY
         val wet = sky == SketchSky.RAIN || sky == SketchSky.STORM || sky == SketchSky.SNOW
@@ -506,7 +587,7 @@ internal object SketchScenes {
             day == MonthDay.of(10, 31) || eve == MonthDay.of(10, 31) -> Surprise.PUMPKIN
             date.dayOfMonth == 13 && date.dayOfWeek == DayOfWeek.FRIDAY -> Surprise.BLACK_CAT
             day == MonthDay.of(5, 1) -> Surprise.LILY
-            sky == SketchSky.SNOW && rnd.nextFloat() < 0.5f -> Surprise.SNOWMAN
+            (sky == SketchSky.SNOW || conditions.snowOnGround && isDay && !wet) && rnd.nextFloat() < 0.5f -> Surprise.SNOWMAN
             sky == SketchSky.RAIN && rnd.nextFloat() < 0.3f -> Surprise.UMBRELLA
             else -> null
         }
@@ -517,13 +598,32 @@ internal object SketchScenes {
 
         // Au sommet, toujours la croix (dessinée sur le lieu) ; ailleurs en montagne, parfois sur le plus haut.
         if (relief == Relief.SUMMIT || mountains && rnd.nextFloat() < 0.35f) surprises += Surprise.SUMMIT_CROSS
-        if (terrain.water.isNotEmpty() || terrain.sea) when {
+        // Pas de bateau ni de monstre sur un lac gelé.
+        if (terrain.water.isNotEmpty() && !conditions.frozen || terrain.sea) when {
             !terrain.sea && rnd.nextFloat() < if (sky == SketchSky.FOG) 0.25f else 0.03f -> surprises += Surprise.NESSIE
             isDay && !wet && rnd.nextFloat() < 0.45f -> surprises += Surprise.SAILBOAT
         }
+        // Les bêtes, selon le relief, la saison et le temps.
+        val month = date.monthValue
+        val calm = sky == SketchSky.CLEAR || sky == SketchSky.PARTLY || sky == SketchSky.CLOUDY
+        val snowy = terrain.snowline <= 0f
+        if (isDay && calm && !snowy && month in 6..9 && relief in Relief.MEDIUM..Relief.HIGH && rnd.nextFloat() < 0.6f &&
+            Decor.CITY !in decor
+        ) {
+            decor += Decor.COWS
+        }
+        if (isDay && relief >= Relief.HIGH && !wet && rnd.nextFloat() < 0.4f) decor += Decor.CHAMOIS
+        if (isDay && (terrain.sea || terrain.island) && sky != SketchSky.STORM) decor += Decor.GULLS
+        if (around?.ski == true && relief.mountains) decor += Decor.SKI
+        if (conditions.windKmh >= 15 && relief != Relief.SUMMIT) decor += Decor.WINDSOCK
+        // Le monument de la grande ville, quand on y est.
+        val monument = landmark?.takeIf { around == null || Decor.CITY in decor || Decor.TOWN in decor }
         val chimneys = decor.any { it in CHIMNEYS }
         if (chimneys && (!wet || sky == SketchSky.SNOW) && rnd.nextFloat() < 0.6f) surprises += Surprise.SMOKE
-        return SketchScene(sky, terrain, decor, surprises, seed, skyVariant, SketchWeather.of(code), clouds)
+        return SketchScene(
+            sky, terrain, decor, surprises, seed, skyVariant, SketchWeather.of(code), conditions,
+            lightAt(time, isDay, conditions.sunrise, conditions.sunset), monument,
+        )
     }
 
     /** Les maisons qui ont une cheminée qui fume (pas les immeubles de la grande ville). */

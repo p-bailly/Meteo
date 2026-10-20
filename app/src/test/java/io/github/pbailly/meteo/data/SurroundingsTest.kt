@@ -44,7 +44,8 @@ class SurroundingsTest {
               {"type":"count","id":0,"tags":{"nodes":"0","ways":"0","relations":"0","total":"0"}},
               {"type":"count","id":0,"tags":{"nodes":"0","ways":"2","relations":"0","total":"2"}},
               {"type":"count","id":0,"tags":{"areas":"0","total":"0"}},
-              {"type":"relation","id":3,"bounds":{"minlat":41.33,"minlon":8.53,"maxlat":43.03,"maxlon":9.56},"tags":{"place":"island","name":"Corse"}}
+              {"type":"relation","id":3,"bounds":{"minlat":41.33,"minlon":8.53,"maxlat":43.03,"maxlon":9.56},"tags":{"place":"island","name":"Corse"}},
+              {"type":"count","id":0,"tags":{"ways":"0","total":"0"}}
             ]}
         """.trimIndent()
         val s = SurroundingsQuery.parse(body, 42.6973, 9.4509)
@@ -54,6 +55,7 @@ class SurroundingsTest {
         assertFalse(s.lake)
         assertTrue(s.coast)
         assertTrue(s.island)
+        assertFalse(s.ski)
         // La Grande-Bretagne est une île, mais trop grande pour être dessinée comme telle.
         val london = """
             {"elements":[
@@ -73,11 +75,28 @@ class SurroundingsTest {
     }
 
     @Test
+    fun `ski lifts make a ski resort`() {
+        val body = """{"elements":[{"type":"count","tags":{"total":"0"}},{"type":"count","tags":{"total":"0"}},{"type":"count","tags":{"total":"0"}},
+            {"type":"count","tags":{"total":"0"}},{"type":"count","tags":{"total":"0"}},{"type":"count","tags":{"total":"12"}}]}"""
+        assertTrue(SurroundingsQuery.parse(body, 45.0, 6.0).ski)
+    }
+
+    @Test
+    fun `air quality reads dust and pollution`() {
+        val clean = AirQualityApi.parse(""" {"current":{"time":"2026-10-20T12:00","dust":1.0,"pm2_5":8.4,"european_aqi":40}} """)
+        assertFalse(clean.saharanDust || clean.haze)
+        val sahara = AirQualityApi.parse(""" {"current":{"dust":240.0,"pm2_5":30.0,"european_aqi":55}} """)
+        assertTrue(sahara.saharanDust)
+        assertTrue(AirQualityApi.parse(""" {"current":{"dust":3.0,"pm2_5":50.0,"european_aqi":75}} """).haze)
+        assertTrue(AirQualityApi.parse(""" {"current":{}} """).dust.isNaN())
+    }
+
+    @Test
     fun `query asks overpass for everything at once`() {
         val url = java.net.URLDecoder.decode(SurroundingsQuery.url(47.0577, 6.5664), "UTF-8")
         assertTrue(url.startsWith(Overpass.SERVERS.first()))
         assertTrue("around:15000,47.05770,6.56640" in url)
-        assertEquals(5, Regex("out count;").findAll(url).count())
+        assertEquals(6, Regex("out count;").findAll(url).count())
         assertTrue("is_in(47.05770,6.56640)" in url)
     }
 }

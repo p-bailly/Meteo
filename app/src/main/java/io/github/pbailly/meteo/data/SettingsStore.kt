@@ -30,9 +30,25 @@ class SettingsStore(context: Context) {
         prefs.edit().putInt(KEY_TEXT_SIZE, size).apply()
     }
 
+    /** Dessin d'Aujourd'hui : 0 = discret, 1 = normal, 2 = coloré. */
+    fun sketchStyle(): Int = prefs.getInt(KEY_SKETCH_STYLE, 1).coerceIn(0, 2)
+
+    fun saveSketchStyle(style: Int) {
+        prefs.edit().putInt(KEY_SKETCH_STYLE, style).apply()
+    }
+
+    /** La pluie, la neige et les nuages du dessin bougent. */
+    fun sketchMotion(): Boolean = prefs.getBoolean(KEY_SKETCH_MOTION, true)
+
+    fun saveSketchMotion(motion: Boolean) {
+        prefs.edit().putBoolean(KEY_SKETCH_MOTION, motion).apply()
+    }
+
     private companion object {
         const val KEY_HIDDEN_MODELS = "hidden_models"
         const val KEY_THEME = "theme"
         const val KEY_TEXT_SIZE = "text_size"
+        const val KEY_SKETCH_STYLE = "sketch_style"
+        const val KEY_SKETCH_MOTION = "sketch_motion"
     }
 }
