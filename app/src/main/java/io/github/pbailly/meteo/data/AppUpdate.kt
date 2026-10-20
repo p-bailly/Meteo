@@ -17,7 +17,7 @@ import java.time.Instant
 data class Release(val commit: String, val publishedAt: Instant?, val apkUrl: String, val size: Long)
 
 /**
- * Mise à jour de l'appli depuis les Réglages : la release « apk-latest » du dépôt porte le commit qui l'a produite ;
+ * Mise à jour de l'appli depuis les Réglages : la dernière release du dépôt (« apk-<numéro> ») porte le commit qui l'a produite ;
  * s'il diffère de celui de l'appli installée, on télécharge son APK (signé avec la même clé, il s'installe par-dessus).
  */
 object AppUpdate {
