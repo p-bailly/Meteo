@@ -34,6 +34,41 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Widgets de l'écran d'accueil (Jetpack Glance), sur le lieu ouvert dans l'app. -->
+        <receiver
+            android:name=".widget.NowWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_now_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_now" />
+        </receiver>
+        <receiver
+            android:name=".widget.ForecastWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_forecast_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_forecast" />
+        </receiver>
+        <receiver
+            android:name=".widget.HoursWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_hours_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_hours" />
+        </receiver>
     </application>
 
 </manifest>

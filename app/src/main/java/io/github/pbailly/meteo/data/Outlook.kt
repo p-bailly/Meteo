@@ -81,6 +81,37 @@ object Outlook {
         return day.map { minOf(h.weatherCode[it], 3) }.average().let { Math.round(it).toInt() }.coerceIn(0, 3)
     }
 
+    /** Pluie (ou neige) des prochaines heures : en cours jusqu'à [end], ou attendue à [start] ; null si rien d'ici là. */
+    data class NextRain(
+        /** Heure de la première heure mouillée ; null quand il pleut déjà. */
+        val start: LocalDateTime?,
+        /** Première heure sèche après l'épisode ; null s'il dure jusqu'au bout de la période regardée. */
+        val end: LocalDateTime?,
+        /** Cumul de l'épisode, en mm. */
+        val total: Double,
+        val snow: Boolean,
+    )
+
+    /** Une heure compte comme mouillée à partir de 0,2 mm : en dessous, quelques gouttes sans importance. */
+    private const val WET_HOUR_MM = 0.2
+
+    /** Premier épisode de pluie des [hours] prochaines heures (heure en cours comprise), ou null s'il n'y en a pas. */
+    fun nextRain(f: Forecast, hours: Int = 24, from: Int = nowIndex(f)): NextRain? {
+        val h = f.hourly
+        val last = minOf(h.size, from + hours)
+        fun wet(i: Int) = h.precipitation[i].let { !it.isNaN() && it >= WET_HOUR_MM }
+        val first = (from until last).firstOrNull(::wet) ?: return null
+        val dry = (first until last).firstOrNull { !wet(it) }
+        val episode = first until (dry ?: last)
+        val snowHours = episode.count { h.weatherCode[it] in SNOW_CODES || h.snowfall[it].let { s -> !s.isNaN() && s > 0.0 } }
+        return NextRain(
+            start = if (first == from) null else h.time[first],
+            end = dry?.let { h.time[it] },
+            total = episode.sumOf { h.precipitation[it] },
+            snow = snowHours * 2 > episode.count(),
+        )
+    }
+
     /** « auj. », « demain » ou « lun. 26 ». */
     fun dayLabel(date: LocalDate, today: LocalDate): String = when (date) {
         today -> "auj."

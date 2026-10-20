@@ -18,6 +18,7 @@ import io.github.pbailly.meteo.data.TerrainProfile
 import io.github.pbailly.meteo.data.TerrainRepository
 import io.github.pbailly.meteo.data.WeatherModel
 import io.github.pbailly.meteo.data.WeatherRepository
+import io.github.pbailly.meteo.widget.Widgets
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -195,6 +196,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     fun setTheme(theme: Int) {
         settings.saveTheme(theme)
         _state.update { it.copy(theme = theme) }
+        viewModelScope.launch { Widgets.updateAll(getApplication()) }
     }
 
     fun setTextSize(size: Int) {
@@ -269,6 +271,8 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
                     onFailure = { state.copy(forecast = state.forecast.copy(loading = false, error = (it as Exception).userMessage())) },
                 )
             }
+            // Les widgets relisent le cache tout juste écrit : même lieu et même prévision que l'app.
+            if (result.isSuccess) Widgets.updateAll(getApplication())
         }
     }
 

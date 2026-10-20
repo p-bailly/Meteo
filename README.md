@@ -68,6 +68,21 @@ la carte) :
   modèles de la comparaison, clés Météo-France et Windy, et la **mise à jour de l'appli** (version installée,
   téléchargement et installation de la dernière version publiée).
 
+**Widgets** de l'écran d'accueil (appui long sur l'écran d'accueil → Widgets → Météo), sur le lieu ouvert dans
+l'app, aux couleurs Glacier (clair ou sombre comme les Réglages) ; les toucher ouvre l'app :
+
+- **Maintenant** (2 × 2, de 2 × 1 à plus large) : température, pictogramme et ciel, maxi (orange) et mini (bleu)
+  du jour ; en large, le ressenti et l'arrivée de la pluie ;
+- **Prévisions** (4 × 2) : le temps actuel puis les prochains jours (pictogramme qui résume la journée, maxi et mini,
+  cumul de pluie s'il y a la place), de 3 à 7 jours selon la largeur ; en 4 × 3, une ligne des prochaines heures ;
+- **Prochaines heures** (4 × 2) : la phrase qui compte (« Pluie vers 15h · 2,4 mm », « Neige jusqu'à 18h »,
+  « Pas de pluie d'ici 24 h ») puis le graphique des 24 prochaines heures (12 en étroit) : pictogrammes,
+  courbe de température et barres de pluie.
+
+Ils se mettent à jour toutes les 30 minutes (le minimum d'Android) et à chaque téléchargement dans l'app ; ils
+réutilisent son cache, donc n'ajoutent un appel à Open-Meteo que si l'app n'a pas été ouverte entre-temps. Une heure
+compte comme pluvieuse à partir de 0,2 mm.
+
 Comment la prévision est résumée :
 
 - **Pictogramme d'un jour (ou de 3 heures)** : le temps qui domine, et non le pire moment comme le code journalier
@@ -172,6 +187,8 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
   dessinés au trait (`WeatherIcon`), dessin au crayon d'Aujourd'hui (`WeatherSketch`), outils de graphique
   (`ChartKit`, dont la jauge de confiance), carte MapLibre
   (`radar/RadarMap`).
+- `widget/` : widgets de l'écran d'accueil avec Jetpack Glance (`NowWidget`, `ForecastWidget`, `HoursWidget`),
+  chargement et couleurs (`WidgetData`), pictogrammes et graphique dessinés en images (`WidgetDrawing`).
 - `ui/theme/` : couleurs (`Theme`) et polices Archivo et Martian Mono (`Type`, fichiers dans `res/font/`).
 
 La clé de signature `app/meteo-perso.jks` est volontairement dans le dépôt pour que chaque APK compilé
