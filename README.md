@@ -21,15 +21,17 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
 Cinq onglets dans la barre du bas, ou en glissant d'une page à l'autre (sauf sur la carte, où le glissement déplace
 la carte) :
 
-- **Aujourd'hui**, sur un seul écran sans défiler : le lieu, son département et son altitude, l'étoile des favoris
+- **Aujourd'hui**, sur un seul écran sans défiler : le lieu (son nom en entier, qui rapetisse s'il est long), son
+  département et son altitude, l'étoile des favoris
   (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel en toutes
-  lettres (sans pictogramme), les extrêmes du jour (maxi en orange, mini en bleu) et leur **écart aux normales** de
-  saison (« +2° vs normales », moyennes 1991-2020) ; en fond, un **dessin aux crayons de couleur** du lieu tel qu'il
+  lettres (sans pictogramme), les extrêmes du jour (maxi en orange, mini en bleu) ; en fond, un **dessin aux crayons de couleur** du lieu tel qu'il
   est, puis du temps qu'il fait : le ciel se place entre les écritures, le relief, le village, la rivière ou les champs
   dans la bande libre sous le texte, sans monter derrière le ciel en toutes lettres ni les extrêmes. Rien n'est inventé :
   sur un sommet (le Mont Blanc), la coupe regarde vers un autre sommet et le relief est en dessous ; en mer ou au milieu
-  d'un lac, de l'eau, un voilier et des mouettes ; et tant que les environs ne sont pas connus (OpenStreetMap lent ou
-  injoignable), pas de village au hasard, seulement ce que le relief fait pousser. D'abord **où l'on est**, d'après la coupe du terrain vers le sommet qui domine le lieu :
+  d'un lac, de l'eau, un voilier et des mouettes ; la ville est posée au niveau du lieu (le sol est aplani sous elle,
+  Valence reste dans sa plaine), et le terrain est colorié sur toute la largeur. Quand OpenStreetMap ne répond pas, la
+  taille de la ville vient du géocodeur d'Open-Meteo (sa population) ; sans rien, pas de village au hasard, seulement
+  ce que le relief fait pousser. D'abord **où l'on est**, d'après la coupe du terrain vers le sommet qui domine le lieu :
   en plaine (champs en parcelles selon la saison, haies), en basse montagne (sommets sous 1 200 m : croupes de feuillus,
   vertes, rousses à l'automne, nues l'hiver), en moyenne montagne (jusqu'à 2 500 m, ou un lieu déjà à 700 m : prés,
   sapins, alpages), en haute montagne (jusqu'à 3 500 m : forêt, roche, neige), en très haute montagne (aiguilles,
@@ -48,7 +50,8 @@ la carte) :
   manche à air ; la neige au sol (toits blancs, bonhomme de neige) ; les lacs gelés après des jours sans dégel ; le ciel
   jauni par le sable du Sahara ou voilé par la pollution (qualité de l'air d'Open-Meteo) ; des vaches à l'alpage l'été,
   des chamois dans les rochers, des mouettes au bord de la mer ; le télésiège et les pistes d'une station de ski ; la
-  tour Eiffel, Fourvière, Notre-Dame de la Garde, la cathédrale de Strasbourg ou le jet d'eau de Genève. Parfois une
+  tour Eiffel, Fourvière, Notre-Dame de la Garde, la cathédrale de Strasbourg, le jet d'eau de Genève ou l'Empire State
+  Building. Parfois une
   petite surprise selon le temps ou certains jours de fête — et toucher le dessin en montre une autre version. La pluie
   et la neige tombent, les nuages glissent (on peut l'arrêter dans les Réglages, où l'on choisit aussi un dessin
   discret, normal ou coloré). Toutes les combinaisons : `design/dessins/coloriages.pdf` ;
@@ -59,7 +62,9 @@ la carte) :
 - **Prévisions** (14 jours) : pour chaque jour, le pictogramme, la barre mini-maxi (du bleu à l'orange), et l'un
   sous l'autre la pluie (goutte, mm), le vent maximal (flèche dans la direction où il souffle, km/h, en rouge à
   partir de 40), l'ensoleillement (soleil, heures) et l'**indice de confiance** sur 5 (jauge à cinq barres) ; la
-  neige attendue s'il en tombe. Toucher un jour ouvre son **détail heure par heure**.
+  neige attendue s'il en tombe. Toucher un jour ouvre son **détail heure par heure**, présenté de la même façon :
+  l'heure, le ciel, la température et le ressenti, puis l'un sous l'autre la pluie et sa probabilité, le vent moyen et
+  les rafales, l'indice de confiance.
 - **Courbes** (météogrammes) :
   - **7 jours**, heure par heure : température et ressenti, pluie et sa probabilité, nuages, vent moyen et rafales,
     pression ; sur la courbe du vent moyen, une flèche toutes les 6 heures montre où va le vent ; trait orange :
@@ -93,8 +98,9 @@ la carte) :
   carte** (toucher un point, ou ailleurs pour le déplacer : il prend le nom de la commune et l'altitude du terrain ;
   l'étoile l'ajoute aux favoris, « Voir la météo » l'ouvre), puis les **favoris**
   (étoile orange) dans l'ordre choisi — appui long sur un lieu puis glisser pour le déplacer — et les **lieux
-  consultés récemment**, du plus récent au plus ancien ; chacun avec son département, son altitude, sa température
-  et ses extrêmes. L'étoile de chaque ligne ajoute ou retire un favori. **Comparer** met tous ces lieux côte à côte
+  consultés récemment**, du plus récent au plus ancien ; chacun avec d'abord son nom (en entier, sur deux lignes s'il
+  le faut), puis en petit son altitude et son département, sa température et ses extrêmes. Toucher un lieu trouvé, ou
+  « Rechercher » sur le clavier (le premier trouvé), ferme le clavier et ouvre Aujourd'hui. L'étoile de chaque ligne ajoute ou retire un favori. **Comparer** met tous ces lieux côte à côte
   sur 8 jours (pictogramme, maxi et mini, pluie) ; l'engrenage ouvre les **Réglages** : thème (comme le téléphone,
   jour ou nuit), taille du texte (100, 115 ou 130 % : plus grand, certains écrans cachent des détails secondaires),
   dessin d'Aujourd'hui (discret, normal ou coloré, animé ou non), modèles de la comparaison, clés Météo-France et Windy, et la **mise à jour de l'appli** (version installée,
@@ -125,16 +131,13 @@ Comment la prévision est résumée :
 - **En plaine** (aucun relief au-dessus de 1 500 m autour du lieu), la neige est comptée sur le lieu et non à
   2 000 m.
 
-Comment l'indice de confiance et les normales sont calculés :
+Comment l'indice de confiance est calculé :
 
 - **Indice de confiance** (1 à 5) : dispersion des 51 scénarios de la prévision d'ensemble du centre européen
   (ECMWF ENS, via Open-Meteo, rechargée toutes les 3 heures) ; à défaut, des 8 modèles. Pour chaque jour, moitié
   température (écart-type des maxima : sûr sous 0,5 °C, incertain à 4 °C), moitié pluie (scénarios d'accord pour
   « sec » ou « au moins 1 mm », et sur les cumuls s'il pleut) ; 5/5 au-dessus de 80 %, 4/5 de 65 %, 3/5 de 50 %,
   2/5 de 35 %. La confiance baisse donc naturellement avec l'échéance, quand les scénarios s'écartent.
-- **Normales** : températures maximales et minimales 1991-2020 (réanalyse ERA5 d'Open-Meteo, ramenée à l'altitude
-  du lieu) sur deux semaines autour de la date, une requête par année (30 en tout, téléchargées une fois par lieu et
-  par semaine, pour ménager le quota gratuit d'Open-Meteo). L'écart compare la moyenne du maxi et du mini du jour.
 
 Comment l'altitude est calculée :
 
@@ -215,8 +218,7 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 - `data/` : appels Open-Meteo et lecture des réponses (`OpenMeteoApi`), cache (`WeatherRepository`),
   favoris (`PlacesStore`), position (`DeviceLocation`), nom d'un point (`PlaceNames` : géocodeur du téléphone, à
   défaut Nominatim d'OpenStreetMap), nouvelles tentatives et messages d'erreur réseau
-  (`Http`), décompression bzip2 (`Bzip2`), mise à jour de l'appli (`AppUpdate`) ; indice de confiance (`Predictability`), normales de saison
-  (`Climate`) ; météo en altitude, limite pluie-neige et neige (`Altitude`), pictogramme du jour et moment de la pluie
+  (`Http`), décompression bzip2 (`Bzip2`), mise à jour de l'appli (`AppUpdate`) ; indice de confiance (`Predictability`) ; météo en altitude, limite pluie-neige et neige (`Altitude`), pictogramme du jour et moment de la pluie
   (`Outlook`), coupe du relief (`Terrain`, avec Overpass pour les sommets).
 - `data/maps/` : couches des cartes (`MapLayers`), lecture des fichiers GRIB2 du DWD avec leur compression CCSDS
   (`Grib2`) et relevés des stations (`Observations` : Météo-France, MétéoSuisse, METAR, répartition des pastilles

@@ -70,9 +70,10 @@ private fun settlementHalfWidth(decor: Set<Decor>): Float? = when {
 }
 
 /** Où poser les choses : le lieu habité près du lieu, l'objet du premier plan ailleurs, jamais sur l'eau. */
-private class Layout(val settlement: Float?, val half: Float, val foreground: Float)
+internal class Layout(val settlement: Float?, val half: Float, val foreground: Float)
 
-private fun layoutOf(scene: SketchScene): Layout {
+internal fun layoutOf(scene: SketchScene): Layout {
+    scene.layout?.let { return it }
     val t = scene.terrain
     fun dry(x: Float) = !t.isWater(x, 0.02f)
     val full = settlementHalfWidth(scene.decor) ?: 0f
@@ -122,9 +123,9 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
     // Neige au sol : les toits aussi sont blancs.
     pencil.snowyRoofs = t.snowline <= 0f
     // Étages en couleur, du bas vers le haut : prés (ou champs), forêt, alpages, roche, glaciers et neige, selon le
-    // relief et l'altitude ; seulement au milieu, pas sous le texte des côtés, avec des bords irréguliers comme un
-    // coloriage.
-    val area = Rect(w * 0.26f, 0f, w * 0.75f, h)
+    // relief et l'altitude ; sur toute la largeur (le relief reste bas sous le texte des côtés), avec des bords
+    // irréguliers comme un coloriage.
+    val area = Rect(w * 0.012f, 0f, w * 0.988f, h)
     val step = 5f * u
     val rows = (0..(h / step).toInt() + 1).map { it * step }
     val colored = polygon(
@@ -184,16 +185,16 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
     t.water.forEach { run -> water(pencil, w * run.start, w * run.endInclusive, y(t.heightAt((run.start + run.endInclusive) / 2)), rnd, ice = scene.conditions.frozen) }
     // L'île : la mer des deux côtés, là où la terre s'enfonce sous l'eau.
     if (t.island) {
-        var x = 0.26f
-        while (x < 0.76f) {
+        var x = 0f
+        while (x < 1f) {
             if (t.heightAt(x) > 0f) { x += 0.005f; continue }
             val start = x
-            while (x < 0.76f && t.heightAt(x) <= 0f) x += 0.005f
+            while (x < 1f && t.heightAt(x) <= 0f) x += 0.005f
             water(pencil, w * start, w * x, h * FOOT, rnd)
         }
     }
     // Au bord de la mer : la mer au premier plan, devant le relief.
-    if (t.sea) water(pencil, w * 0.27f, w * 0.93f, h * SEA, rnd)
+    if (t.sea) water(pencil, 0f, w, h * SEA, rnd)
 
     val layout = layoutOf(scene)
     val settled = layout.settlement?.let { (it - layout.half - 0.03f)..(it + layout.half + 0.03f) }
@@ -370,11 +371,11 @@ private fun DrawScope.fields(pencil: Pencil, t: SketchTerrain, w: Float, h: Floa
     }.shuffled(rnd)
     val top = h * 0.943f
     val bottom = h * 0.99f
-    var x = 0.31f
+    var x = 0.02f
     var k = 0
-    while (x < 0.80f) {
+    while (x < 0.98f) {
         val width = 0.07f + rnd.nextFloat() * 0.06f
-        val x1 = minOf(x + width, 0.80f)
+        val x1 = minOf(x + width, 0.98f)
         if (!t.isWater(x) && !t.isWater(x1)) {
             // Les limites des parcelles penchent vers le centre, comme vues un peu de haut.
             val lean = (0.55f - x) * 0.04f
@@ -410,8 +411,8 @@ private inline fun DrawScope.within(shape: Path, crossinline block: DrawScope.()
 /** La rivière : un ruban qui serpente au pied du relief, plus large au milieu, ses rives et ses rides. */
 private fun DrawScope.river(pencil: Pencil, w: Float, h: Float, rnd: Random) {
     val u = density
-    val x0 = 0.28f
-    val x1 = 0.77f
+    val x0 = 0.02f
+    val x1 = 0.98f
     val phase = rnd.nextFloat() * 6f
     val xs = (0..48).map { x0 + (x1 - x0) * it / 48 }
     fun center(x: Float) = h * RIVER + (sin(x * 24.0 + phase) * 2.4 * u).toFloat()
@@ -631,6 +632,7 @@ private fun DrawScope.city(
         Landmark.FOURVIERE -> fourviere(pencil, monumentAt + Offset(4f * u, 0f))
         Landmark.BONNE_MERE -> bonneMere(pencil, monumentAt)
         Landmark.JET_D_EAU -> jetDeau(pencil, monumentAt + Offset(6f * u, 0f), 58f * u)
+        Landmark.EMPIRE_STATE -> empireState(pencil, monumentAt, 70f * u, lit)
         else -> Unit
     }
     // Les plus hauts derrière : on dessine d'abord les tours du centre, puis les plus basses devant.
@@ -642,7 +644,8 @@ private fun DrawScope.city(
     buildings.forEach { (i, height, width) ->
         val base = at(x - half + (i + 0.5f) * slot)
         // Autour du monument, une place dégagée (le Champ-de-Mars, la colline, la rade) pour bien le voir.
-        if (landmark != null && (i == middle || landmark != Landmark.STRASBOURG_CATHEDRAL && abs(i - middle) == 1)) {
+        val open = landmark != Landmark.STRASBOURG_CATHEDRAL && landmark != Landmark.EMPIRE_STATE
+        if (landmark != null && (i == middle || open && abs(i - middle) == 1)) {
             if (landmark == Landmark.STRASBOURG_CATHEDRAL) strasbourgCathedral(pencil, base)
             return@forEach
         }
@@ -1100,6 +1103,24 @@ private fun DrawScope.strasbourgCathedral(pencil: Pencil, ground: Offset) {
     pencil.ink(Crayon.PINK).hatch(spire, spire.getBounds(), spacing = 1.6f, width = 0.6f)
     pencil.outline(oval(ground + Offset(0f, -17f * u), 3.5f * u, 3.5f * u), width = 0.7f, passes = 1)
     pencil.line(Offset(ground.x - 4.5f * u, ground.y - 54f * u), Offset(ground.x - 4.5f * u, ground.y - 58f * u), width = 0.8f, passes = 1)
+}
+
+/** L'Empire State Building : une tour à gradins, sa flèche, et ses fenêtres (allumées la nuit). */
+private fun DrawScope.empireState(pencil: Pencil, ground: Offset, height: Float, lit: Boolean) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val tiers = listOf(0f to 9f, 0.55f to 7f, 0.72f to 5f, 0.82f to 3.2f)
+    val shape = tiers.foldIndexed(Path()) { k, path, (from, half) ->
+        val to = tiers.getOrNull(k + 1)?.first ?: 0.9f
+        path.union(rect(x - half * u, g - height * to, x + half * u, g - height * from))
+    }
+    pencil.erase(shape)
+    pencil.outline(shape, width = 1f)
+    pencil.ink(Crayon.ROCK).hatch(shape, Rect(x + 2f * u, g - height, x + 9f * u, g), spacing = 2f, width = 0.6f)
+    windows(pencil, Rect(x - 9f * u, g - height * 0.55f, x + 9f * u, g - 3f * u), 7, 3, lit, Random(7))
+    pencil.line(Offset(x, g - height * 0.9f), Offset(x, g - height * 1.08f), width = 1f)
+    pencil.ink(Crayon.RED).dot(Offset(x, g - height * 1.09f), 1f)
 }
 
 /** Le jet d'eau de Genève : une colonne blanche qui monte du lac et retombe en panache. */

@@ -93,6 +93,7 @@ private fun spots(p: Map<String, TerrainProfile>): Map<String, Spot> {
     val high = p.getValue("chamonix").remap { 1041 + (it - 1041) * 0.58 }
     return listOf(
         Spot("paris", "Paris : plaine, grande ville, la Seine", p["paris"], 48.86, at(Settlement.CITY, river = true), Landmark.EIFFEL_TOWER),
+        Spot("newyork", "New York : grande ville au bord de la mer", p["newyork"], 40.71, at(Settlement.CITY, coast = true), Landmark.EMPIRE_STATE),
         Spot("lyon", "Lyon : Fourvière au-dessus de la ville", p["paris"], 45.76, at(Settlement.CITY, river = true), Landmark.FOURVIERE),
         Spot("marseille", "Marseille : la Bonne Mère et la mer", p["nice"], 43.30, at(Settlement.CITY, coast = true), Landmark.BONNE_MERE),
         Spot("strasbourg", "Strasbourg : la cathédrale", p["paris"], 48.58, at(Settlement.CITY, river = true), Landmark.STRASBOURG_CATHEDRAL),
@@ -277,6 +278,8 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
     add(section, "Strasbourg : la cathédrale", "strasbourg", 3, autumn, sky = 0)
     add(section, "Genève : le jet d'eau", "geneve", 1, summer, sky = 0, temperature = 25)
     add(section, "Paris la nuit", "paris", 0, nightTime, sky = 1)
+    add(section, "New York : l'Empire State Building", "newyork", 1, summer, sky = 0, temperature = 29)
+    add(section, "New York la nuit", "newyork", 0, nightTime, sky = 0, temperature = 18)
 
     section = "13. Les couleurs du dessin (réglage)"
     for ((style, name) in listOf(0 to "discret", 1 to "normal", 2 to "coloré")) {

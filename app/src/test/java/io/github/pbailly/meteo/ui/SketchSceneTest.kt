@@ -262,6 +262,22 @@ class SketchSceneTest {
     }
 
     @Test
+    fun `the town stands at the level of the place`() {
+        val day = LocalDateTime.of(2026, 6, 10, 14, 0)
+        // Valence : la coupe met les collines toutes proches de la ville ; la ville reste dans la plaine.
+        for ((name, settlement) in listOf("valence" to Settlement.CITY, "morteau" to Settlement.TOWN, "newyork" to Settlement.CITY)) {
+            val around = Surroundings(settlement)
+            val t = SketchTerrains.from(profile(name), 6, snowing = false, around = around)
+            val scene = SketchScenes.scene(0, true, day, 3, t, around = around)
+            val layout = scene.layout!!
+            val x = layout.settlement!!
+            val heights = (0..10).map { scene.terrain.heightAt(x - layout.half + 2 * layout.half * it / 10) }
+            assertTrue(name, heights.all { kotlin.math.abs(it - scene.terrain.heightAt(scene.terrain.placeX)) < 0.005f })
+        }
+        assertEquals(Landmark.EMPIRE_STATE, Landmark.near(40.7580, -73.9855))
+    }
+
+    @Test
     fun `light follows sunrise and sunset`() {
         val rise = LocalDateTime.of(2026, 10, 20, 7, 30)
         val set = LocalDateTime.of(2026, 10, 20, 18, 30)

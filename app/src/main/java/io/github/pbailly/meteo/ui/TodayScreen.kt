@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.outlined.WbTwilight
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
@@ -57,15 +60,14 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.AirQuality
 import io.github.pbailly.meteo.data.Altitude
 import io.github.pbailly.meteo.data.Forecast
-import io.github.pbailly.meteo.data.Normals
 import io.github.pbailly.meteo.data.Outlook
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.ui.theme.AppCondensed
@@ -124,7 +126,7 @@ fun TodayScreen(
                                 // place au dessin.
                                 TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces, onOpenAltitude.takeIf { snowSeason(f) })
                                 StatusLine(statusText(remote))
-                                NowBlock(f, state.normals.data)
+                                NowBlock(f)
                                 // Sous le texte, le bas du dessin : le village, la rivière, les champs, bien visibles.
                                 Spacer(Modifier.height(SKETCH_GROUND))
                             }
@@ -197,12 +199,12 @@ private fun TodayHeader(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Outlined.Place, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(
+                // Le nom en entier : il rapetisse pour tenir sur la ligne (jusqu'à 16 sp), puis passe sur deux lignes.
+                BasicText(
                     place.name,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    style = LocalTextStyle.current.copy(color = colors.onSurface, fontWeight = FontWeight.SemiBold, lineHeight = 1.15.em),
+                    maxLines = 2,
+                    autoSize = TextAutoSize.StepBased(minFontSize = 16.sp, maxFontSize = 28.sp, stepSize = 1.sp),
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (!elevation.isNaN()) {
@@ -237,7 +239,7 @@ private fun TodayHeader(
 
 /** « 14 °C » en grand, le ciel à droite, le ressenti et les extrêmes du jour. */
 @Composable
-private fun NowBlock(f: Forecast, normals: Normals?) {
+private fun NowBlock(f: Forecast) {
     val c = f.current ?: return
     val today = f.daily.date.indexOf(c.time.toLocalDate()).coerceAtLeast(0)
     val accent = LocalChartColors.current.accent
@@ -265,27 +267,6 @@ private fun NowBlock(f: Forecast, normals: Normals?) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                 MonoText(Fmt.temp(high), color = accent, bold = true, size = 13.sp)
                 MonoText(" / " + Fmt.temp(low), color = MaterialTheme.colorScheme.primary, bold = true, size = 13.sp)
-            }
-            // Écart de la journée (moyenne du maxi et du mini) aux normales 1991-2020 de la saison.
-            normals?.on(c.time.toLocalDate())?.let { (normalHigh, normalLow) ->
-                val gap = ((high + low) - (normalHigh + normalLow)) / 2
-                if (!gap.isNaN()) {
-                    val rounded = gap.roundToInt()
-                    MonoText(
-                        when {
-                            rounded > 0 -> "+$rounded° vs normales"
-                            rounded < 0 -> "−${-rounded}° vs normales"
-                            else -> "de saison"
-                        },
-                        color = when {
-                            rounded > 0 -> accent
-                            rounded < 0 -> MaterialTheme.colorScheme.primary
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        size = 11.5.sp,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
             }
         }
     }
