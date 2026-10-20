@@ -34,6 +34,15 @@ object Predictability {
         return (100 * (0.45 * tempScore + 0.55 * rainScore)).roundToInt()
     }
 
+    /** Indice de confiance sur 5, comme celui de Météo-France, à partir de l'accord des modèles (en %). */
+    fun confidence(percent: Int): Int = when {
+        percent >= 80 -> 5
+        percent >= 65 -> 4
+        percent >= 50 -> 3
+        percent >= 35 -> 2
+        else -> 1
+    }
+
     fun hourly(mm: MultiModelForecast, time: LocalDateTime): Int? {
         val i = mm.time.indexOf(time)
         if (i < 0) return null

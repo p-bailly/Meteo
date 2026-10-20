@@ -20,33 +20,34 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
 Cinq onglets dans la barre du bas, ou en glissant d'une page à l'autre (sauf sur la carte, où le glissement déplace
 la carte) :
 
-- **Aujourd'hui** : le lieu, son département et son altitude, la température en grand avec le ressenti juste en
-  dessous, le ciel et les extrêmes du jour (maxi en orange, mini en bleu) ; le bloc altitude : coupe du relief du
-  lieu vers le plus haut sommet des environs, température sur place, à 1 000, 1 500, 2 000, 3 000 m et au sommet,
-  iso 0 °C (tirets) et limite pluie-neige (pointillés), ressenti et vent à 2 000 m ; puis vent, rafales, humidité,
-  pression (et sa tendance), indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler
-  (pictogramme, courbe de température, probabilité et barres de pluie) avec le résumé de la pluie : « pluie
-  aujourd'hui 17-20 h · 3,0 mm » le matin et en journée, « pluie cette nuit… » le soir (et pour une pluie d'après
-  minuit), sinon « demain ». Toucher le bloc altitude ouvre la page **Neige & altitude** (voir plus bas).
-- **Prévisions** (14 jours par défaut, ou 7) : pour chaque jour, le pictogramme, la barre mini-maxi (du bleu à
-  l'orange), et l'un sous l'autre la pluie (goutte, mm), le vent maximal (flèche dans la direction où il souffle,
-  km/h, en rouge à partir de 40) et l'ensoleillement (soleil, heures) ; la neige attendue s'il en tombe, et l'iso
-  0 °C actuelle sur la ligne d'aujourd'hui. Toucher un jour ouvre son **détail heure par heure** (avec la
-  prévisibilité, comme sur Meteoblue).
+- **Aujourd'hui**, sur un seul écran sans défiler : le lieu, son département et son altitude, l'étoile des favoris
+  (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel et les
+  extrêmes du jour (maxi en orange, mini en bleu) ; une ligne **Neige & altitude** (avec l'iso 0 °C actuel) qui ouvre
+  la page du même nom ; vent, rafales, humidité, pression (et sa tendance), indice UV, coucher et lever du soleil ;
+  et les **48 prochaines heures** à faire défiler, dans toute la hauteur qui reste (pictogramme, courbe de
+  température, probabilité et barres de pluie), avec le résumé de la pluie : « pluie aujourd'hui 17-20 h · 3,0 mm »
+  le matin et en journée, « pluie cette nuit… » le soir (et pour une pluie d'après minuit), sinon « demain ».
+- **Prévisions** (14 jours) : pour chaque jour, le pictogramme, la barre mini-maxi (du bleu à l'orange), et l'un
+  sous l'autre la pluie (goutte, mm), le vent maximal (flèche dans la direction où il souffle, km/h, en rouge à
+  partir de 40), l'ensoleillement (soleil, heures) et l'**indice de confiance** sur 5 (pastille de couleur), tiré de
+  l'accord des 8 modèles ; la neige attendue s'il en tombe. Toucher un jour ouvre son **détail heure par heure**.
 - **Météogramme** :
   - **7 jours**, heure par heure : température et ressenti, pluie et sa probabilité, nuages, vent moyen et rafales,
     pression ; sur la courbe du vent moyen, une flèche toutes les 6 heures montre où va le vent ; trait orange :
     maintenant ;
-  - **14 jours**, en grand, à faire glisser du doigt : pictogramme, accord des modèles (prévisibilité), mini-maxi,
-    cumul de pluie et vent du jour (flèche de la direction dominante et vitesse maximale) ;
+  - **14 jours**, en grand, à faire glisser du doigt : pictogramme, indice de confiance (accord des modèles),
+    mini-maxi, cumul de pluie et vent du jour (flèche de la direction dominante et vitesse maximale) ;
   - **Modèles** : comparaison de 8 modèles avec leur moyenne.
-- **Neige & altitude** (depuis le bloc altitude d'Aujourd'hui ; par jour ou par tranche de 3 heures) : coupe du
+- **Neige & altitude** (depuis la ligne du même nom dans Aujourd'hui) : d'abord **maintenant** — coupe du relief du
+  lieu vers le plus haut sommet des environs, température sur place, à 1 000, 1 500, 2 000, 3 000 m et au sommet,
+  iso 0 °C et limite pluie-neige, ressenti et vent à 2 000 m ; puis par jour ou par tranche de 3 heures : coupe du
   relief vallée → sommets avec l'iso 0, la limite pluie-neige, les sommets nommés, la neige attendue à 2 000 et
   3 000 m et les pentes enneigées ; iso 0 et limite pluie-neige jour par jour, neige à 2 000 m ; température,
   ressenti, vent et neige au sommet, à 2 000 m et sur le lieu.
 - **Radar** : les cartes, avec frise des heures et animation :
   - **Pluie** : radar Météo-France et sa prévision (voir ci-dessous pour la clé) ;
-  - **Température** à 2 m maintenant : modèle ICON-EU du DWD (sans clé), colorée comme les cases de température de
+  - **Température** à 2 m maintenant : modèle ICON-EU du DWD (sans clé, fichier GRIB2 d'environ 1 Mo du serveur de
+    données ouvertes du DWD, plus fiable que son serveur de cartes), colorée comme les cases de température de
     l'app, avec les **vrais relevés** des stations en pastilles : stations Météo-France avec la clé (environ 1 800),
     stations de MétéoSuisse et aéroports (METAR) sans clé. Toucher une pastille affiche toutes les mesures de la
     station (humidité, point de rosée, vent, rafales, pression, pluie, neige au sol, visibilité…) et sa température
@@ -55,7 +56,7 @@ la carte) :
     vraies couleurs le jour, nuages et lumières des villes la nuit ;
   - **Foudre** : imageur d'éclairs de Meteosat (EUMETSAT, sans clé), éclairs par 5 min sur la dernière heure ;
   - **Webcams** autour du lieu : Windy, avec une clé gratuite (api.windy.com) à saisir dans les Réglages ;
-    toucher un point affiche l'image et le lien vers la page Windy.
+    toucher un point affiche l'image sur toute la largeur et le lien vers la page Windy.
 - **Lieux** : recherche (ville, col, station, sommet), **météo à ma position** (GPS du téléphone, sans les services
   Google), favoris avec leur département, leur altitude, leur température et leurs extrêmes, **dans l'ordre choisi** :
   appui long sur un lieu puis glisser pour le déplacer. « Modifier » retire des favoris ; l'engrenage ouvre les
@@ -107,7 +108,9 @@ Le radar vient de l'API publique « DonneesPubliquesRadar » de Météo-France :
 - **Prévision** : après « maintenant », la frise continue dans le futur.
   - Avec l'abonnement gratuit à l'API « PrevisionImmediatePrecipitations » (PIAF) dans la même clé :
     la prévision immédiate officielle de Météo-France (extrapolation radar fusionnée avec le modèle
-    AROME-PI), jusqu'à +3 h par pas de 15 min, sur une zone d'environ 450 × 450 km autour du lieu.
+    AROME-PI), jusqu'à +3 h par pas de 15 min, sur une zone d'environ 450 × 450 km autour du lieu. L'unité des
+    valeurs est lue dans la description du service ; une valeur de remplissage ou une échelle invraisemblable
+    (toute la zone en « grêle ») est écartée.
   - Sinon, en secours : l'app mesure le déplacement des pluies entre deux images récentes (méthode TREC)
     et le prolonge sur 1 heure. Il faut deux images à 5–30 min d'écart ; les averses qui naissent ou se
     dissipent ne sont pas prévues.
@@ -134,16 +137,17 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 
 - `data/` : appels Open-Meteo et lecture des réponses (`OpenMeteoApi`), cache (`WeatherRepository`),
   favoris (`PlacesStore`), position (`DeviceLocation`), nouvelles tentatives et messages d'erreur réseau
-  (`Http`) ; météo en altitude, limite pluie-neige et neige (`Altitude`), pictogramme du jour et moment de la pluie
+  (`Http`), décompression bzip2 (`Bzip2`) ; indice de confiance (`Predictability`) ; météo en altitude, limite pluie-neige et neige (`Altitude`), pictogramme du jour et moment de la pluie
   (`Outlook`), coupe du relief (`Terrain`, avec Overpass pour les sommets).
-- `data/maps/` : couches des cartes (`MapLayers`) et relevés des stations (`Observations` : Météo-France,
-  MétéoSuisse, METAR, répartition des pastilles selon le zoom).
+- `data/maps/` : couches des cartes (`MapLayers`), lecture des fichiers GRIB2 du DWD avec leur compression CCSDS
+  (`Grib2`) et relevés des stations (`Observations` : Météo-France, MétéoSuisse, METAR, répartition des pastilles
+  selon le zoom).
 - `data/radar/` : API radar Météo-France et stockage des images (`MeteoFranceRadar`), lecture des fichiers
   HDF5 (`OdimDecoder`, avec jhdf), projection stéréographique polaire (`PolarStereographic`) et conversion
   en image Web Mercator colorée (`MercatorLookup`, `RainClass`) ; prévision PIAF via WCS (`MeteoFrancePiaf`,
   lecteur `GeoTiff`) et extrapolation de secours (`Nowcast`).
 - `ui/` : navigation et barre du bas (`MeteoApp`, `Glacier`), onglets (`TodayScreen`, `DaysScreen`,
-  `AltitudeScreen`, `radar/RadarScreen`, `PlacesScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
+  `AltitudeScreen` avec `AltitudeNow`, `radar/RadarScreen`, `PlacesScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
   (`MeteogramsScreen`, `DaysTab`, `MeteogramTab`, `MultiModelTab`), réglages (`SettingsScreen`), pictogrammes
   dessinés au trait (`WeatherIcon`), outils de graphique (`ChartKit`), carte MapLibre
   (`radar/RadarMap`).
@@ -154,6 +158,7 @@ puisse mettre à jour le précédent. C'est adapté à un usage personnel, pas �
 
 Données : Open-Meteo.com (licence CC BY 4.0) ; radar et relevés : Météo-France (Licence Ouverte Etalab) ;
 relevés : MétéoSuisse (données ouvertes), NOAA Aviation Weather Center (METAR, domaine public) ;
+carte de température : Deutscher Wetterdienst (DWD, données ouvertes, modèle ICON-EU) ;
 relief : Copernicus DEM (via Open-Meteo), sommets © contributeurs OpenStreetMap (ODbL) ;
 fond de carte : OpenFreeMap, © OpenStreetMap ; polices : Archivo et Martian Mono (SIL Open Font License 1.1,
 `licences/Archivo-OFL.txt` et `licences/MartianMono-OFL.txt`).

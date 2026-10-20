@@ -1,8 +1,8 @@
 package io.github.pbailly.meteo.data.maps
 
+import io.github.pbailly.meteo.data.Bzip2
 import io.github.pbailly.meteo.data.HttpStatusException
 import io.github.pbailly.meteo.data.retryOnNetworkError
-
 import io.github.pbailly.meteo.data.radar.GeoBounds
 import io.github.pbailly.meteo.data.radar.GeoTiffImage
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +16,7 @@ import java.net.URL
 import java.net.URLEncoder
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.PI
@@ -122,25 +123,54 @@ data class TileLayer(
 }
 
 /**
- * Température à 2 m du modèle ICON-EU du service météo allemand (DWD), sans clé,
- * téléchargée en valeurs brutes (WCS, GeoTIFF) puis colorée comme les cases de température de l'app.
+ * Température à 2 m du modèle ICON-EU du service météo allemand (DWD), sans clé : fichiers GRIB2 de son serveur de
+ * données ouvertes (environ 1 Mo par heure pour toute l'Europe), plus fiable que son serveur de cartes.
  */
 object DwdTemperature {
-    private const val OWS = "https://maps.dwd.de/geoserver/dwd/Icon-eu_reg00625_fd_gl_T/ows"
-    const val CAPABILITIES = "$OWS?service=WMS&request=GetCapabilities&version=1.3.0"
     const val ATTRIBUTION = "© DWD, modèle ICON-EU"
 
-    /** Zone téléchargée et couverte par l'image : la France et ses voisins. */
+    /** Zone lue et couverte par l'image : la France et ses voisins. */
     val BOUNDS = GeoBounds(north = 52.0, south = 41.0, west = -6.0, east = 10.0)
 
-    fun coverageUrl(time: Instant): String =
-        "$OWS?service=WCS&version=2.0.1&request=GetCoverage&coverageId=dwd__Icon-eu_reg00625_fd_gl_T&format=image/tiff" +
-            "&subset=" + enc("Lat(${BOUNDS.south},${BOUNDS.north})") +
-            "&subset=" + enc("Long(${BOUNDS.west},${BOUNDS.east})") +
-            "&subset=" + enc("elevation(2)") +
-            "&subset=" + enc("time(\"${DateTimeFormatter.ISO_INSTANT.format(time)}\")")
+    /** ICON-EU tourne toutes les 3 heures ; ses fichiers sont en ligne environ 2 h 45 après l'heure du réseau. */
+    private val PUBLICATION_DELAY = Duration.ofMinutes(170)
+    private const val RUN_SECONDS = 3 * 3600L
 
-    private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
+    /** Fichiers à essayer pour l'heure [time], du réseau le plus récent au plus ancien. */
+    fun candidateUrls(time: Instant, now: Instant = Instant.now()): List<String> {
+        val latest = now.minus(PUBLICATION_DELAY).epochSecond / RUN_SECONDS * RUN_SECONDS
+        return (0 until 3).map { Instant.ofEpochSecond(latest - it * RUN_SECONDS) }
+            .filter { !it.isAfter(time) }
+            .map { run -> url(run, Duration.between(run, time).toHours()) }
+    }
+
+    fun url(run: Instant, step: Long): String {
+        val r = run.atOffset(ZoneOffset.UTC)
+        val stamp = String.format(Locale.ROOT, "%04d%02d%02d%02d", r.year, r.monthValue, r.dayOfMonth, r.hour)
+        return String.format(
+            Locale.ROOT,
+            "https://opendata.dwd.de/weather/nwp/icon-eu/grib/%02d/t_2m/icon-eu_europe_regular-lat-lon_single-level_%s_%03d_T_2M.grib2.bz2",
+            r.hour, stamp, step,
+        )
+    }
+
+    /** Télécharge le champ de l'heure [time] (en °C), en remontant aux réseaux précédents si le dernier n'est pas en ligne. */
+    suspend fun download(time: Instant): GeoTiffImage {
+        var missing: HttpStatusException? = null
+        for (url in candidateUrls(time)) {
+            val bytes = try {
+                httpBytes(url)
+            } catch (e: HttpStatusException) {
+                if (e.code != 404) throw e
+                missing = e
+                continue
+            }
+            return withContext(Dispatchers.Default) { read(bytes) }
+        }
+        throw missing ?: HttpStatusException(404)
+    }
+
+    fun read(bz2: ByteArray): GeoTiffImage = Grib2.read(Bzip2.decompress(bz2), BOUNDS) { kelvin -> kelvin - 273.15 }
 }
 
 /**

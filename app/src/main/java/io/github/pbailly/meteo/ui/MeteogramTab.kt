@@ -131,11 +131,6 @@ fun MeteogramTab(forecast: Forecast, modifier: Modifier = Modifier) {
                 drawAxes(bands, scales, colors, measurer, AXIS_WIDTH.toPx())
             }
         }
-        MonoText(
-            "bleuté : nuit · flèches : sens du vent · orange : maintenant",
-            size = 10.sp,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
-        )
     }
 }
 

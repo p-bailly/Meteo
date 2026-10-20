@@ -84,9 +84,9 @@ private class Slot(
 )
 
 /**
- * Onglet « Neige & altitude » : choix du jour (ou de l'heure), coupe du relief avec l'iso 0 °C, la limite
- * pluie-neige et la neige attendue, évolution jour par jour, puis température, ressenti, vent et neige au sommet,
- * à 2 000 m et sur le lieu.
+ * Page « Neige & altitude » : les températures par altitude maintenant, puis choix du jour (ou de l'heure), coupe
+ * du relief avec l'iso 0 °C, la limite pluie-neige et la neige attendue, évolution jour par jour, puis température,
+ * ressenti, vent et neige au sommet, à 2 000 m et sur le lieu.
  */
 @Composable
 fun AltitudeScreen(state: MeteoUiState, place: Place, onRefresh: () -> Unit, onBack: (() -> Unit)? = null) {
@@ -124,6 +124,7 @@ fun AltitudeScreen(state: MeteoUiState, place: Place, onRefresh: () -> Unit, onB
             val selected = if (mode == 0) selectedDay else hour.coerceIn(0, slots.lastIndex)
             val slot = slots[selected]
             val reference = Outlook.snowReference(Altitude.ground(f))
+            item(key = "now") { AltitudeNowPanel(f, state.terrain.data, Modifier.padding(top = 12.dp, bottom = 6.dp)) }
             item(key = "chips") {
                 SlotChips(f, slots, selected, reference) { if (mode == 0) day = it else hour = it }
             }

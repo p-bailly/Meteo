@@ -25,7 +25,6 @@ import io.github.pbailly.meteo.data.maps.WindyWebcams
 import io.github.pbailly.meteo.data.maps.WmsTimes
 import io.github.pbailly.meteo.data.maps.httpBytes
 import io.github.pbailly.meteo.data.maps.renderLatLonGrid
-import io.github.pbailly.meteo.data.radar.GeoTiff
 import io.github.pbailly.meteo.ui.theme.temperatureColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -40,6 +39,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import io.github.pbailly.meteo.data.HttpStatusException
 import io.github.pbailly.meteo.data.networkMessage
 import java.io.IOException
 import java.time.Duration
@@ -136,13 +136,10 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 when (layer) {
                     MapLayer.TEMPERATURE -> {
-                        // Seulement la carte actuelle : l'heure du modèle la plus proche de maintenant.
-                        val now = Instant.now()
-                        val caps = httpBytes(DwdTemperature.CAPABILITIES).decodeToString()
-                        val current = WmsTimes.fromCapabilities(caps, now.minus(Duration.ofHours(3)), now.plus(Duration.ofHours(3)))
-                            .minByOrNull { Duration.between(it, now).abs() } ?: now.truncatedTo(ChronoUnit.HOURS)
-                        publishTimes(listOf(current), selectLatest = true)
+                        // Les relevés des stations d'abord : ils ne dépendent pas du modèle.
                         loadObservations()
+                        // Seulement la carte actuelle : l'heure ronde la plus proche de maintenant.
+                        publishTimes(listOf(Instant.now().plus(Duration.ofMinutes(30)).truncatedTo(ChronoUnit.HOURS)), selectLatest = true)
                     }
                     MapLayer.SATELLITE, MapLayer.LIGHTNING -> {
                         val tiles = if (layer == MapLayer.SATELLITE) TileLayer.SATELLITE else TileLayer.LIGHTNING
@@ -395,7 +392,7 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Température : GeoTIFF du DWD (environ 350 Ko), colorée comme les cases de l'app. */
+    /** Température : champ ICON-EU du DWD (environ 1 Mo), colorée comme les cases de l'app. */
     private fun showTemperature(time: Instant) {
         temperatures.get(time)?.let { cached ->
             _state.update { it.copy(overlay = MapOverlay.Image(cached, DwdTemperature.BOUNDS, opacity = 0.75f)) }
@@ -405,9 +402,8 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
         showJob = viewModelScope.launch {
             try {
                 _state.update { it.copy(loading = true) }
-                val bytes = httpBytes(DwdTemperature.coverageUrl(time))
+                val image = DwdTemperature.download(time)
                 val bitmap = withContext(Dispatchers.Default) {
-                    val image = GeoTiff.read(bytes)
                     val (pixels, height) = renderLatLonGrid(image, DwdTemperature.BOUNDS, TEMPERATURE_WIDTH) { celsius ->
                         temperatureColor(celsius.toDouble()).toArgb()
                     }
@@ -420,7 +416,9 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = e.userMessage()) }
+                // Les relevés des stations restent affichés : on le dit plutôt qu'une erreur brute.
+                val message = if (e is IOException && e !is HttpStatusException) e.networkMessage() else "Fond de carte du DWD indisponible, réessaie plus tard"
+                _state.update { it.copy(loading = false, error = message) }
             }
         }
     }

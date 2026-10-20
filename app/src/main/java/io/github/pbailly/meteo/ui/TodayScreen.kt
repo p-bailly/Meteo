@@ -7,10 +7,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,16 +20,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Air
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Speed
-import androidx.compose.material.icons.outlined.StarOutline
+import androidx.compose.material.icons.outlined.Terrain
 import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material.icons.outlined.WbTwilight
@@ -45,28 +47,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Altitude
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.Outlook
 import io.github.pbailly.meteo.data.Place
-import io.github.pbailly.meteo.data.TerrainProfile
 import io.github.pbailly.meteo.ui.theme.AppCondensed
-import io.github.pbailly.meteo.ui.theme.AppMono
 import io.github.pbailly.meteo.ui.theme.AppSans
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
 import java.time.LocalDateTime
@@ -96,14 +97,23 @@ fun TodayScreen(
         when {
             f == null && remote.error != null -> ErrorState(remote.error, onRefresh)
             f == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            else -> LazyColumn(Modifier.fillMaxSize()) {
-                item(key = "header") { TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces) }
-                item(key = "status") { StatusLine(statusText(remote)) }
-                item(key = "now") { NowBlock(f) }
-                item(key = "altitude") { AltitudeNowCard(f, state.terrain.data, onOpenAltitude) }
-                item(key = "tiles") { MetricsGrid(f) }
-                item(key = "hours") { NextHours(f) }
-                item(key = "end") { Gap(16.dp) }
+            // Tout tient sur un écran : les prochaines heures prennent la hauteur qui reste. Le défilement ne sert
+            // que si l'écran est trop petit (ou le texte très grand), et au geste de mise à jour.
+            else -> BoxWithConstraints(Modifier.fillMaxSize()) {
+                val viewport = maxHeight
+                FillHeight(
+                    viewport = viewport,
+                    minFill = 250.dp,
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    top = {
+                        TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces)
+                        StatusLine(statusText(remote))
+                        NowBlock(f)
+                        AltitudeLink(f, onOpenAltitude)
+                        MetricsGrid(f)
+                    },
+                    fill = { NextHours(f, Modifier.fillMaxSize()) },
+                )
             }
         }
     }
@@ -156,20 +166,7 @@ private fun TodayHeader(f: Forecast, place: Place, favorite: Boolean, onToggleFa
                 modifier = Modifier.padding(start = 2.dp, top = 4.dp),
             )
         }
-        Box(
-            Modifier
-                .size(46.dp)
-                .clip(CircleShape)
-                .border(1.dp, colors.outlineVariant, CircleShape)
-                .clickable(onClick = onToggleFavorite),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                if (favorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
-                contentDescription = if (favorite) "Retirer des favoris" else "Ajouter aux favoris",
-                tint = colors.primary,
-            )
-        }
+        FavoriteStar(favorite, onToggleFavorite)
     }
 }
 
@@ -206,160 +203,83 @@ private fun NowBlock(f: Forecast) {
     }
 }
 
-/** Bloc « Altitude · maintenant » : coupe du relief et températures par altitude, iso 0, pluie-neige, ressenti en haut. */
-@Composable
-private fun AltitudeNowCard(f: Forecast, terrain: TerrainProfile?, onOpenAltitude: () -> Unit) {
-    val i = Outlook.nowIndex(f)
-    val ground = Altitude.ground(f)
-    val iso = Altitude.freezingLevel(f, i)
-    val snowLine = Altitude.snowLine(f, i)
-    val colors = MaterialTheme.colorScheme
-    // Toucher le bloc ouvre la page « Neige & altitude ».
-    Panel(Modifier.padding(top = 10.dp), onClick = onOpenAltitude) {
-        ReliefNowChart(f, i, terrain, ground, iso, snowLine, Modifier.fillMaxWidth().height(184.dp))
-        HorizontalDivider(Modifier.padding(top = 10.dp, bottom = 8.dp), color = colors.outlineVariant)
-        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
-            // Iso 0 du jour seulement : sa fourchette jusqu'à minuit.
-            val today = f.hourly.time[i].toLocalDate()
-            val rest = (i until f.hourly.size).takeWhile { f.hourly.time[it].toLocalDate() == today }
-                .map { Altitude.freezingLevel(f, it) }.filter { !it.isNaN() }
-            val isoNote = if (rest.size >= 2 && rest.max() - rest.min() >= 100) {
-                "auj. ${Fmt.thousands(rest.min(), 100)}–${Fmt.thousands(rest.max(), 100)}"
-            } else {
-                "stable aujourd'hui"
-            }
-            AltitudeCell("ISO 0 °C", Fmt.altitude(iso, 100), isoNote, colors.primary, Modifier.weight(1f))
-            VerticalDivider(color = colors.outlineVariant)
-            AltitudeCell("PLUIE-NEIGE", Fmt.altitude(snowLine, 100), "iso 0 − 300 m", colors.onBackground, Modifier.weight(1f))
-            VerticalDivider(color = colors.outlineVariant)
-            val high = if (ground < 1700) 2000.0 else 3000.0
-            val wind = Altitude.wind(f, i, high)
-            val feel = Altitude.windChill(Altitude.temperature(f, i, high), wind.speed)
-            AltitudeCell(
-                "RESS. ${Fmt.thousands(high)} M",
-                Fmt.temp(feel),
-                "vent ${Outlook.compass(wind.direction)} ${Fmt.kmh(wind.speed)}",
-                colors.onBackground,
-                Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-
-@Composable
-private fun AltitudeCell(label: String, value: String, note: String, valueColor: Color, modifier: Modifier) {
-    Column(modifier.padding(horizontal = 6.dp)) {
-        MonoText(label, size = 10.sp)
-        Text(value, color = valueColor, fontFamily = AppCondensed, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, maxLines = 1)
-        MonoText(note, size = 10.sp)
-    }
-}
-
 /**
- * Coupe du lieu vers le sommet le plus haut des environs, avec les températures à gauche (lieu, 1 000, 1 500,
- * 2 000, 3 000 m, sommet), l'iso 0 °C en tirets et la limite pluie-neige en pointillés.
+ * Colonne dont les éléments [top] gardent leur hauteur et dont [fill] prend le reste de [viewport], sans descendre
+ * sous [minFill] : la page tient sur un écran, et ne défile que si elle ne peut pas y tenir.
  */
 @Composable
-private fun ReliefNowChart(
-    f: Forecast,
-    i: Int,
-    terrain: TerrainProfile?,
-    ground: Double,
-    iso: Double,
-    snowLine: Double,
-    modifier: Modifier,
-) {
-    val measurer = rememberTextMeasurer()
-    val colors = MaterialTheme.colorScheme
-    val chart = LocalChartColors.current
-    Canvas(modifier) {
-        val labelWidth = 86.dp.toPx()
-        val left = labelWidth + 6.dp.toPx()
-        val right = size.width
-        val topPx = 8.dp.toPx()
-        val bottomPx = size.height - 8.dp.toPx()
-        val profile = terrain?.let { it.elevations.copyOfRange(it.placeIndex, it.elevations.size) }
-        val summit = terrain?.summit?.takeIf { it.index >= terrain.placeIndex }
-        val peak = summit?.elevation ?: profile?.maxOrNull() ?: ground
-        val maxAlt = maxOf(peak, 3000.0, if (iso.isNaN() || iso > 4500) 0.0 else iso + 250, ground + 800) + 120
-        val minAlt = minOf(ground, profile?.minOrNull() ?: ground) - 60
-        fun y(alt: Double) = (bottomPx - (alt - minAlt) / (maxAlt - minAlt) * (bottomPx - topPx)).toFloat()
-
-        // Altitudes de la colonne de gauche, sans chevauchement.
-        val wanted = listOfNotNull(summit?.elevation?.takeIf { it > 3250 }, 3000.0, 2000.0, 1500.0, 1000.0)
-            .filter { it > ground + 150 && it < maxAlt }
-        val rows = ArrayList<Double>()
-        val minGap = 15.dp.toPx()
-        for (alt in wanted.sortedDescending()) {
-            if (rows.isEmpty() || y(alt) - y(rows.last()) >= minGap) rows += alt
+private fun FillHeight(viewport: Dp, minFill: Dp, modifier: Modifier, top: @Composable () -> Unit, fill: @Composable () -> Unit) {
+    Layout(contents = listOf(top, fill), modifier = modifier) { (tops, fills), constraints ->
+        val width = constraints.maxWidth
+        val placed = tops.map { it.measure(Constraints(minWidth = width, maxWidth = width)) }
+        val used = placed.sumOf { it.height }
+        val fillHeight = maxOf(viewport.roundToPx() - used, minFill.roundToPx())
+        val filled = fills.map { it.measure(Constraints.fixed(width, fillHeight)) }
+        layout(width, used + fillHeight) {
+            var y = 0
+            placed.forEach { it.place(0, y); y += it.height }
+            filled.forEach { it.place(0, y) }
         }
-        while (rows.isNotEmpty() && y(ground) - y(rows.last()) < minGap) rows.removeAt(rows.lastIndex)
-        rows += ground
-
-        for (alt in rows) {
-            val yy = y(alt)
-            drawLine(chart.grid, Offset(left, yy), Offset(right, yy), 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 5f)))
-            drawLabel(measurer, Fmt.altitude(alt), Offset(0f, yy), chart.muted, 10f, anchorY = 0.5f)
-            drawText(
-                measurer.measure(Fmt.temp(Altitude.temperature(f, i, alt)), TextStyle(color = colors.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFamily = AppSans)),
-                topLeft = Offset(labelWidth - measureWidth(measurer, Fmt.temp(Altitude.temperature(f, i, alt))), yy - 9.sp.toPx()),
-            )
-        }
-
-        if (profile != null && profile.size > 1) {
-            val step = (right - left) / (profile.size - 1)
-            val line = Path()
-            profile.forEachIndexed { k, e -> if (k == 0) line.moveTo(left, y(e)) else line.lineTo(left + k * step, y(e)) }
-            val fill = Path().apply {
-                addPath(line)
-                lineTo(right, bottomPx)
-                lineTo(left, bottomPx)
-                close()
-            }
-            drawPath(fill, colors.primary.copy(alpha = 0.13f))
-            drawPath(line, colors.primary, style = Stroke(1.5.dp.toPx(), cap = StrokeCap.Round))
-        }
-
-        val textBackground = colors.surfaceContainer
-        if (!iso.isNaN() && iso < maxAlt) {
-            val yy = y(iso)
-            drawLine(colors.primary, Offset(left, yy), Offset(right, yy), 1.6.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 9f)))
-            drawTag(measurer, "ISO 0 °C ${Fmt.altitude(iso, 100)}", Offset(left + 4.dp.toPx(), yy - 2.dp.toPx()), colors.primary, textBackground, above = true)
-        }
-        if (!snowLine.isNaN() && snowLine < maxAlt && snowLine > minAlt) {
-            val yy = y(snowLine)
-            drawLine(colors.onBackground, Offset(left, yy), Offset(right, yy), 1.4.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2f, 5f)), cap = StrokeCap.Round)
-            drawTag(measurer, "PLUIE-NEIGE ${Fmt.altitude(snowLine, 100)}", Offset(left + 4.dp.toPx(), yy + 3.dp.toPx()), colors.onBackground, textBackground, above = false)
-        }
-        drawCircle(colors.primary, 4.dp.toPx(), Offset(left, y(ground)))
     }
 }
 
-private fun measureWidth(measurer: TextMeasurer, text: String): Float =
-    measurer.measure(text, TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFamily = AppSans)).size.width.toFloat()
-
-/** Étiquette d'une ligne (iso 0, pluie-neige), sur un fond pour rester lisible au-dessus du relief. */
-fun DrawScope.drawTag(measurer: TextMeasurer, text: String, at: Offset, color: Color, background: Color, above: Boolean, boxed: Boolean = false) {
-    val layout = measurer.measure(text, TextStyle(color = color, fontSize = 10.sp, fontFamily = AppMono, fontWeight = FontWeight.Medium))
-    val pad = 3.dp.toPx()
-    val top = if (above) at.y - layout.size.height - pad else at.y + pad
-    drawRoundRect(
-        background.copy(alpha = 0.9f),
-        topLeft = Offset(at.x - pad, top - pad / 2),
-        size = Size(layout.size.width + 2 * pad, layout.size.height + pad),
-        cornerRadius = CornerRadius(4.dp.toPx()),
-    )
-    if (boxed) {
-        drawRoundRect(
-            color,
-            topLeft = Offset(at.x - pad, top - pad / 2),
-            size = Size(layout.size.width + 2 * pad, layout.size.height + pad),
-            cornerRadius = CornerRadius(4.dp.toPx()),
-            style = Stroke(1.dp.toPx()),
-        )
+/** Lien vers la page Neige & altitude, avec l'iso 0 °C actuel. */
+@Composable
+private fun AltitudeLink(f: Forecast, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val iso = Altitude.freezingLevel(f, Outlook.nowIndex(f))
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
+            .background(colors.surfaceContainerLowest)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.Terrain, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Neige & altitude", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, modifier = Modifier.weight(1f))
+        if (!iso.isNaN()) MonoText("iso 0 °C · ${Fmt.altitude(iso, 100)}", color = colors.primary, size = 11.sp, bold = true)
+        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
     }
-    drawText(layout, topLeft = Offset(at.x, top))
+}
+
+/** Étoile des favoris, aux branches arrondies : pleine et orange pour un favori, au trait sinon. */
+@Composable
+private fun FavoriteStar(favorite: Boolean, onClick: () -> Unit) {
+    val accent = LocalChartColors.current.accent
+    val outline = MaterialTheme.colorScheme.onSurfaceVariant
+    Box(
+        Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(onClickLabel = if (favorite) "Retirer des favoris" else "Ajouter aux favoris", onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.size(30.dp)) {
+            val outer = size.minDimension / 2
+            val inner = outer * 0.47f
+            val star = Path()
+            for (k in 0 until 10) {
+                val r = if (k % 2 == 0) outer else inner
+                val angle = Math.toRadians(-90.0 + k * 36.0)
+                val x = center.x + r * kotlin.math.cos(angle).toFloat()
+                val y = center.y + outer * 0.06f + r * kotlin.math.sin(angle).toFloat()
+                if (k == 0) star.moveTo(x, y) else star.lineTo(x, y)
+            }
+            star.close()
+            val rounded = PathEffect.cornerPathEffect(outer * 0.22f)
+            if (favorite) {
+                drawPath(star, accent, style = Fill)
+                drawPath(star, accent, style = Stroke(width = 2.dp.toPx(), join = StrokeJoin.Round, pathEffect = rounded))
+            } else {
+                drawPath(star, outline, style = Stroke(width = 1.8.dp.toPx(), join = StrokeJoin.Round, pathEffect = rounded))
+            }
+        }
+    }
 }
 
 /** Vent, rafales, humidité, pression (et sa tendance sur 3 h), UV, coucher et lever du soleil. */
@@ -446,14 +366,14 @@ private fun Tile(icon: ImageVector, label: String, value: String, unit: String, 
 
 /** Les 48 prochaines heures, à faire défiler : pictogramme, température, probabilité et cumul de pluie. */
 @Composable
-private fun NextHours(f: Forecast) {
+private fun NextHours(f: Forecast, modifier: Modifier = Modifier) = Column(modifier) {
     val h = f.hourly
     val start = Outlook.nowIndex(f)
     val hours = (start until minOf(h.size, start + 48)).toList()
-    if (hours.isEmpty()) return
+    if (hours.isEmpty()) return@Column
     val colors = MaterialTheme.colorScheme
     // Titre, puis la pluie des 24 prochaines heures en dessous : ni l'un ni l'autre ne passe à la ligne.
-    Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 6.dp)) {
+    Column(Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 6.dp)) {
         Text("Prochaines heures", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, maxLines = 1)
         val (summary, wet) = rainSummary(f, hours.take(24))
         MonoText(summary, color = if (wet) colors.primary else colors.onSurfaceVariant, bold = wet, modifier = Modifier.padding(top = 2.dp))
@@ -461,16 +381,21 @@ private fun NextHours(f: Forecast) {
     val measurer = rememberTextMeasurer()
     val chart = LocalChartColors.current
     val dark = chart.darkTheme
-    Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-        Canvas(Modifier.width(46.dp * hours.size).height(184.dp)) {
+    Box(Modifier.fillMaxWidth().weight(1f).horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Canvas(Modifier.width(46.dp * hours.size).fillMaxHeight()) {
             val col = size.width / hours.size
             val temps = hours.map { h.temperature[it] }.filter { !it.isNaN() }
             val tMin = temps.minOrNull() ?: 0.0
             val tMax = (temps.maxOrNull() ?: 1.0).let { if (it - tMin < 4) tMin + 4 else it }
             val maxMm = maxOf(2.0, hours.maxOf { h.precipitation[it].takeIf { v -> !v.isNaN() } ?: 0.0 })
-            fun ty(t: Double) = (100.dp.toPx() - (t - tMin) / (tMax - tMin) * 26.dp.toPx()).toFloat()
+            // Hauteur au-delà du minimum (184 dp) : partagée entre la courbe de température et les barres de pluie.
+            val extra = (size.height - 184.dp.toPx()).coerceAtLeast(0f)
+            val tempBottom = 100.dp.toPx() + extra * 0.4f
+            val tempSpan = 26.dp.toPx() + extra * 0.4f
+            fun ty(t: Double) = (tempBottom - (t - tMin) / (tMax - tMin) * tempSpan).toFloat()
+            val probabilityY = tempBottom + 16.dp.toPx()
             val barBottom = size.height - 4.dp.toPx()
-            val barTop = 140.dp.toPx()
+            val barTop = probabilityY + 24.dp.toPx()
 
             for (k in 1 until hours.size) {
                 drawLine(chart.grid, Offset(col * k, 18.dp.toPx()), Offset(col * k, barBottom), 1.dp.toPx())
@@ -506,7 +431,7 @@ private fun NextHours(f: Forecast) {
                 }
                 val p = h.precipitationProbability[idx]
                 if (!p.isNaN()) {
-                    drawLabel(measurer, "${p.roundToInt()} %", Offset(cx, 116.dp.toPx()), if (p >= 50) colors.primary else chart.muted, 10.5f, anchorX = 0.5f, bold = p >= 50)
+                    drawLabel(measurer, "${p.roundToInt()} %", Offset(cx, probabilityY), if (p >= 50) colors.primary else chart.muted, 10.5f, anchorX = 0.5f, bold = p >= 50)
                 }
                 val mm = h.precipitation[idx]
                 val barWidth = 20.dp.toPx()

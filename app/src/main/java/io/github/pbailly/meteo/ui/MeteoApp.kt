@@ -114,6 +114,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
                             place = place,
                             onOpenDay = { openDay = it },
                             onRefresh = viewModel::refresh,
+                            onMultiModelNeeded = viewModel::ensureMultiModel,
                         )
                         Tab.METEOGRAM -> MeteogramsScreen(
                             state = state,

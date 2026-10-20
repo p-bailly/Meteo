@@ -52,11 +52,55 @@ class PiafTest {
         val image = GeoTiff.read(javaClass.getResourceAsStream("/tiff/float32_deflate_pred3_tiles_le.tif")!!.readBytes())
         val area = MeteoFrancePiaf.Area(45.7, 46.0, 4.5, 4.9)
         val grid = MeteoFrancePiaf.toGrid(image, "TOTAL_PRECIPITATION__GROUND_OR_WATER_SURFACE___2026-10-19T17.10.00Z", area)
-        assertEquals(102f * 12, grid.mmPerHour[1 * 40 + 2], 0.01f)
+        // Valeurs fictives (102 mm en 5 min) : seul le rapport entre deux cases compte ici.
+        assertEquals(image.values[1 * 40 + 2] / image.values[1 * 40 + 3], grid.mmPerHour[1 * 40 + 2] / grid.mmPerHour[1 * 40 + 3], 1e-4f)
         assertTrue(grid.mmPerHour[0].isNaN()) // nodata
         val out = DoubleArray(2)
         grid.projection.toGrid(45.985, 4.525, out) // centre du pixel (2, 1)
         assertEquals(2, out[0].roundToInt())
         assertEquals(1, out[1].roundToInt())
+    }
+
+    @Test
+    fun `unit of the values from the coverage description`() {
+        val xml = """
+            <wcs:CoverageDescriptions><wcs:CoverageDescription><gmlcov:rangeType><swe:DataRecord><swe:field name="TP">
+              <swe:Quantity><swe:nilValues><swe:NilValues><swe:nilValue reason="missing">9999</swe:nilValue></swe:NilValues></swe:nilValues>
+              <swe:uom code="kg m-2 s-1"/></swe:Quantity></swe:field></swe:DataRecord></gmlcov:rangeType></wcs:CoverageDescription></wcs:CoverageDescriptions>
+        """.trimIndent()
+        val description = CoverageDescription.parse(xml)
+        assertEquals("kg m-2 s-1", description.unit)
+        assertEquals(listOf(9999.0), description.nilValues)
+        fun factor(unit: String?, id: String) = (Conversion.of(unit, id) as Conversion.Factor).factor
+        val id = "TOTAL_PRECIPITATION__GROUND_OR_WATER_SURFACE___2026-10-19T17.10.00Z_PT5M"
+        assertEquals(3600f, factor("kg m-2 s-1", id), 0f)
+        assertEquals(1f, factor("mm/h", id), 0f)
+        assertEquals(12f, factor("kg m-2", id), 0f)
+        assertEquals(1f, factor("kg.m-2", id.replace("PT5M", "PT1H")), 0f)
+        assertEquals(12f, factor(null, id), 0f)
+        assertEquals(3600f, factor(null, "TOTAL_PRECIPITATION_RATE__GROUND_OR_WATER_SURFACE___2026-10-19T17.10.00Z"), 0f)
+        assertTrue(Conversion.of("dBZ", id) is Conversion.Reflectivity)
+    }
+
+    @Test
+    fun `fill values and impossible intensities do not turn the map yellow`() {
+        val area = MeteoFrancePiaf.Area(45.0, 46.0, 4.0, 5.0)
+        // 100 × 100 : une zone de pluie (0,1 à 0,4 mm en 5 min), du sec, et une valeur de remplissage 9999 ailleurs.
+        val values = FloatArray(10_000) { i ->
+            when {
+                i < 2_000 -> 0.1f + (i % 4) * 0.1f
+                i < 4_000 -> 0f
+                else -> 9999f
+            }
+        }
+        val image = GeoTiffImage(100, 100, values, 4.0, 46.0, 0.01, 0.01, noData = null)
+        val grid = MeteoFrancePiaf.toGrid(image, "TOTAL_PRECIPITATION__GROUND_OR_WATER_SURFACE___2026-10-19T17.10.00Z_PT5M", area)
+        assertEquals(0.1f * 12, grid.mmPerHour[0], 1e-4f)
+        assertEquals(0f, grid.mmPerHour[3_000], 0f)
+        assertTrue(grid.mmPerHour[9_000].isNaN())
+        // Valeurs déjà en mm/h annoncées comme un flux par seconde : ramenées à une échelle vraisemblable.
+        val rates = FloatArray(10_000) { i -> if (i < 3_000) 0.5f + (i % 10) * 0.3f else 0f }
+        assertEquals(1f, MeteoFrancePiaf.plausibleFactor(rates, 3600f), 0f)
+        assertEquals(3600f, MeteoFrancePiaf.plausibleFactor(FloatArray(1_000) { 0.0004f }, 3600f), 0f)
     }
 }

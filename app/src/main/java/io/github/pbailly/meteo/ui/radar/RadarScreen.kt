@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -240,7 +241,7 @@ fun RadarScreen(
                 layerState.openWebcam != null && layer == MapLayer.WEBCAMS -> WebcamCard(
                     layerState,
                     onClose = onCloseWebcam,
-                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 8.dp),
                 )
                 layerState.openStation != null && layer == MapLayer.TEMPERATURE -> StationCard(
                     layerState.openStation,
@@ -706,12 +707,12 @@ private fun WindyKeyCard(onSave: (String) -> Unit, modifier: Modifier = Modifier
     }
 }
 
-/** Image de la webcam touchée, avec le lien vers sa page Windy (demandé par les conditions de Windy). */
+/** Image de la webcam touchée, sur toute la largeur, avec le lien vers sa page Windy (demandé par Windy). */
 @Composable
 private fun WebcamCard(state: LayerUiState, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val cam = state.openWebcam ?: return
     val context = LocalContext.current
-    Card(modifier) {
+    Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
             Text(cam.title, style = MaterialTheme.typography.titleMedium, maxLines = 2)
             Spacer(Modifier.height(8.dp))
@@ -720,11 +721,14 @@ private fun WebcamCard(state: LayerUiState, onClose: () -> Unit, modifier: Modif
                 Image(
                     image.asImageBitmap(),
                     contentDescription = cam.title,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.FillWidth,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(image.width.toFloat() / image.height.coerceAtLeast(1))
+                        .clip(RoundedCornerShape(8.dp)),
                 )
             } else {
-                Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = {

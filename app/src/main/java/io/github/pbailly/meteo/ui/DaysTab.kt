@@ -3,7 +3,6 @@ package io.github.pbailly.meteo.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,7 +20,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.Outlook
@@ -57,15 +55,8 @@ fun DaysTab(forecast: Forecast, multiModel: MultiModelForecast?, modifier: Modif
     val predictability = remember(forecast, multiModel) {
         daily.date.map { date -> multiModel?.let { Predictability.daily(it, date) } }
     }
-    Column(modifier) {
-        BorderedCard {
-            FourteenDayChart(forecast, predictability, Modifier.padding(vertical = 12.dp))
-        }
-        MonoText(
-            "glisser pour voir les ${daily.size} jours · % : accord des modèles",
-            size = 10.sp,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
-        )
+    BorderedCard(modifier) {
+        FourteenDayChart(forecast, predictability, Modifier.padding(vertical = 12.dp))
     }
 }
 
@@ -95,7 +86,7 @@ private fun FourteenDayChart(forecast: Forecast, predictability: List<Int?>, mod
             val right = size.width - 4f * dp
             val tScale = LinearScale(tempTicks.first(), tempTicks.last(), Rows.TEMPERATURE_TOP * dp, Rows.TEMPERATURE_BOTTOM * dp)
             tempTicks.forEach { t -> drawLabel(measurer, "${t.toInt()}°", Offset(right, tScale.y(t)), colors.muted, 10f, 1f, 0.5f) }
-            if (predictability.any { it != null }) drawLabel(measurer, "%", Offset(right, (Rows.PREDICTABILITY + 2f) * dp), colors.muted, 10f, 1f, 0.5f)
+            if (predictability.any { it != null }) drawLabel(measurer, "conf.", Offset(right, (Rows.PREDICTABILITY + 2f) * dp), colors.muted, 9f, 1f, 0.5f)
             drawLabel(measurer, "mm", Offset(right, Rows.RAIN_BOTTOM * dp), colors.muted, 10f, 1f, 1f)
             drawLabel(measurer, "km/h", Offset(right, (Rows.WIND + 16f) * dp), colors.muted, 9f, 1f, 0.5f)
         }
@@ -129,7 +120,7 @@ private fun FourteenDayChart(forecast: Forecast, predictability: List<Int?>, mod
                     val iconSize = 30f * dp
                     drawWeatherIcon(codes[i], true, colors.darkTheme, Offset(cx(i) - iconSize / 2, Rows.ICONS * dp), iconSize)
 
-                    // Prévisibilité : petite barre colorée et pourcentage, comme sur Meteoblue.
+                    // Indice de confiance (accord des modèles) : petite barre colorée et note sur 5.
                     predictability.getOrNull(i)?.let { p ->
                         val barWidth = colWidth - 14f * dp
                         drawRoundRect(
@@ -138,7 +129,7 @@ private fun FourteenDayChart(forecast: Forecast, predictability: List<Int?>, mod
                             Size(barWidth, 5f * dp),
                             CornerRadius(2.5f * dp),
                         )
-                        drawLabel(measurer, "$p %", Offset(cx(i), (Rows.PREDICTABILITY + 8f) * dp), colors.secondaryInk, 9f, 0.5f, 0f)
+                        drawLabel(measurer, "${Predictability.confidence(p)}/5", Offset(cx(i), (Rows.PREDICTABILITY + 8f) * dp), colors.secondaryInk, 10f, 0.5f, 0f)
                     }
 
                     // Températures : barre du mini (bleu) au maxi (orange).

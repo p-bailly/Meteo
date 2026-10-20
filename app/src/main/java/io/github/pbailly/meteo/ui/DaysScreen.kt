@@ -2,7 +2,6 @@ package io.github.pbailly.meteo.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,10 +15,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AcUnit
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.CircularProgressIndicator
@@ -29,11 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,7 +35,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -57,6 +49,10 @@ import io.github.pbailly.meteo.ui.theme.LocalChartColors
 import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.roundToInt
+import io.github.pbailly.meteo.ui.theme.predictabilityColor
+import io.github.pbailly.meteo.data.Predictability
+import io.github.pbailly.meteo.data.MultiModelForecast
+import androidx.compose.runtime.LaunchedEffect
 
 /** Une ligne du tableau des jours, calculée une fois. */
 private class DayLine(
@@ -73,14 +69,14 @@ private class DayLine(
     val sunshine: Double,
     val altitude: AltitudeDay?,
     val snow: Double,
-    /** Iso 0 °C maintenant, pour la ligne d'aujourd'hui seulement. */
-    val freezingNow: Double? = null,
+    /** Accord des modèles (%), quand la comparaison des modèles est chargée. */
+    val predictability: Int?,
 )
 
 /**
- * Onglet « Prévisions » : les 14 (ou 7) jours, avec pour chacun le ciel, le mini et le maxi, puis la pluie, le vent
- * (et sa direction) et l'ensoleillement l'un sous l'autre ; la neige s'il en tombe et l'iso 0 °C d'aujourd'hui.
- * Toucher un jour ouvre son détail heure par heure.
+ * Onglet « Prévisions » : les 14 jours, avec pour chacun le ciel, le mini et le maxi, puis la pluie, le vent (et sa
+ * direction), l'ensoleillement et l'indice de confiance l'un sous l'autre ; la neige s'il en tombe. Toucher un jour
+ * ouvre son détail heure par heure.
  */
 @Composable
 fun DaysScreen(
@@ -88,18 +84,21 @@ fun DaysScreen(
     place: Place,
     onOpenDay: (Int) -> Unit,
     onRefresh: () -> Unit,
+    onMultiModelNeeded: () -> Unit,
 ) {
-    var span by rememberSaveable { mutableIntStateOf(1) }
+    // L'indice de confiance vient de la comparaison des modèles.
+    LaunchedEffect(Unit) { onMultiModelNeeded() }
     val remote = state.forecast
     val terrain = state.terrain.data
-    val allLines = remember(remote.data, terrain) { remote.data?.let { dayLines(it, snowReference(it, terrain)) }.orEmpty() }
+    val multiModel = state.multiModel.data
+    val lines = remember(remote.data, terrain, multiModel) {
+        remote.data?.let { dayLines(it, snowReference(it, terrain), multiModel) }.orEmpty()
+    }
     PullToRefreshBox(isRefreshing = remote.loading && remote.data != null, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
         val f = remote.data
         LazyColumn(Modifier.fillMaxSize()) {
             item(key = "title") {
-                ScreenHeader("Prévisions") {
-                    SegmentedToggle(listOf("7 jours", "14 jours"), span, { span = it })
-                }
+                ScreenHeader("Prévisions")
                 PlaceLine(place.name, place.elevation ?: f?.elevation)
                 StatusLine(statusText(remote), Modifier.padding(top = 6.dp))
                 Gap(8.dp)
@@ -116,17 +115,13 @@ fun DaysScreen(
                 return@LazyColumn
             }
             val today = f.daily.date.firstOrNull() ?: LocalDate.now()
-            val shown = allLines.take(if (span == 0) 7 else 14)
-            val low = shown.minOfOrNull { it.min.takeIf { v -> !v.isNaN() } ?: Double.MAX_VALUE } ?: 0.0
-            val high = shown.maxOfOrNull { it.max.takeIf { v -> !v.isNaN() } ?: -Double.MAX_VALUE } ?: 1.0
-            shown.forEach { line ->
+            val low = lines.minOfOrNull { it.min.takeIf { v -> !v.isNaN() } ?: Double.MAX_VALUE } ?: 0.0
+            val high = lines.maxOfOrNull { it.max.takeIf { v -> !v.isNaN() } ?: -Double.MAX_VALUE } ?: 1.0
+            lines.forEach { line ->
                 item(key = "day-${line.index}") {
                     DayTableRow(line, today, low, high, snowReference(f, terrain), onClick = { onOpenDay(line.index) })
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 }
-            }
-            if (span == 0) allLines.getOrNull(7)?.let { line ->
-                item(key = "teaser") { Teaser(line, snowReference(f, terrain), onClick = { span = 1 }) }
             }
             item(key = "end") { Gap(16.dp) }
         }
@@ -137,11 +132,10 @@ fun DaysScreen(
 private fun snowReference(f: Forecast, terrain: TerrainProfile?): Double =
     Outlook.snowReference(Altitude.ground(f), terrain?.elevations?.maxOrNull())
 
-private fun dayLines(f: Forecast, reference: Double): List<DayLine> {
+private fun dayLines(f: Forecast, reference: Double, multiModel: MultiModelForecast?): List<DayLine> {
     val d = f.daily
     val altitudeDays = Altitude.days(f).associateBy { it.date }
-    val now = Outlook.nowIndex(f)
-    return (0 until d.size).map { i ->
+    return (0 until minOf(d.size, 14)).map { i ->
         val alt = altitudeDays[d.date[i]]
         DayLine(
             index = i,
@@ -155,7 +149,7 @@ private fun dayLines(f: Forecast, reference: Double): List<DayLine> {
             sunshine = d.sunshineDuration[i],
             altitude = alt,
             snow = alt?.let { Altitude.snow(f, it.hours, reference) } ?: 0.0,
-            freezingNow = if (i == 0) Altitude.freezingLevel(f, now).takeIf { !it.isNaN() } else null,
+            predictability = multiModel?.let { Predictability.daily(it, d.date[i]) },
         )
     }
 }
@@ -219,6 +213,12 @@ private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Doub
                 Detail(icon = { Icon(Icons.Outlined.WbSunny, null, tint = chart.accent, modifier = Modifier.size(13.dp)) }) {
                     MonoText("${sunshineHours(line.sunshine)} h", color = colors.onBackground, size = 11.5.sp)
                 }
+                // Indice de confiance : pastille de couleur (vert = modèles d'accord) et note sur 5.
+                line.predictability?.let { p ->
+                    Detail(icon = { Box(Modifier.size(10.dp).clip(CircleShape).background(predictabilityColor(p))) }) {
+                        MonoText("conf. ${Predictability.confidence(p)}/5", color = colors.onBackground, size = 11.5.sp)
+                    }
+                }
             }
         }
         // Neige attendue, sur sa propre ligne sous le jour.
@@ -227,13 +227,6 @@ private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Doub
                 Icon(Icons.Outlined.AcUnit, null, tint = colors.primary, modifier = Modifier.size(13.dp))
                 Spacer(Modifier.width(6.dp))
                 MonoText("neige : +${line.snow.roundToInt()} cm à ${Fmt.altitude(reference)}", color = colors.primary, bold = true, size = 11.sp)
-            }
-        }
-        line.freezingNow?.let { iso ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = DAY_WIDTH, top = 4.dp)) {
-                Box(Modifier.size(6.dp).clip(CircleShape).background(colors.primary))
-                Spacer(Modifier.width(6.dp))
-                MonoText("iso 0 °C maintenant : ${Fmt.altitude(iso, 100)}", size = 10.5.sp)
             }
         }
     }
@@ -272,44 +265,5 @@ private fun TemperatureBar(min: Double, max: Double, low: Double, high: Double, 
             size = Size(x1 - x0, size.height),
             cornerRadius = r,
         )
-    }
-}
-
-/** Le 8e jour en résumé, sous le tableau des 7 jours. */
-@Composable
-private fun Teaser(line: DayLine, reference: Double, onClick: () -> Unit) {
-    val title = Fmt.dayShort(line.date).replaceFirstChar { it.titlecase(Locale.FRANCE) } + " · " + when {
-        line.snow >= 1 -> "+${line.snow.roundToInt()} cm à ${Fmt.altitude(reference)}"
-        line.rain >= 1 -> "${Fmt.decimal(line.rain)} mm de pluie"
-        else -> weatherDescription(line.code)
-    }
-    val detail = "${Fmt.temp(line.max)} / ${Fmt.temp(line.min)} · voir 14 jours"
-    LinkCard(null, title, detail, onClick, weatherCode = line.code)
-}
-
-/** Carte cliquable avec un chevron à droite. */
-@Composable
-private fun LinkCard(icon: ImageVector?, title: String, detail: String, onClick: () -> Unit, weatherCode: Int? = null) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
-            .background(colors.surfaceContainerLowest)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        when {
-            weatherCode != null -> WeatherIcon(weatherCode, true, size = 30.dp)
-            icon != null -> Icon(icon, contentDescription = null, tint = colors.primary, modifier = Modifier.size(26.dp))
-        }
-        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1)
-            MonoText(detail, size = 10.sp, maxLines = 2)
-        }
-        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.primary)
     }
 }

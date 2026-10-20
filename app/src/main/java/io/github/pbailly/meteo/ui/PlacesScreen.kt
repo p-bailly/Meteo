@@ -147,7 +147,7 @@ fun PlacesScreen(
                 value = state.search.query,
                 onValueChange = onQueryChange,
                 modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp),
-                placeholder = { Text("Ville, col, station, sommet") },
+                placeholder = { Text("Rechercher un lieu") },
                 leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
                 trailingIcon = {
                     if (state.search.query.isNotEmpty()) {
@@ -221,15 +221,7 @@ fun PlacesScreen(
                     .then(if (dragging) Modifier else Modifier.animateItem()),
             )
         }
-        if (state.favorites.size > 1) {
-            item(key = "footer") {
-                MonoText(
-                    "appui long puis glisser pour changer l'ordre",
-                    size = 10.5.sp,
-                    modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 18.dp),
-                )
-            }
-        }
+        item(key = "end") { Spacer(Modifier.height(18.dp)) }
     }
 }
 
