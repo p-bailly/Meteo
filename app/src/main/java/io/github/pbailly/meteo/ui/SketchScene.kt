@@ -84,6 +84,8 @@ internal enum class Decor {
     TURBINES, TRAIN, HARBOUR,
     // Les guirlandes et le sapin de décembre, les réverbères du soir.
     GARLANDS, LAMPS,
+    // Le désert : des palmiers (à la place des arbres), des dromadaires.
+    PALMS, CAMELS,
 }
 
 /**
@@ -92,7 +94,7 @@ internal enum class Decor {
  */
 internal enum class Silhouette {
     OWN, TWO_TOWERS, TWO_SPIRES, CENTRAL_SPIRE, BELFRY, BRICK_BELFRY, DOME, NEEDLE, RAMPARTS, MOUNT, CLOCK_TOWER, LEANING_TOWER,
-    SPIRES, ATOMIUM, OCTAGON,
+    SPIRES, ATOMIUM, OCTAGON, BURJ, GREAT_MOSQUE, ONIONS, RED_TOWER, TAJ, PYRAMIDS, OPERA, STATUE_ON_HILL,
 }
 
 /**
@@ -148,6 +150,15 @@ internal enum class Landmark(val latitude: Double, val longitude: Double, val ra
     BARCELONA(41.4036, 2.1744, 12.0, Silhouette.SPIRES),
     BERLIN(52.5208, 13.4094, 15.0, Silhouette.NEEDLE),
     TORONTO(43.6426, -79.3871, 15.0, Silhouette.NEEDLE),
+    DUBAI(25.1972, 55.2744, 25.0, Silhouette.BURJ),
+    ABU_DHABI(24.4128, 54.4750, 20.0, Silhouette.GREAT_MOSQUE),
+    ISTANBUL(41.0054, 28.9768, 15.0, Silhouette.GREAT_MOSQUE),
+    MOSCOW(55.7525, 37.6231, 20.0, Silhouette.ONIONS),
+    TOKYO(35.6586, 139.7454, 20.0, Silhouette.RED_TOWER),
+    AGRA(27.1751, 78.0421, 8.0, Silhouette.TAJ),
+    CAIRO(29.9792, 31.1342, 25.0, Silhouette.PYRAMIDS),
+    SYDNEY(-33.8568, 151.2153, 15.0, Silhouette.OPERA),
+    RIO(-22.9519, -43.2105, 15.0, Silhouette.STATUE_ON_HILL),
     ;
 
     companion object {
@@ -188,6 +199,105 @@ data class SketchConditions(
     /** Décalage de l'heure du lieu sur le temps universel, en secondes. */
     val utcOffsetSeconds: Int? = null,
 )
+
+/**
+ * Les grandes régions du monde, pour bâtir comme on bâtit là-bas : le lieu de culte du village, la forme des toits, et
+ * les fêtes que l'on y célèbre.
+ */
+internal enum class Culture {
+    /** L'Europe de l'Ouest et du Centre : églises (clocher comtois en montagne, flèche d'ardoise), toits de tuiles. */
+    EUROPE,
+    /** L'Amérique du Nord, l'Australie, l'Afrique au sud du Sahara : églises à flèche, toits de tuiles. */
+    NEW_WORLD,
+    /** Russie, Ukraine, Balkans de l'Est, Grèce, Caucase : églises orthodoxes à bulbes. */
+    ORTHODOX,
+    /** Amérique latine, Philippines : églises coloniales blanches à deux clochers. */
+    LATIN,
+    /** Afrique du Nord, Sahel, Moyen-Orient, Turquie, Iran, Asie centrale, Pakistan, Malaisie, Indonésie : mosquées, toits plats. */
+    ISLAMIC,
+    /** Inde, Népal : temples hindous, toits plats. */
+    SOUTH_ASIA,
+    /** Birmanie, Thaïlande, Laos, Cambodge, Vietnam, Sri Lanka : stupas dorés. */
+    BUDDHIST,
+    /** Chine, Corée, Japon, Taïwan, Mongolie : pagodes, toits aux bords relevés. */
+    EAST_ASIA;
+
+    /** Des maisons à toit plat (terrasses), aux murs clairs. */
+    val flatRoofs: Boolean get() = this == ISLAMIC || this == SOUTH_ASIA
+
+    /** Des toits aux coins relevés. */
+    val curvedRoofs: Boolean get() = this == EAST_ASIA
+
+    /** On y fête Noël et Pâques. */
+    val christian: Boolean get() = this == EUROPE || this == NEW_WORLD || this == ORTHODOX || this == LATIN
+
+    companion object {
+        /** La région du lieu, d'après ses coordonnées (des contours simplifiés, à quelques dizaines de kilomètres près). */
+        fun of(latitude: Double, longitude: Double): Culture {
+            val lat = latitude
+            val lon = longitude
+            return when {
+                // Asie : de l'est vers l'ouest.
+                lat in 4.5..21.0 && lon in 116.5..127.0 -> LATIN
+                lat in 18.0..54.0 && lon in 97.0..146.0 && !(lat < 23.5 && lon < 109.5) -> EAST_ASIA
+                lat in 5.8..9.9 && lon in 79.5..82.0 -> BUDDHIST
+                lat in 6.5..28.5 && lon in 92.0..110.0 -> BUDDHIST
+                lat in -9.0..-8.0 && lon in 114.4..115.8 -> SOUTH_ASIA
+                lat in -11.0..7.0 && lon in 95.0..141.0 -> ISLAMIC
+                lat in 20.5..26.6 && lon in 88.0..92.7 -> ISLAMIC
+                lat in 23.5..37.5 && lon in 60.0..74.5 -> ISLAMIC
+                lat in 6.0..36.0 && lon in 68.0..97.5 -> SOUTH_ASIA
+                // Le Caucase chrétien et Chypre, avant le monde musulman qui les entoure.
+                lat in 38.8..43.6 && lon in 40.0..46.7 -> ORTHODOX
+                lat in 34.5..35.7 && lon in 32.0..34.6 -> ORTHODOX
+                // La Grèce et ses îles de la mer Égée, avant la Turquie voisine.
+                lat in 34.8..41.8 && lon in 19.5..26.6 -> ORTHODOX
+                // Moyen-Orient, Turquie, Iran, Afghanistan, Asie centrale (pas la Russie de la basse Volga).
+                lat in 12.0..42.2 && lon in 26.0..63.0 -> ISLAMIC
+                lat in 35.0..50.0 && lon in 46.0..87.0 && !(lat > 45.5 && lon < 50.5) -> ISLAMIC
+                // Afrique du Nord et Sahel (l'Éthiopie chrétienne à part).
+                lat in 10.0..37.5 && lon in -17.5..35.0 && !(lat < 15.0 && lon > 33.0) -> ISLAMIC
+                // Europe orthodoxe : Grèce, Balkans de l'Est, Roumanie, Moldavie, Ukraine, Biélorussie, Russie.
+                lat in 41.0..45.5 && lon in 20.0..30.0 -> ORTHODOX
+                lat in 45.5..48.3 && lon in 21.5..30.0 -> ORTHODOX
+                lat in 44.0..78.0 && lon in 24.0..180.0 && !(lat in 53.9..59.7 && lon < 28.2) && !(lat > 59.8 && lon < 31.5) -> ORTHODOX
+                // Amérique latine : au sud de la frontière des États-Unis (le Rio Grande), les Caraïbes, l'Amérique du Sud.
+                lon in -118.0..-34.0 && lat > -56.0 && lat < latinBorder(lon) -> LATIN
+                lat in 35.0..71.5 && lon in -11.0..40.0 -> EUROPE
+                else -> NEW_WORLD
+            }
+        }
+
+        /** La frontière nord de l'Amérique latine, selon la longitude. */
+        private fun latinBorder(lon: Double): Double = when {
+            lon < -106.5 -> 32.7
+            lon < -97.2 -> 31.8 + (lon + 106.5) * (25.9 - 31.8) / (106.5 - 97.2)
+            else -> 24.0
+        }
+
+        /**
+         * Les grands déserts chauds : Sahara, Arabie (Dubaï), sud-ouest des États-Unis, Atacama, Namib et Kalahari,
+         * centre de l'Australie, Gobi. Le sol y est de sable, sans prés ni champs.
+         */
+        fun desert(latitude: Double, longitude: Double): Boolean {
+            val lat = latitude
+            val lon = longitude
+            return lat in 16.0..31.0 && lon in -17.0..32.0 ||
+                lat in 13.0..31.0 && lon in 35.0..60.0 ||
+                lat in 31.0..37.0 && lon in -117.0..-109.0 ||
+                lat in -27.0..-18.0 && lon in -71.0..-68.0 ||
+                lat in -28.0..-17.0 && lon in 12.0..22.0 ||
+                lat in -32.0..-19.0 && lon in 117.0..146.0 ||
+                lat in 40.0..46.0 && lon in 95.0..112.0
+        }
+
+        /** Le désert des dromadaires : Sahara et Arabie. */
+        fun camels(latitude: Double, longitude: Double) = latitude in 13.0..31.0 && longitude in -17.0..60.0
+
+        /** La France (pour ses fêtes : le 14 Juillet, le muguet du 1er mai, le poisson d'avril). */
+        fun france(latitude: Double, longitude: Double) = latitude in 41.3..51.1 && longitude in -5.2..9.6
+    }
+}
 
 /** Un sommet nommé, à l'abscisse [x] de la crête : « Mont Vouillot », 1 145 m. */
 internal class PeakName(val x: Float, val name: String, val elevation: Double)
@@ -612,6 +722,10 @@ internal class SketchScene(
     val moon: SkyPoint? = null,
     /** Part des fenêtres allumées : aucune le jour, de plus en plus au crépuscule, moins au cœur de la nuit. */
     val lit: Float = 0f,
+    /** La région du monde : le lieu de culte, les toits. */
+    val culture: Culture = Culture.EUROPE,
+    /** Un désert chaud : du sable plutôt que des prés. */
+    val desert: Boolean = false,
 ) {
     val clouds: SketchClouds? get() = conditions.clouds
 
@@ -855,15 +969,20 @@ internal object SketchScenes {
         val day = MonthDay.from(date)
         val eve = MonthDay.from(night)
         val easter = easterSunday(date.year)
+        val culture = if (latitude != null && longitude != null) Culture.of(latitude, longitude) else Culture.EUROPE
+        val christian = culture.christian
+        // Sans coordonnées, on fait comme en France.
+        val france = latitude == null || longitude == null || Culture.france(latitude, longitude)
+        val halloween = culture == Culture.EUROPE || culture == Culture.NEW_WORLD
 
         // Dans le ciel : les fêtes d'abord, sinon un peu de vie selon le temps.
         val skyThing = when {
             variant > 0 && variant % ABDUCTION_TAPS == 0 -> Surprise.ABDUCTION
-            !isDay && eve == MonthDay.of(12, 24) || day == MonthDay.of(12, 25) -> Surprise.SLEIGH
-            !isDay && (eve == MonthDay.of(12, 31) || eve == MonthDay.of(7, 14)) -> Surprise.FIREWORKS
-            !isDay && eve == MonthDay.of(10, 31) -> Surprise.BATS
+            christian && (!isDay && eve == MonthDay.of(12, 24) || day == MonthDay.of(12, 25)) -> Surprise.SLEIGH
+            !isDay && (eve == MonthDay.of(12, 31) || france && eve == MonthDay.of(7, 14)) -> Surprise.FIREWORKS
+            halloween && !isDay && eve == MonthDay.of(10, 31) -> Surprise.BATS
             day == MonthDay.of(2, 14) -> Surprise.HEART
-            day == MonthDay.of(4, 1) -> Surprise.FISH
+            france && day == MonthDay.of(4, 1) -> Surprise.FISH
             day == MonthDay.of(6, 21) -> Surprise.NOTES
             isDay && clearish -> rnd.nextFloat().let {
                 when {
@@ -890,10 +1009,10 @@ internal object SketchScenes {
         val groundThing = when {
             // Sur l'eau, rien ne tient debout au premier plan.
             skyThing == Surprise.ABDUCTION || terrain.onWater -> null
-            date == easter || date == easter.plusDays(1) -> Surprise.EGGS
-            day == MonthDay.of(10, 31) || eve == MonthDay.of(10, 31) -> Surprise.PUMPKIN
+            christian && (date == easter || date == easter.plusDays(1)) -> Surprise.EGGS
+            halloween && (day == MonthDay.of(10, 31) || eve == MonthDay.of(10, 31)) -> Surprise.PUMPKIN
             date.dayOfMonth == 13 && date.dayOfWeek == DayOfWeek.FRIDAY -> Surprise.BLACK_CAT
-            day == MonthDay.of(5, 1) -> Surprise.LILY
+            france && day == MonthDay.of(5, 1) -> Surprise.LILY
             (sky == SketchSky.SNOW || conditions.snowOnGround && isDay && !wet) && rnd.nextFloat() < 0.5f -> Surprise.SNOWMAN
             sky == SketchSky.RAIN && rnd.nextFloat() < 0.3f -> Surprise.UMBRELLA
             else -> null
@@ -961,8 +1080,17 @@ internal object SketchScenes {
         if (leafy && season in 10..11 && sky != SketchSky.SNOW && (conditions.windKmh >= 12 || rnd.nextFloat() < 0.4f)) surprises += Surprise.LEAVES
         // Décembre : les guirlandes et le sapin illuminé ; le soir, les réverbères.
         val inhabited = decor.any { it == Decor.HAMLET || it == Decor.VILLAGE || it == Decor.TOWN || it == Decor.CITY }
-        if (inhabited && date.monthValue == 12 && relief != Relief.SUMMIT) decor += Decor.GARLANDS
+        if (inhabited && christian && date.monthValue == 12 && relief != Relief.SUMMIT) decor += Decor.GARLANDS
         if (decor.any { it == Decor.VILLAGE || it == Decor.TOWN || it == Decor.CITY }) decor += Decor.LAMPS
+        // Le désert : ni prés, ni champs, ni forêt, ni vaches ; des palmiers autour du lieu habité, des dromadaires.
+        val desert = latitude != null && longitude != null && Culture.desert(latitude, longitude)
+        if (desert) {
+            val green = decor.any { it == Decor.TREES || it == Decor.FOREST || it == Decor.ORCHARD || it == Decor.FIELDS }
+            decor -= setOf(Decor.FIELDS, Decor.TREES, Decor.FOREST, Decor.FIRS, Decor.ORCHARD, Decor.VINES, Decor.LAVENDER, Decor.SUNFLOWERS, Decor.COWS)
+            if (green || inhabited) decor += Decor.PALMS
+            if (Culture.camels(latitude!!, longitude!!) && isDay && !terrain.onWater && Decor.CITY !in decor && rnd.nextFloat() < 0.5f) decor += Decor.CAMELS
+            surprises -= Surprise.LEAVES
+        }
         // Le lieu habité au niveau du lieu : le sol est aplani sous lui.
         val population = around?.population
         val layout = layoutOf(SketchScene(sky, terrain, decor, surprises, seed, skyVariant, weather, conditions, light, monument, population = population))
@@ -975,6 +1103,8 @@ internal object SketchScenes {
             sun = sun,
             moon = moon,
             lit = litWindows(light, time, sky),
+            culture = culture,
+            desert = desert,
         )
     }
 

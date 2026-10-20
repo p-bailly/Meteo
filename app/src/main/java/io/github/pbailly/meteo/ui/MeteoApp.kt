@@ -133,8 +133,10 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
                 showAltitude -> AltitudeScreen(state = state, place = place, onRefresh = viewModel::refresh, onBack = { showAltitude = false })
                 else -> HorizontalPager(
                     state = pager,
-                    // Sur la carte, le glissement sert à la déplacer : on change d'onglet par la barre du bas.
-                    userScrollEnabled = current != Tab.RADAR,
+                    // Sur la carte, le glissement sert à la déplacer : on change d'onglet par la barre du bas. Seulement une
+                    // fois la carte posée (settledPage) : la page courante bascule à mi-chemin du geste, et couper le
+                    // glissement à ce moment-là laissait l'écran bloqué entre Courbes et Cartes.
+                    userScrollEnabled = pager.settledPage != Tab.RADAR.ordinal,
                     key = { it },
                     modifier = Modifier.fillMaxSize(),
                 ) { page ->

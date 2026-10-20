@@ -366,6 +366,8 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
             val cached = runCatching { terrainRepository.cached(place) }.getOrNull()
             if (cached != null) {
                 setTerrain(Result.success(cached))
+                // Une coupe gardée sans noms de sommets (le réseau manquait) : on réessaie de les trouver.
+                if (!cached.named) runLoading { terrainRepository.rename(place, cached) }.getOrNull()?.takeIf { it.named }?.let { setTerrain(Result.success(it)) }
                 return@launch
             }
             val quick = runLoading { terrainRepository.quick(place) }

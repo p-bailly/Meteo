@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.abs
 
 class TerrainTest {
 
@@ -126,5 +127,19 @@ class TerrainTest {
         // En plaine sans relief : le plus haut point, au moins à 3 km.
         val flat = DoubleArray(grid.size) { 100.0 }.also { it[near] = 120.0 }
         assertEquals(grid[near], Terrain.dominantPoint(chamonix.latitude, chamonix.longitude, 100.0, grid, flat))
+    }
+}
+
+class PeakNamesTest {
+    @Test
+    fun `summits of the profile are found and named by photon`() {
+        val e = DoubleArray(100) { k -> 700.0 + when (k) { in 55..65 -> 450.0 - abs(k - 60) * 40; in 80..90 -> 300.0 - abs(k - 85) * 30; else -> 0.0 } }
+        val profile = TerrainProfile(e, 30.0, 25, emptyList(), emptyList(), start = 47.0 to 6.5, end = 47.0 to 6.9)
+        assertEquals(listOf(60, 85), Terrain.summits(profile))
+        assertEquals(47.0 to 6.7, profile.pointAt(50)!!.let { (a, b) -> Math.round(a * 1e6) / 1e6 to Math.round(b * 1e2) / 1e2 })
+        val body = """{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"osm_key":"natural","osm_value":"peak","name":"Mont de la Chevanne"},"geometry":{"type":"Point","coordinates":[6.557,47.028]}}]}"""
+        assertEquals("Mont de la Chevanne", PeakNames.parse(body))
+        assertEquals(null, PeakNames.parse("""{"type":"FeatureCollection","features":[]}"""))
+        assertTrue(PeakNames.url(47.03, 6.55).contains("osm_tag=natural:peak"))
     }
 }

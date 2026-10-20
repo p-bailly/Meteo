@@ -45,7 +45,16 @@ la carte) :
   refuge au-dessus des arbres. Le relief est en **perspective** (le près s'étale et grandit, le loin se resserre), et une
   **deuxième chaîne**, vue dans une autre direction, se dessine pâle derrière lui (le Massif central depuis Valence).
   Les sommets nommés d'OpenStreetMap sont **écrits au crayon** au-dessus de la crête (« Mont Vouillot »), deux au plus,
-  jamais sur le texte de l'écran ni dans les nuages.
+  jamais sur le texte de l'écran ni dans les nuages ; quand Overpass ne répond pas, leur nom vient de Photon (le
+  géocodeur d'OpenStreetMap, rapide), et l'appli réessaie tant qu'aucun sommet n'est nommé. On bâtit **comme dans la
+  région du monde** : église (clocher comtois ou flèche) en Europe et en Amérique du Nord, bulbes orthodoxes en Russie,
+  dans les Balkans et en Grèce, églises coloniales à deux clochers en Amérique latine, mosquée et minaret et maisons à
+  toit plat du Maroc à l'Indonésie, temples hindous en Inde, stupas dorés en Asie du Sud-Est, pagodes et toits aux
+  coins relevés en Asie de l'Est ; dans les déserts chauds (Sahara, Arabie, sud-ouest américain, Australie…), du
+  sable et des dunes plutôt que des prés, des palmiers, des dromadaires ; Noël, Pâques et Halloween seulement là où
+  on les fête, le 14 Juillet, le muguet et le poisson d'avril seulement en France. Et des monuments du monde : Burj
+  Khalifa, la grande mosquée d'Abou Dabi et d'Istanbul, Saint-Basile de Moscou, la tour de Tokyo, le Taj Mahal, les
+  pyramides, l'Opéra de Sydney, le Christ de Rio.
   Enfin **le temps**, chaque ciel en trois versions et plus ou moins fort selon la
   prévision : le **soleil et la lune à leur vraie place** (à gauche, au milieu ou à droite selon la direction où l'on
   regarde, plus ou moins haut selon l'heure ; la lune couchée ne se dessine pas), la lune dans sa vraie phase et étoiles (ou la Grande Ourse, ou la Voie lactée), éclaircies, ciel
@@ -73,9 +82,8 @@ la carte) :
   tombent, les nuages glissent, la fumée monte, les éoliennes tournent, le train passe, les bateaux dansent au port, les
   oiseaux et l'avion volent, les aurores ondulent (on peut l'arrêter dans les Réglages, où l'on choisit aussi un dessin
   discret, normal ou coloré). Les combinaisons d'avant ces derniers ajouts : `design/dessins/coloriages.pdf` ;
-  de la mi-octobre à la mi-mars, une pastille **Neige & altitude** dans l'en-tête, à côté de l'étoile (une montagne et
-  l'iso 0 °C actuel), qui ouvre la page du même nom ; vent, rafales, humidité, pression (et sa tendance),
-  indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
+  vent, rafales, humidité, pression (et sa tendance), **iso 0 °C** actuel (toucher la case ouvre la page Neige &
+  altitude), coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
   qui reste (pictogramme, courbe de température, probabilité et barres de pluie).
 - **Prévisions** (14 jours) : pour chaque jour, le pictogramme, la barre mini-maxi (du bleu à l'orange), et l'un
   sous l'autre la pluie (goutte, mm), le vent maximal (flèche dans la direction où il souffle, km/h, en rouge à
@@ -93,7 +101,7 @@ la carte) :
 
   En très grand texte, les graphiques s'agrandissent avec lui (rangées plus hautes, journées plus larges, dates
   raccourcies si besoin) pour que rien ne se chevauche.
-- **Neige & altitude** (depuis la pastille de l'en-tête d'Aujourd'hui), par jour ou par tranche de 3 heures : une
+- **Neige & altitude** (depuis la case iso 0 °C d'Aujourd'hui), par jour ou par tranche de 3 heures : une
   coupe du relief de la vallée vers le sommet qui domine le lieu (le Mont Vouillot pour Morteau, le Grand Veymont pour
   Valence) avec la température à chaque altitude, l'iso 0, la limite pluie-neige, les
   sommets nommés, la neige attendue à 2 000 et 3 000 m et les pentes enneigées, puis le ressenti et le vent à

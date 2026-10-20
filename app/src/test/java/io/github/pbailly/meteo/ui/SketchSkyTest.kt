@@ -207,3 +207,43 @@ class SketchNamesTest {
     private fun flatTerrain(around: Surroundings) =
         SketchTerrains.from(TerrainProfile(DoubleArray(100) { 100.0 + it % 3 }, 30.0, 25, emptyList(), emptyList(), bearing = 90.0), 7, snowing = false, around = around)
 }
+
+/** Bâtir comme dans la région du monde. */
+class SketchCultureTest {
+    @Test
+    fun `each region builds its own way`() {
+        assertEquals(Culture.EUROPE, Culture.of(47.06, 6.6))
+        assertEquals(Culture.ISLAMIC, Culture.of(25.2, 55.27))
+        assertEquals(Culture.ISLAMIC, Culture.of(32.89, 13.19))
+        assertEquals(Culture.ISLAMIC, Culture.of(41.0, 28.97))
+        assertEquals(Culture.ORTHODOX, Culture.of(55.75, 37.62))
+        assertEquals(Culture.ORTHODOX, Culture.of(37.98, 23.73))
+        assertEquals(Culture.EAST_ASIA, Culture.of(35.68, 139.69))
+        assertEquals(Culture.EAST_ASIA, Culture.of(39.9, 116.4))
+        assertEquals(Culture.BUDDHIST, Culture.of(13.75, 100.5))
+        assertEquals(Culture.SOUTH_ASIA, Culture.of(28.61, 77.2))
+        assertEquals(Culture.LATIN, Culture.of(19.43, -99.13))
+        assertEquals(Culture.LATIN, Culture.of(-22.9, -43.2))
+        assertEquals(Culture.NEW_WORLD, Culture.of(40.71, -74.0))
+        assertEquals(Culture.NEW_WORLD, Culture.of(29.76, -95.37))
+        assertTrue(Culture.desert(25.2, 55.27) && !Culture.desert(47.06, 6.6))
+    }
+
+    @Test
+    fun `no church nor fields in dubai, no french holidays abroad`() {
+        val time = LocalDateTime.of(2026, 12, 24, 22, 0)
+        val around = Surroundings(Settlement.VILLAGE, forest = true, population = 900)
+        val t = SketchTerrains.from(TerrainProfile(DoubleArray(100) { 10.0 + it % 3 }, 30.0, 25, emptyList(), emptyList(), bearing = 90.0), 12, snowing = false, around = around)
+        val dubai = SketchScenes.scene(0, false, time, 1, t, around = around, latitude = 25.2, longitude = 55.27)
+        assertEquals(Culture.ISLAMIC, dubai.culture)
+        assertTrue(dubai.desert && Decor.PALMS in dubai.decor && Decor.FIELDS !in dubai.decor && Decor.FOREST !in dubai.decor)
+        assertFalse(Decor.GARLANDS in dubai.decor || Surprise.SLEIGH in dubai.surprises)
+        val paris = SketchScenes.scene(0, false, time, 1, t, around = around, latitude = 48.86, longitude = 2.35)
+        assertTrue(Decor.GARLANDS in paris.decor && Surprise.SLEIGH in paris.surprises)
+        // Le 14 Juillet ne se fête qu'en France.
+        val july = LocalDateTime.of(2026, 7, 14, 23, 0)
+        assertTrue(Surprise.FIREWORKS in SketchScenes.scene(0, false, july, 1, t, around = around, latitude = 48.86, longitude = 2.35).surprises)
+        assertFalse(Surprise.FIREWORKS in SketchScenes.scene(0, false, july, 1, t, around = around, latitude = 40.71, longitude = -74.0).surprises)
+        assertEquals(Landmark.DUBAI, Landmark.near(25.2, 55.27))
+    }
+}
