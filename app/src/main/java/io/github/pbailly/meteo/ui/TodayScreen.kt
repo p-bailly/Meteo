@@ -438,7 +438,11 @@ private fun Tile(icon: ImageVector, label: String, value: String, unit: String, 
     }
 }
 
-/** Les 48 prochaines heures, à faire défiler : pictogramme, température, probabilité et cumul de pluie. */
+/**
+ * Les 48 prochaines heures, à faire défiler : pictogramme, température, probabilité et cumul de pluie (la barre, et
+ * les millimètres au-dessus). Les écritures du graphique grandissent peu avec la taille du texte : les colonnes ont
+ * une largeur fixe.
+ */
 @Composable
 private fun NextHours(f: Forecast, modifier: Modifier = Modifier) = Column(modifier) {
     val h = f.hourly
@@ -452,6 +456,8 @@ private fun NextHours(f: Forecast, modifier: Modifier = Modifier) = Column(modif
     Box(Modifier.fillMaxWidth().weight(1f).horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
         Canvas(Modifier.width(46.dp * hours.size).fillMaxHeight()) {
             val col = size.width / hours.size
+            // En grand texte, les heures et les pourcentages ne débordent pas de leur colonne : 10 % de plus au plus.
+            val cap = minOf(1f, 1.1f / fontScale)
             val temps = hours.map { h.temperature[it] }.filter { !it.isNaN() }
             val tMin = temps.minOrNull() ?: 0.0
             val tMax = (temps.maxOrNull() ?: 1.0).let { if (it - tMin < 4) tMin + 4 else it }
@@ -464,12 +470,15 @@ private fun NextHours(f: Forecast, modifier: Modifier = Modifier) = Column(modif
             fun ty(t: Double) = (tempBottom - (t - tMin) / (tMax - tMin) * tempSpan).toFloat()
             val probabilityY = tempBottom + 16.dp.toPx()
             val barBottom = size.height - 4.dp.toPx()
-            val barTop = probabilityY + 20.dp.toPx()
+            // Au-dessus des barres, la place des millimètres.
+            val barTop = probabilityY + 30.dp.toPx()
 
             for (k in 1 until hours.size) {
                 drawLine(chart.grid, Offset(col * k, 18.dp.toPx()), Offset(col * k, barBottom), 1.dp.toPx())
             }
             drawLine(chart.axis, Offset(0f, barBottom), Offset(size.width, barBottom), 1.dp.toPx())
+            // L'unité des millimètres, une seule fois : à la première heure de pluie.
+            val firstRain = hours.indexOfFirst { h.precipitation[it].let { mm -> !mm.isNaN() && mm >= 0.05 } }
             val line = Path()
             hours.forEachIndexed { k, idx ->
                 val cx = col * k + col / 2
@@ -486,7 +495,7 @@ private fun NextHours(f: Forecast, modifier: Modifier = Modifier) = Column(modif
                     midnight -> colors.onBackground
                     else -> chart.muted
                 }
-                drawLabel(measurer, label, Offset(cx, 0f), labelColor, 10.5f, anchorX = 0.5f, bold = k == 0 || midnight)
+                drawLabel(measurer, label, Offset(cx, 0f), labelColor, 10.5f * cap, anchorX = 0.5f, bold = k == 0 || midnight)
                 val icon = 30.dp.toPx()
                 drawWeatherIcon(h.weatherCode[idx], h.isDay[idx], dark, Offset(cx - icon / 2, 20.dp.toPx()), icon)
                 val t = h.temperature[idx]
@@ -494,13 +503,13 @@ private fun NextHours(f: Forecast, modifier: Modifier = Modifier) = Column(modif
                     val yy = ty(t)
                     if (k == 0) line.moveTo(cx, yy) else line.lineTo(cx, yy)
                     drawText(
-                        measurer.measure(Fmt.temp(t), TextStyle(color = colors.onBackground, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFamily = AppSans)),
+                        measurer.measure(Fmt.temp(t), TextStyle(color = colors.onBackground, fontSize = 13.sp * cap, fontWeight = FontWeight.SemiBold, fontFamily = AppSans)),
                         topLeft = Offset(cx - 9.dp.toPx(), yy - 21.dp.toPx()),
                     )
                 }
                 val p = h.precipitationProbability[idx]
                 if (!p.isNaN()) {
-                    drawLabel(measurer, "${p.roundToInt()} %", Offset(cx, probabilityY), if (p >= 50) colors.primary else chart.muted, 10.5f, anchorX = 0.5f, bold = p >= 50)
+                    drawLabel(measurer, "${p.roundToInt()} %", Offset(cx, probabilityY), if (p >= 50) colors.primary else chart.muted, 10f * cap, anchorX = 0.5f, bold = p >= 50)
                 }
                 val mm = h.precipitation[idx]
                 val barWidth = 20.dp.toPx()
@@ -512,6 +521,9 @@ private fun NextHours(f: Forecast, modifier: Modifier = Modifier) = Column(modif
                         size = Size(barWidth, height),
                         cornerRadius = CornerRadius(2.dp.toPx()),
                     )
+                    // La pluie de l'heure, en millimètres, juste au-dessus de sa barre.
+                    val amount = Fmt.decimal(mm) + if (k == firstRain) " mm" else ""
+                    drawLabel(measurer, amount, Offset(cx, barBottom - height - 2.dp.toPx()), colors.primary, 9.5f * cap, anchorX = 0.5f, anchorY = 1f, bold = true)
                 } else {
                     drawLine(chart.grid, Offset(cx - barWidth / 2, barBottom - 1.dp.toPx()), Offset(cx + barWidth / 2, barBottom - 1.dp.toPx()), 2.dp.toPx())
                 }

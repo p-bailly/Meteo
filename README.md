@@ -84,7 +84,8 @@ la carte) :
   discret, normal ou coloré). Les combinaisons d'avant ces derniers ajouts : `design/dessins/coloriages.pdf` ;
   vent, rafales, humidité, pression (et sa tendance), **iso 0 °C** actuel (toucher la case ouvre la page Neige &
   altitude), coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
-  qui reste (pictogramme, courbe de température, probabilité et barres de pluie).
+  qui reste (pictogramme, courbe de température, probabilité, barres de pluie et millimètres de chaque heure ;
+  en grand texte, les heures et les pourcentages ne grandissent presque pas, pour rester lisibles).
 - **Prévisions** (14 jours) : pour chaque jour, le pictogramme, la barre mini-maxi (du bleu à l'orange), et l'un
   sous l'autre la pluie (goutte, mm), le vent maximal (flèche dans la direction où il souffle, km/h, en rouge à
   partir de 40), l'ensoleillement (soleil, heures) et l'**indice de confiance** sur 5 (jauge à cinq barres) ; la
