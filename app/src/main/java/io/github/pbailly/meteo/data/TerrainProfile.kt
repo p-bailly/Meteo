@@ -27,6 +27,9 @@ class TerrainProfile(
     val bearing: Double? = null,
     /** Une autre chaîne, dans une autre direction : dessinée pâle, au loin, derrière le relief. */
     val backdrop: Backdrop? = null,
+    /** Les deux bouts de la coupe (latitude, longitude) : pour retrouver où est chaque point, et nommer ses sommets. */
+    val start: Pair<Double, Double>? = null,
+    val end: Pair<Double, Double>? = null,
 ) {
     val summit: ProfileLabel? get() = labels.firstOrNull()
 
@@ -34,5 +37,18 @@ class TerrainProfile(
     fun nameNear(altitude: Double, tolerance: Double = 200.0): String? =
         peaks.filter { abs(it.elevation - altitude) <= tolerance }.minByOrNull { abs(it.elevation - altitude) }?.name
 
-    fun with(backdrop: Backdrop?) = TerrainProfile(elevations, lengthKm, placeIndex, labels, peaks, bearing, backdrop)
+    fun with(backdrop: Backdrop?) = TerrainProfile(elevations, lengthKm, placeIndex, labels, peaks, bearing, backdrop, start, end)
+
+    fun withLabels(labels: List<ProfileLabel>) = TerrainProfile(elevations, lengthKm, placeIndex, labels, peaks, bearing, backdrop, start, end)
+
+    /** Au moins un sommet de la coupe a un nom. */
+    val named: Boolean get() = labels.any { it.name != null }
+
+    /** Où est l'échantillon [index] de la coupe (latitude, longitude), si l'on connaît ses deux bouts. */
+    fun pointAt(index: Int): Pair<Double, Double>? {
+        val a = start ?: return null
+        val b = end ?: return null
+        val f = index.toDouble() / (elevations.size - 1).coerceAtLeast(1)
+        return (a.first + (b.first - a.first) * f) to (a.second + (b.second - a.second) * f)
+    }
 }

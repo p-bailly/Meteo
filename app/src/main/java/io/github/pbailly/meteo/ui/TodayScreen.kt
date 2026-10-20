@@ -138,14 +138,14 @@ fun TodayScreen(
                             Column {
                                 // Neige & altitude (à la saison de la neige) : une pastille dans l'en-tête, pour laisser la
                                 // place au dessin.
-                                TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces, onOpenAltitude.takeIf { snowSeason(f) })
+                                TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces)
                                 StatusLine(statusText(remote))
                                 NowBlock(f)
                                 // Sous le texte, le bas du dessin : le village, la rivière, les champs, bien visibles.
                                 Spacer(Modifier.height(SKETCH_GROUND))
                             }
                         }
-                        MetricsGrid(f)
+                        MetricsGrid(f, onOpenAltitude)
                     },
                     fill = { NextHours(f, Modifier.fillMaxSize()) },
                 )
@@ -207,7 +207,6 @@ private fun TodayHeader(
     favorite: Boolean,
     onToggleFavorite: () -> Unit,
     onOpenPlaces: () -> Unit,
-    onOpenAltitude: (() -> Unit)?,
 ) {
     val colors = MaterialTheme.colorScheme
     val elevation = place.elevation ?: f.elevation
@@ -255,7 +254,6 @@ private fun TodayHeader(
                 modifier = Modifier.padding(start = 2.dp, top = 4.dp),
             )
         }
-        onOpenAltitude?.let { AltitudeChip(f, it) }
         FavoriteStar(favorite, onToggleFavorite)
     }
 }
@@ -322,29 +320,6 @@ fun snowSeason(f: Forecast): Boolean {
     return day >= 1015 || day <= 315
 }
 
-/** Pastille vers la page Neige & altitude : une montagne et l'iso 0 °C actuel (la montagne seule en très grand texte). */
-@Composable
-private fun AltitudeChip(f: Forecast, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val iso = Altitude.freezingLevel(f, Outlook.nowIndex(f))
-    Row(
-        Modifier
-            .padding(start = 6.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
-            .background(colors.surfaceContainerLowest.copy(alpha = 0.85f))
-            .clickable(onClickLabel = "Neige & altitude", onClick = onClick)
-            .padding(horizontal = 9.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Outlined.Terrain, contentDescription = "Neige & altitude", tint = colors.primary, modifier = Modifier.size(18.dp))
-        if (!iso.isNaN() && LocalTextSize.current < 2) {
-            Spacer(Modifier.width(5.dp))
-            MonoText("0° ${Fmt.altitude(iso, 100)}", color = colors.primary, size = 11.sp, bold = true)
-        }
-    }
-}
-
 /** Étoile des favoris, aux branches arrondies : pleine et orange pour un favori, au trait sinon. */
 @Composable
 private fun FavoriteStar(favorite: Boolean, onClick: () -> Unit) {
@@ -380,9 +355,12 @@ private fun FavoriteStar(favorite: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Vent, rafales, humidité, pression (et sa tendance sur 3 h), UV, coucher et lever du soleil. */
+/**
+ * Vent, rafales, humidité, pression (et sa tendance sur 3 h), iso 0 °C (qui ouvre la page Neige & altitude), coucher
+ * et lever du soleil.
+ */
 @Composable
-private fun MetricsGrid(f: Forecast) {
+private fun MetricsGrid(f: Forecast, onOpenAltitude: () -> Unit) {
     val c = f.current ?: return
     val h = f.hourly
     val i = Outlook.nowIndex(f)
@@ -394,7 +372,7 @@ private fun MetricsGrid(f: Forecast) {
         trend <= -1 -> " ↘"
         else -> " →"
     }
-    val uv = h.uvIndex.getOrElse(i) { Double.NaN }
+    val iso = Altitude.freezingLevel(f, i)
     val (sunMain, sunNote) = sunTimes(f, c.time)
     Column(
         Modifier
@@ -415,7 +393,14 @@ private fun MetricsGrid(f: Forecast) {
         Row(Modifier.height(IntrinsicSize.Min)) {
             Tile(Icons.Outlined.Speed, "PRESSION", number(c.pressure), "hPa$arrow", Modifier.weight(1f))
             VerticalDivider(color = colors.outlineVariant)
-            Tile(Icons.Outlined.WbSunny, "INDICE UV", if (uv.isNaN()) "–" else uv.roundToInt().toString(), uvLabel(uv), Modifier.weight(1f), accent = true)
+            Tile(
+                Icons.Outlined.Terrain,
+                "ISO 0 °C",
+                if (iso.isNaN()) "–" else Fmt.altitude(iso, 100).removeSuffix("\u00A0m"),
+                "m ›",
+                Modifier.weight(1f).clickable(onClickLabel = "Neige & altitude", onClick = onOpenAltitude),
+                accent = true,
+            )
             VerticalDivider(color = colors.outlineVariant)
             Tile(Icons.Outlined.WbTwilight, "SOLEIL", sunMain, if (LocalTextSize.current < 2) sunNote else "", Modifier.weight(1f), accent = true)
         }
@@ -423,15 +408,6 @@ private fun MetricsGrid(f: Forecast) {
 }
 
 private fun number(v: Double) = if (v.isNaN()) "–" else v.roundToInt().toString()
-
-private fun uvLabel(uv: Double) = when {
-    uv.isNaN() -> ""
-    uv < 3 -> "faible"
-    uv < 6 -> "modéré"
-    uv < 8 -> "élevé"
-    uv < 11 -> "très élevé"
-    else -> "extrême"
-}
 
 /** Avant le coucher : coucher en grand, lever en petit ; après : le prochain lever, puis le coucher suivant. */
 private fun sunTimes(f: Forecast, now: LocalDateTime): Pair<String, String> {

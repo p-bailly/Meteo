@@ -1,6 +1,9 @@
 package io.github.pbailly.meteo.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -193,7 +196,25 @@ object Terrain {
             if (peak.elevation - values[near] > 300) continue
             labels += ProfileLabel(near, peak.name, peak.elevation)
         }
-        return TerrainProfile(values, length, placeIndex(), labels, corridor, bearing(first.first, first.second, last.first, last.second))
+        return TerrainProfile(values, length, placeIndex(), labels, corridor, bearing(first.first, first.second, last.first, last.second), start = first, end = last)
+    }
+
+    /**
+     * Les sommets de la coupe à nommer, du plus haut au plus bas (trois au plus) : au-delà du lieu, plus hauts que tout
+     * à 3 km autour, au moins 150 m au-dessus du lieu et 80 m au-dessus des cols voisins.
+     */
+    fun summits(profile: TerrainProfile): List<Int> {
+        val e = profile.elevations
+        val n = e.size
+        if (n < 10) return emptyList()
+        val p = profile.placeIndex.coerceIn(0, n - 1)
+        val kmPerSample = profile.lengthKm / (n - 1)
+        val window = (3.0 / kmPerSample).toInt().coerceIn(2, 12)
+        val ground = e[p]
+        return ((p + 3) until n).filter { k ->
+            val around = (k - window..k + window).filter { it in 0 until n }
+            around.all { e[it] <= e[k] } && e[k] - ground >= 150 && e[k] - around.minOf { e[it] } >= 80
+        }.distinctBy { k -> (k - p) / window }.sortedByDescending { e[it] }.take(3)
     }
 
     /** Position d'un point le long du segment (0 au début, 1 à la fin) et sa distance au segment, en km. */
@@ -216,6 +237,21 @@ object Terrain {
         val dx = (lon2 - lon1) * k
         val dy = (lat2 - lat1) * 111.2
         return sqrt(dx * dx + dy * dy)
+    }
+}
+
+/**
+ * Le nom d'un sommet proche d'un point, d'après Photon (le géocodeur d'OpenStreetMap, gratuit, sans clé, rapide) :
+ * quand Overpass ne répond pas, les sommets de la coupe ont quand même leur nom.
+ */
+object PeakNames {
+    fun url(latitude: Double, longitude: Double): String =
+        "https://photon.komoot.io/reverse?lat=%.5f&lon=%.5f&radius=1.5&limit=1&osm_tag=natural:peak".format(java.util.Locale.ROOT, latitude, longitude)
+
+    fun parse(body: String): String? {
+        val features = Json.parseToJsonElement(body).jsonObject["features"] as? JsonArray ?: return null
+        val properties = features.firstOrNull()?.jsonObject?.get("properties") as? JsonObject ?: return null
+        return properties["name"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
     }
 }
 
@@ -271,7 +307,7 @@ class TerrainRepository(
     private val httpGet: (String) -> String,
     private val overpassGet: (String) -> String = httpGet,
 ) {
-    private fun file(place: Place) = File(cacheDir, "terrain3_${place.id}.json")
+    private fun file(place: Place) = File(cacheDir, "terrain4_${place.id}.json")
 
     /** La coupe déjà gardée (une coupe de moins d'un kilomètre, vers le lieu lui-même, est refaite). */
     suspend fun cached(place: Place): TerrainProfile? = withContext(Dispatchers.IO) {
@@ -296,7 +332,40 @@ class TerrainRepository(
         val line = Terrain.line(place.latitude, place.longitude, toLat, toLon)
         val profile = Terrain.build(line, OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line))), null, emptyList())
         val second = Terrain.secondPoint(place.latitude, place.longitude, ground, grid, heights, profile.bearing ?: 0.0)
-        profile.with(second?.let { backdrop(place, it.first, it.second) })
+        named(profile.with(second?.let { backdrop(place, it.first, it.second) }))
+    }
+
+    /**
+     * Les sommets de la coupe nommés d'après Photon, quand aucun ne l'est encore (coupe rapide, ou Overpass muet) : un
+     * appel rapide par sommet, trois au plus ; ceux qui ne répondent pas restent sans nom.
+     */
+    suspend fun named(profile: TerrainProfile): TerrainProfile = coroutineScope {
+        if (profile.named) return@coroutineScope profile
+        // Les trois appels en même temps : une fraction de seconde en tout.
+        val labels = Terrain.summits(profile).map { k ->
+            async(Dispatchers.IO) {
+                val (lat, lon) = profile.pointAt(k) ?: return@async null
+                val name = try {
+                    PeakNames.parse(httpGet(PeakNames.url(lat, lon)))
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    null
+                } ?: return@async null
+                ProfileLabel(k, name, profile.elevations[k])
+            }
+        }.awaitAll().filterNotNull().distinctBy { it.name }
+        if (labels.isEmpty()) profile else profile.withLabels(labels)
+    }
+
+    /** Nomme les sommets d'une coupe déjà gardée qui n'en a pas, et la garde ainsi. */
+    suspend fun rename(place: Place, profile: TerrainProfile): TerrainProfile = withContext(Dispatchers.IO) {
+        val named = named(profile)
+        if (named.named) {
+            cacheDir.mkdirs()
+            file(place).writeText(encode(named))
+        }
+        named
     }
 
     /** La deuxième chaîne, vers [toLat], [toLon] : un appel de plus à l'API d'altitude ; rien si elle ne répond pas. */
@@ -326,10 +395,10 @@ class TerrainRepository(
             // La deuxième chaîne : celle de la coupe rapide, sinon vers un sommet nommé dans une autre direction.
             val second = fallback?.backdrop?.takeIf { Terrain.angleBetween(it.bearing, built.bearing ?: 0.0) >= 60 }
                 ?: Terrain.secondPeak(place.latitude, place.longitude, ground, peaks, built.bearing ?: 0.0)?.let { backdrop(place, it.latitude, it.longitude) }
-            built.with(second)
+            named(built.with(second))
         }
         cacheDir.mkdirs()
-        cacheDir.listFiles { f -> f.name.startsWith("terrain_") || f.name.startsWith("terrain2_") }?.forEach { it.delete() }
+        cacheDir.listFiles { f -> f.name.startsWith("terrain_") || f.name.startsWith("terrain2_") || f.name.startsWith("terrain3_") }?.forEach { it.delete() }
         file(place).writeText(encode(profile))
         profile
     }
@@ -372,6 +441,8 @@ class TerrainRepository(
             }
         })
         p.bearing?.let { put("bearing", it) }
+        p.start?.let { put("start", buildJsonArray { add(JsonPrimitive(it.first)); add(JsonPrimitive(it.second)) }) }
+        p.end?.let { put("end", buildJsonArray { add(JsonPrimitive(it.first)); add(JsonPrimitive(it.second)) }) }
         p.backdrop?.let { b ->
             put("backdrop", buildJsonObject {
                 put("lengthKm", b.lengthKm)
@@ -406,6 +477,8 @@ class TerrainRepository(
                 )
             }.orEmpty(),
             bearing = o["bearing"]?.jsonPrimitive?.doubleOrNull,
+            start = (o["start"] as? JsonArray)?.let { it[0].jsonPrimitive.doubleOrNull!! to it[1].jsonPrimitive.doubleOrNull!! },
+            end = (o["end"] as? JsonArray)?.let { it[0].jsonPrimitive.doubleOrNull!! to it[1].jsonPrimitive.doubleOrNull!! },
             backdrop = (o["backdrop"] as? JsonObject)?.let { b ->
                 Backdrop(
                     b["elevations"]!!.jsonArray.map { it.jsonPrimitive.doubleOrNull ?: 0.0 }.toDoubleArray(),
