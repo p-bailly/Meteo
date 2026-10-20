@@ -195,7 +195,7 @@ class SketchNamesTest {
         assertEquals(Landmark.MONT_SAINT_MICHEL, Landmark.near(48.636, -1.51))
         assertEquals(Landmark.LONDON, Landmark.near(51.507, -0.128))
         assertEquals(Landmark.EIFFEL_TOWER, Landmark.near(48.86, 2.35))
-        assertNull(Landmark.near(47.06, 6.6))
+        assertNull(Landmark.near(46.5, 3.0))
         assertEquals(Silhouette.BELFRY, Landmark.ARRAS.look)
         // Le monument remplace l'église du village (pas la tour Eiffel, qui reste à la grande ville).
         val time = LocalDateTime.of(2026, 7, 10, 14, 0)
@@ -245,5 +245,37 @@ class SketchCultureTest {
         assertTrue(Surprise.FIREWORKS in SketchScenes.scene(0, false, july, 1, t, around = around, latitude = 48.86, longitude = 2.35).surprises)
         assertFalse(Surprise.FIREWORKS in SketchScenes.scene(0, false, july, 1, t, around = around, latitude = 40.71, longitude = -74.0).surprises)
         assertEquals(Landmark.DUBAI, Landmark.near(25.2, 55.27))
+    }
+}
+
+/** Les lieux de chez nous, dessinés au plus juste. */
+class SketchHomeTest {
+    @Test
+    fun `home places are known and built in their own style`() {
+        assertEquals(Landmark.MORTEAU, Landmark.near(47.058, 6.607))
+        assertEquals(Landmark.VALENCE, Landmark.near(44.933, 4.892))
+        assertEquals(Landmark.BESANCON, Landmark.near(47.238, 6.024))
+        assertEquals(Landmark.VALDAHON, Landmark.near(47.15, 6.333))
+        assertEquals(Landmark.ASNANS, Landmark.near(46.948, 5.372))
+        assertEquals(Landmark.LA_BREVINE, Landmark.near(46.981, 6.606))
+        assertEquals(Landmark.LA_LONDE, Landmark.near(43.139, 6.234))
+        // Clocher comtois en Franche-Comté (Morteau, Asnans), temple du Jura suisse à La Brévine, campanile en Provence.
+        assertEquals(LocalStyle.COMTOIS, LocalStyle.of(47.058, 6.607))
+        assertEquals(LocalStyle.COMTOIS, LocalStyle.of(46.948, 5.372))
+        assertEquals(LocalStyle.SWISS_JURA, LocalStyle.of(46.981, 6.606))
+        assertEquals(LocalStyle.SWISS_JURA, LocalStyle.of(47.10, 6.83))
+        assertEquals(LocalStyle.COMTOIS, LocalStyle.of(46.905, 6.355))
+        assertEquals(LocalStyle.PROVENCE, LocalStyle.of(43.139, 6.234))
+        assertEquals(LocalStyle.NONE, LocalStyle.of(44.933, 4.892))
+        // Ce qu'on sait complète OpenStreetMap : la Brévine a son lac, La Londe sa mer et son port, même sans réponse.
+        assertTrue(Landmark.LA_BREVINE.completed(null)!!.lake)
+        val londe = Landmark.LA_LONDE.completed(Surroundings(Settlement.VILLAGE, forest = true))!!
+        assertTrue(londe.coast && londe.harbour && londe.vineyard && londe.settlement == Settlement.TOWN)
+        // Pas de monument dessiné pour un lieu seulement connu.
+        val time = LocalDateTime.of(2026, 7, 10, 14, 0)
+        fun terrain(around: Surroundings?) =
+            SketchTerrains.from(TerrainProfile(DoubleArray(100) { 120.0 + it % 3 }, 30.0, 25, emptyList(), emptyList(), bearing = 90.0), 7, snowing = false, around = around)
+        assertNull(SketchScenes.scene(0, true, time, 1, terrain(Landmark.VALDAHON.known), around = Landmark.VALDAHON.known, landmark = Landmark.VALDAHON).landmark)
+        assertEquals(Landmark.VALENCE, SketchScenes.scene(0, true, time, 1, terrain(Landmark.VALENCE.known), around = Landmark.VALENCE.known, landmark = Landmark.VALENCE).landmark)
     }
 }

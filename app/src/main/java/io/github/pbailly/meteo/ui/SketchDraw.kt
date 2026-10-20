@@ -403,6 +403,9 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
     /** La région du monde : on y bâtit des mosquées ou des églises, des toits plats ou de tuiles. */
     var culture = Culture.EUROPE
 
+    /** La manière de bâtir de la région : clocher comtois, temple du Jura suisse, campanile de Provence. */
+    var local = LocalStyle.NONE
+
     /**
      * L'écriture à la main (noms des sommets), fournie par l'appli : du texte centré sur [at] (sa ligne de base), de
      * [size] dp ; sans elle, rien n'est écrit.
@@ -428,6 +431,7 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
         it.snowyRoofs = snowyRoofs
         it.write = write
         it.culture = culture
+        it.local = local
     }
 
     /** Le crayon d'un toit : sa couleur, ou la neige. */

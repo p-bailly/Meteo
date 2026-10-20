@@ -68,10 +68,12 @@ fun WeatherSketch(
     val snowing = SketchSky.of(code) == SketchSky.SNOW || conditions.snowOnGround
     // Les saisons de l'hémisphère sud sont à l'envers.
     val month = SketchScenes.seasonMonth(time.monthValue, latitude)
-    val relief = remember(terrain, surroundings, month, snowing, latitude, conditions) { SketchTerrains.from(terrain, month, snowing, latitude, surroundings, conditions) }
     val landmark = remember(latitude, longitude) { Landmark.near(latitude, longitude) }
-    val scene = remember(code, isDay, time, placeSeed, relief, surroundings, conditions, landmark, taps.intValue) {
-        SketchScenes.scene(code, isDay, time, placeSeed, relief, taps.intValue, surroundings, conditions, landmark, latitude, longitude)
+    // Ce qu'on sait déjà du lieu complète OpenStreetMap (et dessine tout de suite, avant sa réponse).
+    val around = remember(surroundings, landmark) { landmark?.completed(surroundings) ?: surroundings }
+    val relief = remember(terrain, around, month, snowing, latitude, conditions) { SketchTerrains.from(terrain, month, snowing, latitude, around, conditions) }
+    val scene = remember(code, isDay, time, placeSeed, relief, around, conditions, landmark, taps.intValue) {
+        SketchScenes.scene(code, isDay, time, placeSeed, relief, taps.intValue, around, conditions, landmark, latitude, longitude)
     }
     val moonAge = remember(time) { SketchScenes.moonAge(time) }
     // L'animation : une phase de 0 à 1 en 20 secondes, mise à jour une quinzaine de fois par seconde (assez pour la
@@ -132,8 +134,10 @@ fun sketchImage(
     val strength = sketchStrength(style)
     val snowing = SketchSky.of(code) == SketchSky.SNOW || conditions.snowOnGround
     val month = SketchScenes.seasonMonth(time.monthValue, latitude)
-    val relief = SketchTerrains.from(terrain, month, snowing, latitude, surroundings, conditions)
-    val scene = SketchScenes.scene(code, isDay, time, placeSeed, relief, 0, surroundings, conditions, Landmark.near(latitude, longitude), latitude, longitude)
+    val landmark = Landmark.near(latitude, longitude)
+    val around = landmark?.completed(surroundings) ?: surroundings
+    val relief = SketchTerrains.from(terrain, month, snowing, latitude, around, conditions)
+    val scene = SketchScenes.scene(code, isDay, time, placeSeed, relief, 0, around, conditions, landmark, latitude, longitude)
     val image = ImageBitmap(widthPx.coerceAtLeast(1), heightPx.coerceAtLeast(1))
     val size = Size(image.width.toFloat(), image.height.toFloat())
     CanvasDrawScope().draw(Density(density), LayoutDirection.Ltr, Canvas(image), size) {

@@ -79,6 +79,23 @@ class OpenMeteoApiTest {
     }
 
     @Test
+    fun `most important places come first`() {
+        // « Valence » : la préfecture de la Drôme avant le village homonyme et la ville d'Espagne au nom plus long.
+        val body = """{"results":[
+            {"name":"Valence","latitude":44.05,"longitude":0.9,"feature_code":"PPL","country_code":"FR","population":500},
+            {"name":"Valencia","latitude":39.47,"longitude":-0.38,"feature_code":"PPLA","country_code":"ES","population":800000},
+            {"name":"Valence","latitude":44.93,"longitude":4.89,"feature_code":"PPLA2","country_code":"FR","population":64000},
+            {"name":"Valence-d'Albigeois","latitude":44.02,"longitude":2.41,"feature_code":"PPLA3","country_code":"FR","population":1300}
+        ]}"""
+        val places = OpenMeteoApi.parseSearch(body, "valence")
+        assertEquals(listOf(4.89, 0.9), places.take(2).map { it.longitude })
+        assertEquals("Valence-d'Albigeois", places[2].name)
+        assertEquals("la brevine", OpenMeteoApi.searchKey("La Brévine"))
+        assertEquals("la brevi ine", OpenMeteoApi.searchKey("La Brévi-ine"))
+        assertEquals("asnans beauvoisin", OpenMeteoApi.searchKey("Asnans-Beauvoisin"))
+    }
+
+    @Test
     fun `ensemble members are read as separate series`() {
         val body = """{"hourly":{"time":["2026-10-20T00:00","2026-10-20T01:00"],
             "temperature_2m":[10.0,11.0],"temperature_2m_member01":[9.5,10.5],"temperature_2m_member02":[10.5,11.5],

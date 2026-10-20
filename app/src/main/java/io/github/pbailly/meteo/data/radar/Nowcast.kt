@@ -41,6 +41,14 @@ class MotionField(
 
     /** Vitesse moyenne, en pixels par minute (utile pour les tests et l'affichage). */
     fun meanSpeed(): Pair<Float, Float> = u.average().toFloat() to v.average().toFloat()
+
+    companion object {
+        /**
+         * Aucun déplacement : quand il n'y a qu'une image radar, ou trop peu de pluie pour mesurer son mouvement, la
+         * prévision montre la pluie telle qu'elle est (et, s'il ne pleut nulle part, une carte sèche).
+         */
+        fun still(width: Int, height: Int) = MotionField(width, height, 0f, 1f, 1, 1, floatArrayOf(0f), floatArrayOf(0f))
+    }
 }
 
 /**

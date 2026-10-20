@@ -86,6 +86,8 @@ internal enum class Decor {
     GARLANDS, LAMPS,
     // Le désert : des palmiers (à la place des arbres), des dromadaires.
     PALMS, CAMELS,
+    // Des îles au large (les îles d'Hyères).
+    ISLANDS,
 }
 
 /**
@@ -93,15 +95,30 @@ internal enum class Decor {
  * à deux flèches, à flèche centrale, beffroi, dôme, tour de télévision, remparts…), dessinée à la manière du lieu.
  */
 internal enum class Silhouette {
+    /** Pas de monument : un lieu dont on connaît seulement les environs ([Landmark.known]). */
+    NONE,
     OWN, TWO_TOWERS, TWO_SPIRES, CENTRAL_SPIRE, BELFRY, BRICK_BELFRY, DOME, NEEDLE, RAMPARTS, MOUNT, CLOCK_TOWER, LEANING_TOWER,
     SPIRES, ATOMIUM, OCTAGON, BURJ, GREAT_MOSQUE, ONIONS, RED_TOWER, TAJ, PYRAMIDS, OPERA, STATUE_ON_HILL,
+    /** Morteau : l'église au clocher comtois et le château Pertusier. */
+    PERTUSIER,
+    /** Valence : la cathédrale Saint-Apollinaire et son clocher-porche. */
+    APOLLINAIRE,
+    /** Besançon : la citadelle de Vauban sur sa colline, au-dessus de la boucle du Doubs. */
+    CITADEL,
 }
 
 /**
  * Les monuments qui font la silhouette d'une ville, vus de loin : dessinés parmi les immeubles d'une grande ville, ou
  * à la place de l'église d'une petite ville ou d'un village.
  */
-internal enum class Landmark(val latitude: Double, val longitude: Double, val radiusKm: Double, val look: Silhouette = Silhouette.OWN) {
+internal enum class Landmark(
+    val latitude: Double,
+    val longitude: Double,
+    val radiusKm: Double,
+    val look: Silhouette = Silhouette.OWN,
+    /** Ce que l'on sait de ses environs, sûr, même sans OpenStreetMap (et pour dessiner tout de suite). */
+    val known: Surroundings? = null,
+) {
     EIFFEL_TOWER(48.8584, 2.2945, 12.0),
     FOURVIERE(45.7623, 4.8225, 8.0),
     BONNE_MERE(43.2840, 5.3713, 9.0),
@@ -159,10 +176,39 @@ internal enum class Landmark(val latitude: Double, val longitude: Double, val ra
     CAIRO(29.9792, 31.1342, 25.0, Silhouette.PYRAMIDS),
     SYDNEY(-33.8568, 151.2153, 15.0, Silhouette.OPERA),
     RIO(-22.9519, -43.2105, 15.0, Silhouette.STATUE_ON_HILL),
+
+    // Des lieux qu'on connaît bien, dessinés au plus juste.
+    MORTEAU(47.0578, 6.6072, 3.0, Silhouette.PERTUSIER, Surroundings(Settlement.TOWN, forest = true, river = true, railway = true, population = 6_900)),
+    VALENCE(44.9334, 4.8924, 6.0, Silhouette.APOLLINAIRE, Surroundings(Settlement.CITY, river = true, railway = true, ruins = true, population = 64_000)),
+    BESANCON(47.2378, 6.0241, 7.0, Silhouette.CITADEL, Surroundings(Settlement.CITY, forest = true, river = true, railway = true, population = 119_000)),
+    VALDAHON(47.1500, 6.3333, 3.0, Silhouette.NONE, Surroundings(Settlement.TOWN, forest = true, railway = true, population = 5_600)),
+    ASNANS(46.9480, 5.3720, 2.5, Silhouette.NONE, Surroundings(Settlement.VILLAGE, population = 560)),
+    LA_BREVINE(46.9806, 6.6064, 2.5, Silhouette.NONE, Surroundings(Settlement.VILLAGE, forest = true, lake = true, population = 640)),
+    LA_LONDE(43.1386, 6.2342, 4.0, Silhouette.NONE, Surroundings(Settlement.TOWN, forest = true, coast = true, vineyard = true, harbour = true, population = 10_500)),
     ;
 
+    /** Les environs d'OpenStreetMap [around], complétés de ce que l'on sait du lieu (la taille de la ville, sûre). */
+    fun completed(around: Surroundings?): Surroundings? {
+        val k = known ?: return around
+        val a = around ?: return k
+        return a.copy(
+            settlement = k.settlement,
+            population = k.population ?: a.population,
+            forest = a.forest || k.forest,
+            river = a.river || k.river,
+            lake = a.lake || k.lake,
+            coast = a.coast || k.coast,
+            vineyard = a.vineyard || k.vineyard,
+            castle = a.castle || k.castle,
+            ruins = a.ruins || k.ruins,
+            railway = a.railway || k.railway,
+            harbour = a.harbour || k.harbour,
+        )
+    }
+
     companion object {
-        fun near(latitude: Double, longitude: Double): Landmark? = entries.firstOrNull {
+        /** Le monument (ou le lieu connu) le plus proche : d'abord les lieux connus, qui sont plus petits. */
+        fun near(latitude: Double, longitude: Double): Landmark? = entries.sortedBy { it.radiusKm }.firstOrNull {
             val k = cos(Math.toRadians((latitude + it.latitude) / 2)) * 111.2
             val dx = (longitude - it.longitude) * k
             val dy = (latitude - it.latitude) * 111.2
@@ -296,6 +342,29 @@ internal enum class Culture {
 
         /** La France (pour ses fêtes : le 14 Juillet, le muguet du 1er mai, le poisson d'avril). */
         fun france(latitude: Double, longitude: Double) = latitude in 41.3..51.1 && longitude in -5.2..9.6
+    }
+}
+
+/**
+ * Les manières de bâtir de chez nous, plus fines que [Culture] : le clocher comtois de Franche-Comté (et ses fermes à
+ * tuyé, ou bressanes en plaine), le temple et la grande ferme du Jura suisse, le campanile et les pins de Provence.
+ */
+internal enum class LocalStyle {
+    NONE, COMTOIS, SWISS_JURA, PROVENCE;
+
+    companion object {
+        fun of(latitude: Double, longitude: Double): LocalStyle {
+            val lat = latitude
+            val lon = longitude
+            // La frontière franco-suisse dans le Jura, de Sainte-Croix au Doubs puis vers Delle.
+            val border = if (lon < 6.70) 46.85 + (lon - 6.43) * 0.815 else 47.07 + (lon - 6.70) * 0.8
+            return when {
+                lat in 46.5..47.6 && lon in 6.43..7.4 && lat < border -> SWISS_JURA
+                lat in 46.25..48.05 && lon in 5.25..7.15 -> COMTOIS
+                lat in 42.9..44.6 && lon in 4.3..7.55 -> PROVENCE
+                else -> NONE
+            }
+        }
     }
 }
 
@@ -726,6 +795,8 @@ internal class SketchScene(
     val culture: Culture = Culture.EUROPE,
     /** Un désert chaud : du sable plutôt que des prés. */
     val desert: Boolean = false,
+    /** La manière de bâtir de la région (clocher comtois, temple, campanile de Provence). */
+    val local: LocalStyle = LocalStyle.NONE,
 ) {
     val clouds: SketchClouds? get() = conditions.clouds
 
@@ -1052,7 +1123,7 @@ internal object SketchScenes {
         if (conditions.windKmh >= 15 && relief != Relief.SUMMIT && !terrain.onWater) decor += Decor.WINDSOCK
         // Le monument de la grande ville, quand on y est.
         // Les monuments propres à une grande ville seulement avec elle ; les autres aussi à la place de l'église du village.
-        val monument = landmark?.takeIf {
+        val monument = landmark?.takeIf { it.look != Silhouette.NONE }?.takeIf {
             around == null || Decor.CITY in decor || Decor.TOWN in decor ||
                 it.look != Silhouette.OWN && (Decor.VILLAGE in decor || Decor.HAMLET in decor)
         }
@@ -1084,6 +1155,10 @@ internal object SketchScenes {
         if (decor.any { it == Decor.VILLAGE || it == Decor.TOWN || it == Decor.CITY }) decor += Decor.LAMPS
         // Le désert : ni prés, ni champs, ni forêt, ni vaches ; des palmiers autour du lieu habité, des dromadaires.
         val desert = latitude != null && longitude != null && Culture.desert(latitude, longitude)
+        // En Provence, au bord de la mer : des palmiers sur le front de mer ; les îles d'Hyères au large de La Londe.
+        val local = if (latitude != null && longitude != null && culture == Culture.EUROPE) LocalStyle.of(latitude, longitude) else LocalStyle.NONE
+        if (local == LocalStyle.PROVENCE && terrain.sea && inhabited) decor += Decor.PALMS
+        if (latitude != null && longitude != null && terrain.sea && latitude in 42.9..43.2 && longitude in 5.95..6.6) decor += Decor.ISLANDS
         if (desert) {
             val green = decor.any { it == Decor.TREES || it == Decor.FOREST || it == Decor.ORCHARD || it == Decor.FIELDS }
             decor -= setOf(Decor.FIELDS, Decor.TREES, Decor.FOREST, Decor.FIRS, Decor.ORCHARD, Decor.VINES, Decor.LAVENDER, Decor.SUNFLOWERS, Decor.COWS)
@@ -1105,6 +1180,7 @@ internal object SketchScenes {
             lit = litWindows(light, time, sky),
             culture = culture,
             desert = desert,
+            local = local,
         )
     }
 

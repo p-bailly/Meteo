@@ -133,15 +133,21 @@ object OpenMeteoApi {
         "format" to "json",
     )
 
-    fun parseSearch(body: String): List<Place> {
+    /**
+     * Les lieux trouvés, les plus importants d'abord : ceux dont le nom est exactement celui cherché (sans tenir compte
+     * des accents ni des majuscules), puis ceux qui commencent par lui ; à égalité, une capitale ou un chef-lieu avant
+     * un village, les plus peuplés avant les autres, et la France un peu avant le reste du monde.
+     */
+    fun parseSearch(body: String, query: String = ""): List<Place> {
         val root = parseRoot(body)
         val results = root["results"] as? JsonArray ?: return emptyList()
-        return results.mapNotNull { element ->
+        val wanted = searchKey(query)
+        return results.mapIndexedNotNull { index, element ->
             val o = element.jsonObject
-            val lat = o.double("latitude") ?: return@mapNotNull null
-            val lon = o.double("longitude") ?: return@mapNotNull null
-            Place(
-                name = o.string("name") ?: return@mapNotNull null,
+            val lat = o.double("latitude") ?: return@mapIndexedNotNull null
+            val lon = o.double("longitude") ?: return@mapIndexedNotNull null
+            val place = Place(
+                name = o.string("name") ?: return@mapIndexedNotNull null,
                 latitude = lat,
                 longitude = lon,
                 admin1 = o.string("admin1"),
@@ -149,8 +155,33 @@ object OpenMeteoApi {
                 country = o.string("country"),
                 elevation = o.double("elevation").validElevation(),
             )
-        }
+            val name = searchKey(place.name)
+            val match = when {
+                wanted.isEmpty() -> 0
+                name == wanted -> 3
+                name.startsWith(wanted) -> 2
+                wanted in name -> 1
+                else -> 0
+            }
+            val importance = when (o.string("feature_code")) {
+                "PPLC" -> 4.0
+                "PPLA" -> 3.0
+                "PPLA2" -> 2.0
+                "PPLA3" -> 1.2
+                "PPLA4" -> 0.6
+                else -> 0.0
+            }
+            val people = o.double("population") ?: 0.0
+            val france = if (o.string("country_code") == "FR") 1.0 else 0.0
+            // Le rang donné par Open-Meteo départage le reste.
+            Triple(place, match, importance + kotlin.math.log10(people + 1) + france - index * 0.01)
+        }.sortedWith(compareByDescending<Triple<Place, Int, Double>> { it.second }.thenByDescending { it.third }).map { it.first }
     }
+
+    /** Le nom tel qu'on le tape : sans accents, en minuscules, les tirets et apostrophes comme des espaces. */
+    fun searchKey(text: String): String =
+        java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+            .lowercase(java.util.Locale.ROOT).replace(Regex("[-'’]"), " ").replace(Regex("\\s+"), " ").trim()
 
     fun parseForecast(body: String): Forecast = forecastOf(parseRoot(body))
 
