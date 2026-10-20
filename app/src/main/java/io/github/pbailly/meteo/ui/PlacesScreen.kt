@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -61,6 +62,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -238,6 +240,15 @@ private fun spots(state: MeteoUiState): List<Spot> {
     return state.favorites.map { spot(it, favorite = true) } + recents.map { spot(it, favorite = false) }
 }
 
+/** Altitude d'un lieu, « 1 035 m » sur une seule ligne, alignée à droite dans sa colonne. */
+@Composable
+private fun Altitude(value: String, size: TextUnit) {
+    Row(Modifier.width(74.sp.asWidth()), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.Bottom) {
+        Text(value, fontFamily = AppMono, fontWeight = FontWeight.Medium, fontSize = size, maxLines = 1, softWrap = false)
+        MonoText(" m", size = 10.sp, modifier = Modifier.padding(bottom = 2.dp))
+    }
+}
+
 @Composable
 private fun SpotRow(
     e: Spot,
@@ -260,10 +271,7 @@ private fun SpotRow(
                 .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column(Modifier.width(62.dp), horizontalAlignment = Alignment.End) {
-                Text(Fmt.thousands(e.altitude), fontFamily = AppMono, fontWeight = FontWeight.Medium, fontSize = 16.sp, maxLines = 1, softWrap = false)
-                MonoText("m", size = 10.sp)
-            }
+            Altitude(Fmt.thousands(e.altitude), 15.sp)
             VerticalDivider(Modifier.padding(horizontal = 12.dp), color = colors.outlineVariant)
             Column(Modifier.weight(1f)) {
                 Text(e.place.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -315,10 +323,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.searchResults(
                     Modifier.fillMaxWidth().clickable { onSelect(place) }.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Column(Modifier.width(62.dp), horizontalAlignment = Alignment.End) {
-                        Text(place.elevation?.let { Fmt.thousands(it) } ?: "–", fontFamily = AppMono, fontWeight = FontWeight.Medium, fontSize = 15.sp)
-                        MonoText("m", size = 10.sp)
-                    }
+                    Altitude(place.elevation?.let { Fmt.thousands(it) } ?: "–", 14.sp)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(place.name, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
