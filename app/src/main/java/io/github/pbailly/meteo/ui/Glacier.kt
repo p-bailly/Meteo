@@ -342,7 +342,7 @@ fun OutlineChip(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
     }
 }
 
-/** Bandeau d'état (hors ligne, erreur). */
+/** Bandeau d'état (erreur). */
 @Composable
 fun StatusLine(text: String?, modifier: Modifier = Modifier) {
     if (text == null) return
@@ -359,12 +359,8 @@ fun StatusLine(text: String?, modifier: Modifier = Modifier) {
     )
 }
 
-/** Message d'état de la prévision (hors ligne, erreur), ou null. */
-fun statusText(forecast: Remote<*>): String? = when {
-    forecast.stale -> "Hors ligne : prévisions du ${Fmt.clockOfMillis(forecast.fetchedAt)}"
-    forecast.error != null -> forecast.error
-    else -> null
-}
+/** Message d'état de la prévision (une erreur), ou null : hors ligne, la prévision gardée s'affiche sans bandeau. */
+fun statusText(forecast: Remote<*>): String? = forecast.error
 
 /** Espace vertical. */
 @Composable
