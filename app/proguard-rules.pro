@@ -8,3 +8,7 @@
 # (la publication ne garde pas la table de correspondance de R8). Le code inutilisé est toujours retiré.
 -dontobfuscate
 -keepattributes SourceFile,LineNumberTable
+
+# Base de données de WorkManager (Room) : créée par réflexion au démarrage. Sans son constructeur, que R8 retire en
+# mode complet, l'appli plantait avant même de s'afficher (« Failed to create an instance of WorkDatabase »).
+-keep class * extends androidx.room.RoomDatabase { <init>(); }

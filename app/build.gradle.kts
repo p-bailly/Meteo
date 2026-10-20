@@ -74,6 +74,7 @@ dependencies {
     implementation(libs.maplibre.android)
     implementation(libs.jhdf)
     implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.work.runtime)
     debugImplementation(libs.androidx.compose.ui.tooling)
     testImplementation(libs.junit)
 }
