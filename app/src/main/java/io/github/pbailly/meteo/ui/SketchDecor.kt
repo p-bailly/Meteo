@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.rotate
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -284,13 +285,25 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
         val at = { p: Float -> Offset(w * p, y(t.heightAt(p)) + 1f * u) }
         val lit = scene.lit
         val half = layout.half
+        // Le monument du lieu, à la place de l'église d'une petite ville ou d'un village (la grande ville le place
+        // elle-même parmi ses immeubles).
+        val monument = scene.landmark?.takeIf { it.look != Silhouette.OWN && Decor.CITY !in scene.decor }
         val chimney = when {
             Decor.CITY in scene.decor -> city(pencil, at, x, half, w, rnd, lit, scene.landmark, settlementSize(scene))
-            Decor.TOWN in scene.decor -> town(pencil, at, x, half, rnd, lit, settlementSize(scene))
+            Decor.TOWN in scene.decor -> town(pencil, at, x, half, rnd, lit, settlementSize(scene), church = monument == null)
+                .also { monument?.let { m -> silhouette(pencil, m.look, at(x - 0.03f), lit) } }
+            Decor.HAMLET in scene.decor && monument != null -> {
+                silhouette(pencil, monument.look, at(x), lit)
+                null
+            }
             Decor.VILLAGE in scene.decor -> {
                 // Clocher comtois en montagne (et parfois ailleurs), sinon une flèche d'ardoise ; de deux à cinq
                 // maisons autour, selon le nombre d'habitants.
-                if (relief.mountains || rnd.nextFloat() < 0.35f) church(pencil, at(x)) else spireChurch(pencil, at(x), 1f)
+                when {
+                    monument != null -> silhouette(pencil, monument.look, at(x), lit)
+                    relief.mountains || rnd.nextFloat() < 0.35f -> church(pencil, at(x))
+                    else -> spireChurch(pencil, at(x), 1f)
+                }
                 val houses = 2 + (3 * settlementSize(scene)).roundToInt()
                 var smoking: Offset? = null
                 for (k in 0 until houses) {
@@ -376,6 +389,48 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
             if (Surprise.SAILBOAT in scene.surprises) anchors.sail = Offset(w * x, surface + 4f * u)
             if (Surprise.NESSIE in scene.surprises) nessie(pencil, Offset(w * x - 8f * u, surface + 6f * u))
         }
+    }
+    peakNames(pencil, scene, w, h)
+}
+
+/**
+ * Les sommets nommés (OpenStreetMap), écrits au crayon au-dessus de la crête avec un petit trait : deux au plus, les plus
+ * hauts d'abord ; pas dans le brouillard ni quand les nuages coiffent les sommets, pas sur le texte de l'écran, ni
+ * au-dessus des immeubles de la ville.
+ */
+private fun DrawScope.peakNames(pencil: Pencil, scene: SketchScene, w: Float, h: Float) {
+    val t = scene.terrain
+    if (t.labels.isEmpty() || scene.sky == SketchSky.FOG || scene.lowClouds && t.relief.mountains) return
+    val u = density
+    val sh = skyHeight()
+    val size = 9f
+    val layout = layoutOf(scene)
+    val built = layout.settlement?.takeIf { Decor.CITY in scene.decor || Decor.TOWN in scene.decor }
+    // La croix est sur le plus haut point de la crête : le nom passe au-dessus.
+    val crossY = if (Surprise.SUMMIT_CROSS in scene.surprises) ridgeLine(t).filter { it.x in w * 0.36f..w * 0.84f }.minOfOrNull { it.y } else null
+    val placed = mutableListOf<Rect>()
+    for (label in t.labels.sortedByDescending { it.elevation }) {
+        if (placed.size == 2) break
+        val x = label.x
+        if (x !in 0.36f..0.84f || built != null && abs(x - built) < layout.half + 0.03f) continue
+        val peak = Offset(w * x, h * (FOOT - t.heightAt(x)))
+        val lift = if (crossY != null && abs(peak.y - crossY) < 3f * u) 15f else 7f
+        val half = label.name.length * size * 0.26f * u
+        // Centré sur le sommet ; poussé de côté s'il passerait sur le texte de l'écran (le ciel à droite, la
+        // température à gauche).
+        val y = peak.y - lift * u
+        val beside = y - size * u < sh * 0.95f
+        val center = when {
+            beside && peak.x + half > w * 0.60f -> w * 0.60f - half
+            beside && peak.x - half < w * 0.37f -> w * 0.37f + half
+            else -> peak.x
+        }
+        val base = Offset(center, y)
+        val box = Rect(base.x - half, base.y - size * u, base.x + half, base.y + 1f * u)
+        if (box.left < w * 0.30f || box.right > w || box.top < sh * 0.30f || abs(center - peak.x) > half * 1.6f || placed.any { it.overlaps(box) }) continue
+        if (lift < 10f) pencil.line(peak + Offset(0f, -1.5f * u), Offset(peak.x + (center - peak.x) * 0.25f, peak.y - 4.5f * u), width = 0.6f, passes = 1, wobble = 0.1f)
+        pencil.write(label.name, base, size)
+        placed += box
     }
 }
 
@@ -742,7 +797,7 @@ private fun DrawScope.windows(pencil: Pencil, facade: Rect, rows: Int, columns: 
 }
 
 /** Petite ville : l'église et son clocher au milieu, des maisons à étages autour, plus basses vers les bords. */
-private fun DrawScope.town(pencil: Pencil, at: (Float) -> Offset, x: Float, half: Float, rnd: Random, lit: Float, size: Float = 0.5f): Offset? {
+private fun DrawScope.town(pencil: Pencil, at: (Float) -> Offset, x: Float, half: Float, rnd: Random, lit: Float, size: Float = 0.5f, church: Boolean = true): Offset? {
     val u = density
     var chimney: Offset? = null
     // Du bord vers le milieu : les maisons du milieu, plus hautes, passent devant celles des bords. Plus la ville est
@@ -758,7 +813,7 @@ private fun DrawScope.town(pencil: Pencil, at: (Float) -> Offset, x: Float, half
         val p = townHouse(pencil, at(x + half * k), (11f + rnd.nextFloat() * 4f) * u, floors, lit, rnd)
         if (k > 0 && chimney == null) chimney = p
     }
-    spireChurch(pencil, at(x - 0.03f), 1.1f)
+    if (church) spireChurch(pencil, at(x - 0.03f), 1.1f)
     return chimney
 }
 
@@ -793,7 +848,8 @@ private fun DrawScope.city(
         Landmark.BONNE_MERE -> bonneMere(pencil, monumentAt)
         Landmark.JET_D_EAU -> jetDeau(pencil, monumentAt + Offset(6f * u, 0f), 58f * u)
         Landmark.EMPIRE_STATE -> empireState(pencil, monumentAt, 70f * u, lit)
-        else -> Unit
+        null, Landmark.STRASBOURG_CATHEDRAL -> Unit
+        else -> silhouette(pencil, landmark.look, monumentAt, lit)
     }
     // Les plus hauts derrière : on dessine d'abord les tours du centre, puis les plus basses devant.
     val buildings = (0 until n).map { i ->
@@ -2134,4 +2190,313 @@ private fun DrawScope.leaves(pencil: Pencil, w: Float, h: Float, phase: Float, l
         pencil.ink(colors[k % colors.size]).outline(leaf, width = 0.8f, passes = 1)
         pencil.ink(colors[k % colors.size]).hatch(leaf, leaf.getBounds(), spacing = 0.9f, width = 0.5f)
     }
+}
+
+// --- Les silhouettes des villes ---
+
+/** Le monument d'une famille de silhouettes ([Silhouette]), posé sur [ground]. */
+internal fun DrawScope.silhouette(pencil: Pencil, look: Silhouette, ground: Offset, lit: Float) {
+    when (look) {
+        Silhouette.TWO_TOWERS -> cathedral(pencil, ground, spires = false)
+        Silhouette.TWO_SPIRES -> cathedral(pencil, ground, spires = true)
+        Silhouette.CENTRAL_SPIRE -> spiredCathedral(pencil, ground)
+        Silhouette.BELFRY -> belfry(pencil, ground, Crayon.WHEAT, lit)
+        Silhouette.BRICK_BELFRY -> belfry(pencil, ground, Crayon.ROOF, lit)
+        Silhouette.DOME -> domed(pencil, ground)
+        Silhouette.NEEDLE -> needle(pencil, ground, lit)
+        Silhouette.RAMPARTS -> ramparts(pencil, ground)
+        Silhouette.MOUNT -> mount(pencil, ground)
+        Silhouette.CLOCK_TOWER -> clockTower(pencil, ground, lit)
+        Silhouette.LEANING_TOWER -> leaningTower(pencil, ground)
+        Silhouette.SPIRES -> sagrada(pencil, ground)
+        Silhouette.ATOMIUM -> atomium(pencil, ground)
+        Silhouette.OCTAGON -> octagon(pencil, ground)
+        Silhouette.OWN -> Unit
+    }
+}
+
+/** Efface les formes, trace leurs contours et les hachure dans la couleur [stone]. */
+private fun DrawScope.build(pencil: Pencil, shapes: List<Path>, stone: androidx.compose.ui.graphics.Color, spacing: Float = 2.4f) {
+    pencil.erase(shapes.fold(Path()) { p, s -> p.union(s) })
+    val ink = pencil.ink(stone)
+    shapes.forEach {
+        pencil.outline(it, width = 0.9f, passes = 1)
+        ink.hatch(it, it.getBounds(), spacing = spacing, width = 0.5f)
+    }
+}
+
+/** Un toit pointu (flèche) de [left] à [right] sur [base], jusqu'à [top]. */
+private fun spire(left: Float, right: Float, base: Float, top: Float) = polygon(listOf(Offset(left, base), Offset((left + right) / 2, top), Offset(right, base)))
+
+/** Une cathédrale gothique de face : deux tours carrées (ou coiffées de flèches), la rose, les trois portails, la nef. */
+private fun DrawScope.cathedral(pencil: Pencil, ground: Offset, spires: Boolean) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val nave = rect(x + 10f * u, g - 20f * u, x + 32f * u, g)
+    val roof = polygon(listOf(Offset(x + 10f * u, g - 20f * u), Offset(x + 12f * u, g - 27f * u), Offset(x + 32f * u, g - 27f * u), Offset(x + 33f * u, g - 20f * u)))
+    val front = rect(x - 11f * u, g - 27f * u, x + 11f * u, g)
+    val towers = listOf(rect(x - 11f * u, g - 42f * u, x - 4f * u, g - 27f * u), rect(x + 4f * u, g - 42f * u, x + 11f * u, g - 27f * u))
+    val tops = if (spires) listOf(spire(x - 11.5f * u, x - 3.5f * u, g - 42f * u, g - 60f * u), spire(x + 3.5f * u, x + 11.5f * u, g - 42f * u, g - 57f * u)) else emptyList()
+    build(pencil, listOf(nave, front) + towers, Crayon.WHEAT)
+    pencil.erase(roof)
+    pencil.outline(roof, width = 0.8f, passes = 1)
+    pencil.roofInk(Crayon.FAR).hatch(roof, roof.getBounds(), spacing = 1.8f, width = 0.5f)
+    tops.forEach {
+        pencil.erase(it)
+        pencil.outline(it, width = 0.9f, passes = 1)
+        pencil.roofInk(Crayon.FAR).hatch(it, it.getBounds(), spacing = 1.6f, width = 0.5f)
+    }
+    // La rose, les portails, les abat-son des tours, les arcs-boutants de la nef.
+    pencil.outline(oval(Offset(x, g - 18f * u), 3.6f * u, 3.6f * u), width = 0.7f, passes = 1)
+    listOf(-7f, 0f, 7f).forEach { dx ->
+        val r = if (dx == 0f) 2.6f else 2f
+        pencil.stroke(listOf(Offset(x + (dx - r) * u, g), Offset(x + (dx - r) * u, g - 5f * u), Offset(x + dx * u, g - (6f + r) * u), Offset(x + (dx + r) * u, g - 5f * u), Offset(x + (dx + r) * u, g)), width = 0.6f, passes = 1)
+    }
+    listOf(-7.5f, 7.5f).forEach { dx -> pencil.line(Offset(x + dx * u, g - 39f * u), Offset(x + dx * u, g - 31f * u), width = 0.6f, passes = 1) }
+    listOf(17f, 23f, 29f).forEach { dx -> pencil.line(Offset(x + dx * u, g - 20f * u), Offset(x + (dx + 3f) * u, g - 12f * u), width = 0.5f, passes = 1) }
+}
+
+/** Une cathédrale à flèche centrale : la longue nef, deux tours basses en façade, la haute flèche à la croisée. */
+private fun DrawScope.spiredCathedral(pencil: Pencil, ground: Offset) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val nave = rect(x - 20f * u, g - 16f * u, x + 22f * u, g)
+    val roof = polygon(listOf(Offset(x - 20f * u, g - 16f * u), Offset(x - 18f * u, g - 22f * u), Offset(x + 20f * u, g - 22f * u), Offset(x + 22f * u, g - 16f * u)))
+    val front = listOf(rect(x - 24f * u, g - 30f * u, x - 18f * u, g), rect(x - 17f * u, g - 30f * u, x - 11f * u, g))
+    val base = rect(x - 4f * u, g - 32f * u, x + 4f * u, g - 20f * u)
+    val tip = spire(x - 4.5f * u, x + 4.5f * u, g - 32f * u, g - 66f * u)
+    build(pencil, listOf(nave) + front + base, Crayon.WHEAT)
+    listOf(roof, tip).forEach {
+        pencil.erase(it)
+        pencil.outline(it, width = 0.9f, passes = 1)
+        pencil.roofInk(Crayon.FAR).hatch(it, it.getBounds(), spacing = 1.6f, width = 0.5f)
+    }
+    pencil.line(Offset(x, g - 66f * u), Offset(x, g - 71f * u), width = 0.7f, passes = 1)
+    pencil.outline(oval(Offset(x - 14f * u, g - 20f * u), 2.2f * u, 2.2f * u), width = 0.6f, passes = 1)
+    var dx = -8f
+    while (dx < 20f) {
+        pencil.stroke(listOf(Offset(x + dx * u, g - 4f * u), Offset(x + dx * u, g - 10f * u), Offset(x + (dx + 1.2f) * u, g - 12f * u), Offset(x + (dx + 2.4f) * u, g - 10f * u), Offset(x + (dx + 2.4f) * u, g - 4f * u)), width = 0.5f, passes = 1)
+        dx += 6f
+    }
+}
+
+/** Un beffroi : la haute tour carrée de l'hôtel de ville, son horloge, son bulbe et sa flèche. */
+private fun DrawScope.belfry(pencil: Pencil, ground: Offset, stone: androidx.compose.ui.graphics.Color, lit: Float) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val hall = rect(x - 17f * u, g - 12f * u, x + 17f * u, g)
+    val hallRoof = polygon(listOf(Offset(x - 18f * u, g - 12f * u), Offset(x - 13f * u, g - 18f * u), Offset(x + 13f * u, g - 18f * u), Offset(x + 18f * u, g - 12f * u)))
+    val shaft = rect(x - 5f * u, g - 40f * u, x + 5f * u, g - 12f * u)
+    val stage = rect(x - 4f * u, g - 48f * u, x + 4f * u, g - 40f * u)
+    val turrets = listOf(-5f, 5f).map { dx -> spire(x + (dx - 1.2f) * u, x + (dx + 1.2f) * u, g - 40f * u, g - 45f * u) }
+    val bulb = oval(Offset(x, g - 51f * u), 3.2f * u, 3.4f * u)
+    val tip = spire(x - 1.6f * u, x + 1.6f * u, g - 53.5f * u, g - 64f * u)
+    build(pencil, listOf(hall, shaft, stage), stone)
+    (listOf(hallRoof, bulb, tip) + turrets).forEach {
+        pencil.erase(it)
+        pencil.outline(it, width = 0.8f, passes = 1)
+        pencil.roofInk(Crayon.FAR).hatch(it, it.getBounds(), spacing = 1.5f, width = 0.5f)
+    }
+    pencil.ink(Crayon.YELLOW).dot(Offset(x, g - 64.5f * u), 1f)
+    val clock = oval(Offset(x, g - 34f * u), 2.6f * u, 2.6f * u)
+    pencil.erase(clock)
+    pencil.outline(clock, width = 0.7f, passes = 1)
+    if (lit > 0f) pencil.ink(Crayon.YELLOW).hatch(clock, clock.getBounds(), spacing = 0.8f, width = 0.5f)
+    pencil.line(Offset(x, g - 34f * u), Offset(x + 1.4f * u, g - 35f * u), width = 0.5f, passes = 1)
+    listOf(-11f, -7f, 7f, 11f).forEach { dx -> pencil.outline(rect(x + (dx - 1f) * u, g - 9f * u, x + (dx + 1f) * u, g - 5f * u), width = 0.5f, passes = 1) }
+}
+
+/** Une basilique à dôme : la façade à colonnes et fronton, le tambour, la coupole et sa lanterne. */
+private fun DrawScope.domed(pencil: Pencil, ground: Offset) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val front = rect(x - 17f * u, g - 14f * u, x + 17f * u, g)
+    val pediment = polygon(listOf(Offset(x - 8f * u, g - 14f * u), Offset(x, g - 19f * u), Offset(x + 8f * u, g - 14f * u)))
+    val drum = rect(x - 9f * u, g - 26f * u, x + 9f * u, g - 16f * u)
+    val dome = Path().apply { addArc(Rect(x - 10f * u, g - 37f * u, x + 10f * u, g - 15f * u), 180f, 180f); close() }
+    val lantern = rect(x - 1.8f * u, g - 42f * u, x + 1.8f * u, g - 36f * u)
+    build(pencil, listOf(front, pediment, drum, lantern), Crayon.WHEAT)
+    pencil.erase(dome)
+    pencil.outline(dome, width = 1f)
+    pencil.roofInk(Crayon.FAR).hatch(dome, dome.getBounds(), spacing = 1.8f, width = 0.5f)
+    listOf(-6f, -2f, 2f, 6f).forEach { dx -> pencil.stroke((0..6).map { i -> val a = PI + PI * i / 6; Offset(x + (dx * u * sin(-a + PI)).toFloat(), g - 26f * u + (11f * u * sin(a)).toFloat() * (1 - abs(dx) / 12f)) }, width = 0.5f, passes = 1) }
+    var dx = -15f
+    while (dx <= 15f) {
+        pencil.line(Offset(x + dx * u, g - 13f * u), Offset(x + dx * u, g - 1f * u), width = 0.5f, passes = 1)
+        dx += 3.75f
+    }
+    pencil.line(Offset(x, g - 42f * u), Offset(x, g - 47f * u), width = 0.7f, passes = 1)
+    pencil.line(Offset(x - 1.5f * u, g - 45.5f * u), Offset(x + 1.5f * u, g - 45.5f * u), width = 0.6f, passes = 1)
+}
+
+/** Une tour de télévision : le fût fin, la boule et l'antenne (allumée en rouge la nuit). */
+private fun DrawScope.needle(pencil: Pencil, ground: Offset, lit: Float) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val shaft = polygon(listOf(Offset(x - 3f * u, g), Offset(x - 1.4f * u, g - 50f * u), Offset(x + 1.4f * u, g - 50f * u), Offset(x + 3f * u, g)))
+    val ball = oval(Offset(x, g - 54f * u), 5.5f * u, 5.5f * u)
+    val mast = rect(x - 0.8f * u, g - 76f * u, x + 0.8f * u, g - 59f * u)
+    build(pencil, listOf(shaft, mast), Crayon.ROCK, spacing = 1.6f)
+    pencil.erase(ball)
+    pencil.outline(ball, width = 0.9f)
+    pencil.ink(Crayon.FAR).hatch(ball, ball.getBounds(), spacing = 1.4f, width = 0.5f)
+    pencil.line(Offset(x - 5.5f * u, g - 54f * u), Offset(x + 5.5f * u, g - 54f * u), width = 0.5f, passes = 1)
+    if (lit > 0f) repeat(5) { k -> pencil.ink(Crayon.YELLOW).dot(Offset(x - 4f * u + k * 2f * u, g - 52.5f * u), 0.6f) }
+    pencil.ink(Crayon.RED).dot(Offset(x, g - 77f * u), 1f)
+}
+
+/** Une cité fortifiée : la muraille crénelée, ses tours rondes coiffées en poivrière, le donjon au milieu. */
+private fun DrawScope.ramparts(pencil: Pencil, ground: Offset) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val wall = rect(x - 30f * u, g - 10f * u, x + 30f * u, g)
+    val merlons = (0..14).fold(Path()) { p, k -> p.union(rect(x - 30f * u + k * 4f * u, g - 12f * u, x - 28f * u + k * 4f * u, g - 10f * u)) }
+    val keep = rect(x - 3f * u, g - 28f * u, x + 6f * u, g - 10f * u)
+    val towers = listOf(-30f, -11f, 11f, 30f).map { dx -> rect(x + (dx - 3.5f) * u, g - 18f * u, x + (dx + 3.5f) * u, g) }
+    build(pencil, listOf(keep) + listOf(wall) + towers, Crayon.ROCK, spacing = 2.2f)
+    pencil.outline(merlons, width = 0.6f, passes = 1)
+    (listOf(-30f, -11f, 11f, 30f).map { dx -> spire(x + (dx - 4.3f) * u, x + (dx + 4.3f) * u, g - 18f * u, g - 26f * u) } + spire(x - 3.8f * u, x + 6.8f * u, g - 28f * u, g - 36f * u)).forEach {
+        pencil.erase(it)
+        pencil.outline(it, width = 0.8f, passes = 1)
+        pencil.roofInk(Crayon.FAR).hatch(it, it.getBounds(), spacing = 1.5f, width = 0.5f)
+    }
+    pencil.stroke(listOf(Offset(x - 2.5f * u, g), Offset(x - 2.5f * u, g - 4f * u), Offset(x, g - 6.5f * u), Offset(x + 2.5f * u, g - 4f * u), Offset(x + 2.5f * u, g)), width = 0.7f, passes = 1)
+}
+
+/** Le Mont-Saint-Michel : le rocher, les maisons accrochées, l'abbaye et sa flèche, l'archange doré tout en haut. */
+private fun DrawScope.mount(pencil: Pencil, ground: Offset) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val rock = polygon(listOf(Offset(x - 32f * u, g), Offset(x - 18f * u, g - 12f * u), Offset(x - 7f * u, g - 26f * u), Offset(x + 8f * u, g - 27f * u), Offset(x + 20f * u, g - 14f * u), Offset(x + 32f * u, g)))
+    pencil.erase(rock)
+    pencil.outline(rock, width = 1f)
+    pencil.ink(Crayon.ROCK).hatch(rock, rock.getBounds(), spacing = 2.8f, width = 0.5f)
+    val nave = rect(x - 9f * u, g - 36f * u, x + 10f * u, g - 26f * u)
+    val tower = rect(x - 2f * u, g - 46f * u, x + 3f * u, g - 36f * u)
+    val tip = spire(x - 2.5f * u, x + 3.5f * u, g - 46f * u, g - 66f * u)
+    build(pencil, listOf(nave, tower), Crayon.WHEAT, spacing = 2f)
+    pencil.erase(tip)
+    pencil.outline(tip, width = 0.9f, passes = 1)
+    pencil.roofInk(Crayon.FAR).hatch(tip, tip.getBounds(), spacing = 1.4f, width = 0.5f)
+    pencil.ink(Crayon.YELLOW).line(Offset(x + 0.5f * u, g - 66f * u), Offset(x + 0.5f * u, g - 71f * u), width = 1.4f, passes = 1)
+    // Les maisons sur la pente, et les remparts au pied.
+    listOf(-20f to -6f, -14f to -12f, 14f to -8f, 20f to -4f).forEach { (dx, dy) -> house(pencil, Offset(x + dx * u, g + dy * u), 7f * u, chimney = false) }
+    pencil.stroke(listOf(Offset(x - 30f * u, g - 3f * u), Offset(x + 30f * u, g - 3f * u)), width = 0.8f, passes = 1)
+}
+
+/** Big Ben : la tour de l'horloge et sa flèche, le Parlement à côté. */
+private fun DrawScope.clockTower(pencil: Pencil, ground: Offset, lit: Float) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val tower = rect(x - 4f * u, g - 46f * u, x + 4f * u, g)
+    val belfry = rect(x - 3f * u, g - 52f * u, x + 3f * u, g - 46f * u)
+    val parliament = rect(x + 4f * u, g - 16f * u, x + 30f * u, g)
+    val victoria = rect(x + 25f * u, g - 36f * u, x + 32f * u, g)
+    build(pencil, listOf(tower, belfry, parliament, victoria), Crayon.WHEAT, spacing = 2f)
+    val tip = spire(x - 3.5f * u, x + 3.5f * u, g - 52f * u, g - 64f * u)
+    pencil.erase(tip)
+    pencil.outline(tip, width = 0.9f, passes = 1)
+    pencil.roofInk(Crayon.FAR).hatch(tip, tip.getBounds(), spacing = 1.4f, width = 0.5f)
+    val clock = oval(Offset(x, g - 41f * u), 2.8f * u, 2.8f * u)
+    pencil.erase(clock)
+    pencil.outline(clock, width = 0.7f, passes = 1)
+    if (lit > 0f) pencil.ink(Crayon.YELLOW).hatch(clock, clock.getBounds(), spacing = 0.8f, width = 0.5f)
+    pencil.line(Offset(x, g - 41f * u), Offset(x, g - 43f * u), width = 0.5f, passes = 1)
+    var dx = 7f
+    while (dx < 25f) {
+        pencil.line(Offset(x + dx * u, g - 16f * u), Offset(x + dx * u, g - 19f * u), width = 0.6f, passes = 1)
+        dx += 4.5f
+    }
+}
+
+/** La tour de Pise, qui penche, ses étages d'arcades ; le dôme de la cathédrale derrière. */
+private fun DrawScope.leaningTower(pencil: Pencil, ground: Offset) {
+    val u = density
+    domed(pencil, ground + Offset(-24f * u, 0f))
+    val x = ground.x + 6f * u
+    val g = ground.y
+    rotate(degrees = 5f, pivot = Offset(x, g)) {
+        val body = rect(x - 6f * u, g - 44f * u, x + 6f * u, g)
+        val top = rect(x - 4.5f * u, g - 50f * u, x + 4.5f * u, g - 44f * u)
+        build(pencil, listOf(body, top), Crayon.WHEAT, spacing = 2.6f)
+        for (k in 1..6) pencil.line(Offset(x - 6f * u, g - k * 7f * u), Offset(x + 6f * u, g - k * 7f * u), width = 0.5f, passes = 1)
+        for (k in 0..6) {
+            var dx = -4.5f
+            while (dx <= 4.5f) {
+                pencil.line(Offset(x + dx * u, g - k * 7f * u - 1f * u), Offset(x + dx * u, g - k * 7f * u - 5f * u), width = 0.4f, passes = 1, wobble = 0.1f)
+                dx += 3f
+            }
+        }
+    }
+}
+
+/** La Sagrada Família : une forêt de flèches arrondies, et la grue du chantier. */
+private fun DrawScope.sagrada(pencil: Pencil, ground: Offset) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val base = rect(x - 20f * u, g - 16f * u, x + 20f * u, g)
+    val towers = listOf(-16f to 44f, -10f to 52f, -4f to 60f, 4f to 66f, 10f to 54f, 16f to 46f).map { (dx, height) ->
+        Path().apply {
+            moveTo(x + (dx - 2.6f) * u, g - 14f * u)
+            lineTo(x + (dx - 2.2f) * u, g - (height - 10f) * u)
+            quadraticTo(x + dx * u, g - (height + 2f) * u, x + (dx + 2.2f) * u, g - (height - 10f) * u)
+            lineTo(x + (dx + 2.6f) * u, g - 14f * u)
+            close()
+        }
+    }
+    build(pencil, listOf(base) + towers, Crayon.WHEAT, spacing = 1.8f)
+    listOf(-16f to 44f, -10f to 52f, -4f to 60f, 4f to 66f, 10f to 54f, 16f to 46f).forEachIndexed { k, (dx, height) ->
+        pencil.ink(if (k % 2 == 0) Crayon.RED else Crayon.YELLOW).dot(Offset(x + dx * u, g - (height + 1f) * u), 1.1f)
+    }
+    val crane = pencil.ink(Crayon.YELLOW)
+    crane.line(Offset(x + 26f * u, g), Offset(x + 26f * u, g - 70f * u), width = 1f, passes = 1)
+    crane.line(Offset(x + 14f * u, g - 68f * u), Offset(x + 40f * u, g - 68f * u), width = 0.9f, passes = 1)
+}
+
+/** L'Atomium : neuf boules d'acier reliées par des tubes, posées sur trois pieds. */
+private fun DrawScope.atomium(pencil: Pencil, ground: Offset) {
+    val u = density
+    val c = ground + Offset(0f, -34f * u)
+    val d = 12f * u
+    val corners = listOf(Offset(0f, -1.6f), Offset(-1.2f, -0.7f), Offset(1.2f, -0.7f), Offset(0f, -0.2f), Offset(-1.2f, 0.7f), Offset(1.2f, 0.7f), Offset(0f, 1.2f), Offset(0f, 0.4f)).map { c + it * d } + c
+    val links = listOf(0 to 1, 0 to 2, 1 to 4, 2 to 5, 4 to 6, 5 to 6, 0 to 8, 8 to 6, 1 to 8, 2 to 8, 4 to 8, 5 to 8, 3 to 8, 7 to 8)
+    listOf(-1f, 1f, 0f).forEach { side -> pencil.line(corners[6], ground + Offset(side * 10f * u, 0f), width = 0.8f, passes = 1) }
+    links.forEach { (a, b) -> pencil.line(corners[a], corners[b], width = 0.9f, passes = 1, wobble = 0.1f) }
+    corners.forEach { p ->
+        val ball = oval(p, 4f * u, 4f * u)
+        pencil.erase(ball)
+        pencil.outline(ball, width = 0.8f, passes = 1)
+        pencil.ink(Crayon.FAR).hatch(ball, Rect(p.x, p.y - 4f * u, p.x + 4f * u, p.y + 4f * u), spacing = 1.2f, width = 0.5f)
+    }
+}
+
+/** Saint-Sernin de Toulouse : la basilique de brique et son clocher octogonal à étages, coiffé d'une flèche. */
+private fun DrawScope.octagon(pencil: Pencil, ground: Offset) {
+    val u = density
+    val x = ground.x
+    val g = ground.y
+    val nave = rect(x - 26f * u, g - 15f * u, x + 24f * u, g)
+    val tiers = (0 until 5).map { k -> rect(x - (7f - k * 1f) * u, g - (23f + k * 8f) * u, x + (7f - k * 1f) * u, g - (15f + k * 8f) * u) }
+    build(pencil, listOf(nave) + tiers, Crayon.ROOF, spacing = 2f)
+    tiers.forEachIndexed { k, _ ->
+        val y = g - (19f + k * 8f) * u
+        var dx = -(5.5f - k)
+        while (dx <= 5.5f - k) {
+            pencil.stroke(listOf(Offset(x + (dx - 0.8f) * u, y + 2f * u), Offset(x + (dx - 0.8f) * u, y - 1f * u), Offset(x + dx * u, y - 2.2f * u), Offset(x + (dx + 0.8f) * u, y - 1f * u), Offset(x + (dx + 0.8f) * u, y + 2f * u)), width = 0.4f, passes = 1)
+            dx += 2.6f
+        }
+    }
+    val tip = spire(x - 2.5f * u, x + 2.5f * u, g - 55f * u, g - 68f * u)
+    pencil.erase(tip)
+    pencil.outline(tip, width = 0.8f, passes = 1)
+    pencil.roofInk(Crayon.ROOF).hatch(tip, tip.getBounds(), spacing = 1.4f, width = 0.5f)
 }

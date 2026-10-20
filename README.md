@@ -44,6 +44,8 @@ la carte) :
   fenêtres allumées la nuit), petite ville, village (clocher comtois ou à flèche), hameau, ferme isolée, chalet, ou
   refuge au-dessus des arbres. Le relief est en **perspective** (le près s'étale et grandit, le loin se resserre), et une
   **deuxième chaîne**, vue dans une autre direction, se dessine pâle derrière lui (le Massif central depuis Valence).
+  Les sommets nommés d'OpenStreetMap sont **écrits au crayon** au-dessus de la crête (« Mont Vouillot »), deux au plus,
+  jamais sur le texte de l'écran ni dans les nuages.
   Enfin **le temps**, chaque ciel en trois versions et plus ou moins fort selon la
   prévision : le **soleil et la lune à leur vraie place** (à gauche, au milieu ou à droite selon la direction où l'on
   regarde, plus ou moins haut selon l'heure ; la lune couchée ne se dessine pas), la lune dans sa vraie phase et étoiles (ou la Grande Ourse, ou la Voie lactée), éclaircies, ciel
@@ -61,7 +63,11 @@ la carte) :
   jauni par le sable du Sahara ou voilé par la pollution (qualité de l'air d'Open-Meteo) ; des vaches à l'alpage l'été,
   des chamois dans les rochers, des mouettes au bord de la mer ; le télésiège et les pistes d'une station de ski ; la
   tour Eiffel, Fourvière, Notre-Dame de la Garde, la cathédrale de Strasbourg, le jet d'eau de Genève ou l'Empire State
-  Building. Parfois une
+  Building ; et la **silhouette d'une quarantaine de villes**, à la place de l'église d'une petite ville ou d'un
+  village : les cathédrales (Reims, Amiens, Chartres, Rouen, Bourges, Clermont, Cologne…), les beffrois du Nord et de
+  Belgique (Lille, Arras, Douai, Calais, Dunkerque, Bruges ; Albi en brique), Saint-Sernin de Toulouse, les remparts de
+  Carcassonne, d'Avignon et de Saint-Malo, le Mont-Saint-Michel, Big Ben, la tour de Pise, Saint-Pierre de Rome, la
+  Sagrada Família, l'Atomium, les tours de télévision de Berlin et de Toronto. Parfois une
   petite surprise selon le temps ou certains jours de fête — et toucher le dessin en montre une autre version ; un
   **appui long** l'ouvre en grand, en carte postale (« Bons baisers de… », la date, un timbre). La pluie et la neige
   tombent, les nuages glissent, la fumée monte, les éoliennes tournent, le train passe, les bateaux dansent au port, les
