@@ -13,6 +13,8 @@ import io.github.pbailly.meteo.data.PlacesStore
 import io.github.pbailly.meteo.data.SettingsStore
 import io.github.pbailly.meteo.data.Normals
 import io.github.pbailly.meteo.data.ClimateRepository
+import io.github.pbailly.meteo.data.Surroundings
+import io.github.pbailly.meteo.data.SurroundingsRepository
 import io.github.pbailly.meteo.data.Terrain
 import io.github.pbailly.meteo.data.TerrainProfile
 import io.github.pbailly.meteo.data.TerrainRepository
@@ -62,6 +64,8 @@ data class MeteoUiState(
     val hiddenModels: Set<WeatherModel> = emptySet(),
     /** Coupe du relief autour du lieu (vallée → sommets). */
     val terrain: Remote<TerrainProfile> = Remote(),
+    /** Ce qui entoure le lieu (ville ou village, forêt, rivière, lac, mer, île), pour le dessin d'Aujourd'hui. */
+    val surroundings: Remote<Surroundings> = Remote(),
     /** Normales de saison du lieu (1991-2020). */
     val normals: Remote<Normals> = Remote(),
     /** Prévision courte de chaque favori, par identifiant de lieu. */
@@ -78,6 +82,7 @@ data class MeteoUiState(
 class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = WeatherRepository(File(app.cacheDir, "openmeteo"))
     private val terrainRepository = TerrainRepository(File(app.filesDir, "terrain"), repository.httpGet)
+    private val surroundingsRepository = SurroundingsRepository(File(app.filesDir, "terrain"), repository.httpGet)
     private val climateRepository = ClimateRepository(File(app.filesDir, "normals"), repository.httpGet)
     private val store = PlacesStore(app)
     private val settings = SettingsStore(app)
@@ -151,7 +156,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(recents = recents) }
         multiModelJob?.cancel()
         _state.update {
-            it.copy(place = place, forecast = Remote(), multiModel = Remote(), ensemble = Remote(), terrain = Remote(), normals = Remote(), search = SearchState())
+            it.copy(place = place, forecast = Remote(), multiModel = Remote(), ensemble = Remote(), terrain = Remote(), surroundings = Remote(), normals = Remote(), search = SearchState())
         }
         loadForecast(place, force = false)
         // Les modèles servent aussi à la page principale : prévisibilité et fourchettes de pluie.
@@ -164,7 +169,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         val place = _state.value.place ?: return
         loadForecast(place, force = true)
         loadMultiModel(place, force = true)
-        if (_state.value.terrain.data == null) loadTerrain(place)
+        if (_state.value.terrain.data == null || _state.value.surroundings.data == null) loadTerrain(place)
     }
 
     /** Liste des lieux : on rafraîchit la météo des favoris (le cache évite les appels inutiles). */
@@ -287,6 +292,16 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
                 result.fold(
                     onSuccess = { state.copy(terrain = Remote(it, System.currentTimeMillis())) },
                     onFailure = { state.copy(terrain = Remote(error = (it as Exception).userMessage())) },
+                )
+            }
+            // Puis ce qui entoure le lieu, aussi d'OpenStreetMap : après la coupe, pour ne pas charger Overpass deux fois
+            // en même temps. Sans lui, le dessin choisit son décor d'après le seul relief.
+            val around = runLoading { surroundingsRepository.of(place) }
+            _state.update { state ->
+                if (state.place?.id != place.id) return@update state
+                around.fold(
+                    onSuccess = { state.copy(surroundings = Remote(it, System.currentTimeMillis())) },
+                    onFailure = { state.copy(surroundings = Remote(error = (it as Exception).userMessage())) },
                 )
             }
         }

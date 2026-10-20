@@ -24,13 +24,23 @@ la carte) :
 - **Aujourd'hui**, sur un seul écran sans défiler : le lieu, son département et son altitude, l'étoile des favoris
   (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel en toutes
   lettres (sans pictogramme), les extrêmes du jour (maxi en orange, mini en bleu) et leur **écart aux normales** de
-  saison (« +2° vs normales », moyennes 1991-2020) ; en fond, un **dessin aux crayons de couleur** du temps qu'il
-  fait (soleil, lune dans sa vraie phase et étoiles, nuages, pluie, neige, orage ou brouillard) devant **le relief
-  du lieu tel qu'il est** : la coupe du terrain vers le sommet qui le domine (plaine et ses champs, collines,
-  montagnes, haute montagne), avec ses prés et ses forêts, sa roche et sa neige selon la saison, le relief lointain
-  bleuté, et le lac ou la mer quand il y en a ; un village au clocher comtois, un chalet, des sapins ou des arbres
-  selon le jour ; parfois une petite surprise selon le temps ou certains jours de fête — et toucher le dessin en
-  montre une autre version ; de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
+  saison (« +2° vs normales », moyennes 1991-2020) ; en fond, un **dessin aux crayons de couleur** du lieu tel qu'il
+  est, puis du temps qu'il fait. D'abord **où l'on est**, d'après la coupe du terrain vers le sommet qui domine le lieu :
+  en plaine (champs en parcelles selon la saison, haies), en basse montagne (sommets sous 1 200 m : croupes de feuillus,
+  vertes, rousses à l'automne, nues l'hiver), en moyenne montagne (jusqu'à 2 500 m, ou un lieu déjà à 700 m : prés,
+  sapins, alpages), en haute montagne (jusqu'à 3 500 m : forêt, roche, neige), en très haute montagne (aiguilles,
+  glaciers en toute saison) ou **au sommet** (le relief en dessous, la croix au premier plan) ; la limite des arbres et
+  la neige du mois descendent vers le Grand Nord, et les saisons s'inversent dans l'hémisphère sud. Puis **ce qui
+  entoure le lieu**, d'après OpenStreetMap : un lac, la mer, une rivière (et son pont), une île (la mer des deux côtés,
+  parfois un phare), une forêt toute proche ; et le lieu habité : grande ville (immeubles, tour, parfois une grue,
+  fenêtres allumées la nuit), petite ville, village (clocher comtois ou à flèche), hameau, ferme isolée, chalet, ou
+  refuge au-dessus des arbres. Enfin **le temps**, chaque ciel en trois versions et plus ou moins fort selon la
+  prévision : soleil, lune dans sa vraie phase et étoiles (ou la Grande Ourse, ou la Voie lactée), éclaircies, ciel
+  couvert, brouillard (ou brouillard de vallée, mer de nuages vue du sommet), bruine, pluie faible à forte (en traits,
+  chassée par le vent, ou en gouttes et flaques), pluie verglaçante, averses, neige en petits ou gros flocons ou en
+  grains, orage (un ou deux éclairs, ou un cumulonimbus) ; parfois une petite surprise selon le temps ou certains jours
+  de fête — et toucher le dessin en montre une autre version (toutes les combinaisons : `design/dessins/coloriages.pdf`) ;
+  de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
   (avec l'iso 0 °C actuel) qui ouvre la page du même nom ; vent, rafales, humidité, pression (et sa tendance),
   indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
   qui reste (pictogramme, courbe de température, probabilité et barres de pluie).
@@ -119,6 +129,12 @@ Comment l'altitude est calculée :
   −0,65 °C par 100 m. Ressenti en altitude : formule du refroidissement éolien d'Environnement Canada.
 - **Limite pluie-neige** : 300 m sous l'iso 0 °C. **Neige à une altitude** : la pluie prévue sur le lieu, quand
   elle tombe au-dessus de la limite pluie-neige (1 mm d'eau ≈ 1 cm de neige fraîche).
+- **Environs du lieu**, pour le dessin d'Aujourd'hui : une seule requête Overpass (OpenStreetMap), gardée sur le
+  téléphone. Le lieu habité est le plus grand qui couvre le lieu, une ville s'étendant d'autant plus loin de son centre
+  qu'elle est peuplée (Paris sur 8 km, 50 000 habitants sur 2 km, un village sur 700 m) : grande ville à partir de
+  50 000 habitants, petite ville à partir de 2 000, village à partir de 150, sinon hameau. Forêt à moins de 1,5 km,
+  rivière à moins de 1 km, lac à moins de 2 km, côte à moins de 3 km ; île si le lieu est sur une île de moins de 350 km
+  (la Corse, pas la Grande-Bretagne).
 - **Coupe du relief** (aussi pour le dessin d'Aujourd'hui : le modèle de terrain rend les lacs et la mer parfaitement
   plats, ce qui suffit à les reconnaître) : sommets nommés d'OpenStreetMap (API Overpass, sans clé, avec deux serveurs de secours) et
   altitudes du terrain (modèle Copernicus à 90 m, via l'API d'altitude d'Open-Meteo), téléchargées une seule fois

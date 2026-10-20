@@ -1,0 +1,17 @@
+// Outil de bureau, hors de l'appli : dessine le coloriage d'Aujourd'hui pour plein de combinaisons, avec le code même
+// de l'appli (Compose sur Skia au lieu d'Android). Voir README.md.
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        google()
+    }
+}
+
+rootProject.name = "dessins"

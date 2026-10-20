@@ -1,5 +1,7 @@
 package io.github.pbailly.meteo.ui
 
+import io.github.pbailly.meteo.data.Settlement
+import io.github.pbailly.meteo.data.Surroundings
 import io.github.pbailly.meteo.data.TerrainProfile
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.double
@@ -70,16 +72,53 @@ class SketchSceneTest {
     @Test
     fun `relief follows the real terrain`() {
         fun terrain(name: String, month: Int = 10) = SketchTerrains.from(profile(name), month, snowing = false)
-        assertEquals(Relief.HIGH_MOUNTAINS, terrain("chamonix").relief)
-        assertEquals(Relief.MOUNTAINS, terrain("annecy").relief)
-        assertEquals(Relief.MOUNTAINS, terrain("valence").relief)
-        assertEquals(Relief.HILLS, terrain("morteau").relief)
-        assertEquals(Relief.FLAT, terrain("paris").relief)
+        assertEquals(Relief.VERY_HIGH, terrain("chamonix").relief)
+        // Les Préalpes autour d'Annecy (la Tournette, 2 351 m), le Haut-Doubs à 770 m : moyenne montagne.
+        assertEquals(Relief.MEDIUM, terrain("annecy").relief)
+        assertEquals(Relief.MEDIUM, terrain("morteau").relief)
+        // Les collines de Nice, de Tromsø : basse montagne.
+        assertEquals(Relief.LOW, terrain("nice").relief)
+        assertEquals(Relief.LOW, terrain("tromso").relief)
+        // Valence voit le Vercors à 50 km, mais elle est dans la plaine du Rhône.
+        assertEquals(Relief.PLAIN, terrain("valence").relief)
+        assertEquals(Relief.PLAIN, terrain("paris").relief)
         // Le Mont Blanc monte presque en haut du dessin ; Paris reste plat.
         assertTrue(terrain("chamonix").ridge.maxOf { it.second } > 0.25f)
         assertTrue(terrain("paris").ridge.maxOf { it.second } < 0.05f)
         // Sans coupe (pas encore chargée), des collines.
-        assertEquals(Relief.HILLS, SketchTerrains.from(null, 10, snowing = false).relief)
+        assertEquals(Relief.LOW, SketchTerrains.from(null, 10, snowing = false).relief)
+    }
+
+    /** Une coupe inventée : un sommet pointu au lieu même, les vallées 900 m plus bas des deux côtés. */
+    private fun summitProfile(): TerrainProfile {
+        val n = 100
+        val p = 18
+        val e = DoubleArray(n) { k -> 1900.0 - 900.0 * minOf(1.0, kotlin.math.abs(k - p) / 12.0) + if (k > 60) (k - 60) * 20.0 else 0.0 }
+        return TerrainProfile(e, lengthKm = 25.0, placeIndex = p, labels = emptyList(), peaks = emptyList())
+    }
+
+    @Test
+    fun `a place on a summit sees the land below`() {
+        val t = SketchTerrains.from(summitProfile(), 7, snowing = false)
+        assertEquals(Relief.SUMMIT, t.relief)
+        // Le lieu est le haut du dessin, au milieu ; la croix y est toujours.
+        assertTrue(t.heightAt(t.placeX) > 0.2f)
+        assertTrue(t.placeX in 0.42f..0.52f)
+        val days = (0L until 30L).map { LocalDateTime.of(2026, 7, 1, 14, 0).plusDays(it) }
+        assertTrue(days.all { Surprise.SUMMIT_CROSS in SketchScenes.scene(0, true, it, 3, t).surprises })
+    }
+
+    @Test
+    fun `tree line and snow come down towards the poles`() {
+        assertEquals(1900.0, SketchTerrains.treelineAltitude(45.0), 1.0)
+        assertTrue(SketchTerrains.treelineAltitude(69.6) < 500)
+        assertTrue(SketchTerrains.treelineAltitude(42.0) > 2100)
+        // En janvier, la neige descend jusqu'à la mer à Tromsø, pas à Nice.
+        assertTrue(SketchTerrains.from(profile("tromso"), 1, snowing = false, latitude = 69.6).snowline <= 0f)
+        assertTrue(SketchTerrains.from(profile("nice"), 1, snowing = false, latitude = 43.7).snowline > 0f)
+        // L'été austral : janvier au sud est un mois d'été.
+        assertEquals(7, SketchScenes.seasonMonth(1, -33.0))
+        assertEquals(1, SketchScenes.seasonMonth(1, 45.0))
     }
 
     @Test
@@ -119,6 +158,57 @@ class SketchSceneTest {
         assertTrue(days.all { Decor.FIELDS in SketchScenes.scene(0, true, it, 3, paris).decor })
         assertTrue(days.any { Surprise.SAILBOAT in SketchScenes.scene(0, true, it, 3, annecy).surprises })
         assertTrue(days.none { Decor.FIELDS in SketchScenes.scene(0, true, it, 3, annecy).decor })
+    }
+
+    @Test
+    fun `decor follows the real place`() {
+        val time = LocalDateTime.of(2026, 6, 10, 14, 0)
+        val days = (0L until 60L).map { time.plusDays(it) }
+        fun decors(name: String, around: Surroundings, month: Int = 6): List<Set<Decor>> {
+            val t = SketchTerrains.from(profile(name), month, snowing = false, around = around)
+            return days.map { SketchScenes.scene(0, true, it, 3, t, around = around).decor }
+        }
+        // La ville qu'il est vraiment, chaque jour.
+        assertTrue(decors("paris", Surroundings(Settlement.CITY, river = true)).all { Decor.CITY in it && Decor.FIELDS !in it })
+        assertTrue(decors("morteau", Surroundings(Settlement.TOWN, forest = true)).all { Decor.TOWN in it && Decor.FOREST in it })
+        assertTrue(decors("annecy", Surroundings(Settlement.VILLAGE)).all { Decor.VILLAGE in it && Decor.CITY !in it })
+        // En pleine campagne : une ferme et ses champs ; en montagne, un chalet ou une ferme.
+        assertTrue(decors("paris", Surroundings(Settlement.NONE)).all { Decor.FARM in it && Decor.FIELDS in it })
+        assertTrue(decors("chamonix", Surroundings(Settlement.NONE)).all { Decor.CHALET in it })
+        // Au bord de la mer, parfois un phare ; jamais loin de l'eau.
+        assertTrue(decors("nice", Surroundings(Settlement.TOWN, coast = true)).any { Decor.LIGHTHOUSE in it })
+        assertTrue(decors("morteau", Surroundings(Settlement.TOWN)).none { Decor.LIGHTHOUSE in it })
+    }
+
+    @Test
+    fun `water from the surroundings shows in the drawing`() {
+        // Une rivière qui passe à Paris, un lac que la coupe ne traverse pas, la mer d'une île.
+        assertTrue(SketchTerrains.from(profile("paris"), 6, false, around = Surroundings(Settlement.CITY, river = true)).river)
+        assertFalse(SketchTerrains.from(profile("paris"), 6, false, around = Surroundings(Settlement.CITY)).river)
+        val lake = SketchTerrains.from(profile("morteau"), 6, false, around = Surroundings(Settlement.TOWN, lake = true))
+        assertEquals(1, lake.water.size)
+        val run = lake.water.first()
+        assertEquals(lake.heightAt(run.start), lake.heightAt(run.endInclusive), 0.001f)
+        val island = SketchTerrains.from(profile("nice"), 6, false, around = Surroundings(Settlement.TOWN, coast = true, island = true))
+        assertTrue(island.island && island.sea)
+        // La terre s'enfonce dans la mer des deux côtés.
+        assertTrue(island.isWater(0.27f) && island.isWater(0.75f))
+        assertFalse(island.isWater(island.placeX + 0.05f))
+    }
+
+    @Test
+    fun `every sky has its variants and its strength`() {
+        val time = LocalDateTime.of(2026, 10, 20, 15, 0)
+        for (code in listOf(0, 2, 3, 45, 61, 73, 95)) {
+            val variants = (0 until 40).map { SketchScenes.scene(code, true, time, 42, variant = it).skyVariant }.toSet()
+            assertEquals((0 until SketchScenes.SKY_VARIANTS).toSet(), variants)
+        }
+        assertEquals(0, SketchWeather.of(61).intensity)
+        assertEquals(2, SketchWeather.of(65).intensity)
+        assertTrue(SketchWeather.of(53).drizzle)
+        assertTrue(SketchWeather.of(67).freezing)
+        assertTrue(SketchWeather.of(81).showers)
+        assertTrue(SketchWeather.of(77).grains)
     }
 
     @Test
