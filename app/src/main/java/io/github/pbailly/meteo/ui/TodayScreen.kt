@@ -107,9 +107,10 @@ fun TodayScreen(
                     minFill = 250.dp,
                     modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                     top = {
-                        // Le haut de l'écran, avec en fond un dessin au crayon du temps qu'il fait.
+                        // Le haut de l'écran, avec en fond un dessin au crayon du temps qu'il fait (sous la barre d'état,
+                        // pour que ses repères tombent au même endroit du texte sur tous les téléphones).
                         Box {
-                            f.current?.let { WeatherSketch(it.weatherCode, it.isDay, Modifier.matchParentSize()) }
+                            f.current?.let { WeatherSketch(it.weatherCode, it.isDay, it.time, place.latitude, place.id.hashCode(), Modifier.matchParentSize().statusBarsPadding()) }
                             Column {
                                 TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces)
                                 StatusLine(statusText(remote))

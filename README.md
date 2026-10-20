@@ -24,8 +24,10 @@ la carte) :
 - **Aujourd'hui**, sur un seul écran sans défiler : le lieu, son département et son altitude, l'étoile des favoris
   (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel, les
   extrêmes du jour (maxi en orange, mini en bleu) et leur **écart aux normales** de saison (« +2° vs normales »,
-  moyennes 1991-2020) ; en fond, un **dessin au crayon** du temps qu'il fait (soleil, lune et étoiles, nuages, pluie,
-  neige, orage ou brouillard au-dessus des montagnes) ; de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
+  moyennes 1991-2020) ; en fond, un **dessin au crayon** du temps qu'il fait (soleil, lune dans sa vraie phase et
+  étoiles, nuages, pluie, neige, orage ou brouillard), devant un paysage qui change d'un jour à l'autre (montagnes,
+  lac, forêt de sapins ou village au clocher comtois), avec parfois une petite surprise selon le temps ou certains
+  jours de fête — et toucher le dessin en montre une autre version ; de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
   (avec l'iso 0 °C actuel) qui ouvre la page du même nom ; vent, rafales, humidité, pression (et sa tendance),
   indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
   qui reste (pictogramme, courbe de température, probabilité et barres de pluie).
@@ -184,7 +186,8 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 - `ui/` : navigation et barre du bas (`MeteoApp`, `Glacier`), onglets (`TodayScreen`, `DaysScreen`,
   `AltitudeScreen`, `radar/RadarScreen`, `PlacesScreen`), comparaison des lieux (`CompareScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
   (`MeteogramsScreen`, `DaysTab`, `MeteogramTab`, `MultiModelTab`), réglages (`SettingsScreen`), pictogrammes
-  dessinés au trait (`WeatherIcon`), dessin au crayon d'Aujourd'hui (`WeatherSketch`), outils de graphique
+  dessinés au trait (`WeatherIcon`), dessin au crayon d'Aujourd'hui (`WeatherSketch`, son décor et ses surprises dans `SketchScene` et
+  `SketchDecor`), outils de graphique
   (`ChartKit`, dont la jauge de confiance), carte MapLibre
   (`radar/RadarMap`).
 - `widget/` : widgets de l'écran d'accueil avec Jetpack Glance (`NowWidget`, `ForecastWidget`, `HoursWidget`),
