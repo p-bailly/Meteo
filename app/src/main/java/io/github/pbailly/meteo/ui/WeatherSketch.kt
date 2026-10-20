@@ -20,7 +20,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
+import io.github.pbailly.meteo.data.TerrainProfile
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
 import java.time.LocalDateTime
 import kotlin.math.PI
@@ -29,18 +31,31 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * Dessin au crayon du temps qu'il fait, en fond du haut d'Aujourd'hui : un paysage (montagnes, lac, forêt ou village,
- * selon le jour), et selon le ciel le soleil, la lune dans sa vraie phase et des étoiles, des nuages, la pluie, la
- * neige, l'orage ou le brouillard. Parfois une petite surprise, et certains jours de fête une autre. Traits doublés,
- * un peu tremblés, et hachures, en gris graphite très léger pour ne pas gêner la lecture. Toucher le dessin en montre
- * une autre version.
+ * Dessin aux crayons de couleur du temps qu'il fait, en fond du haut d'Aujourd'hui : le relief du lieu tel qu'il est
+ * (plaine, collines, montagnes, lac ou mer, d'après la coupe du terrain), avec ses prés, ses forêts, sa roche et sa
+ * neige selon la saison ; un village, un chalet, des sapins ou des arbres selon le jour ; et selon le ciel le soleil,
+ * la lune dans sa vraie phase et des étoiles, des nuages, la pluie, la neige, l'orage ou le brouillard. Parfois une
+ * petite surprise, et certains jours de fête une autre. Traits doublés, un peu tremblés, et hachures, en couleurs
+ * douces pour ne pas gêner la lecture. Toucher le dessin en montre une autre version.
  */
 @Composable
-fun WeatherSketch(code: Int, isDay: Boolean, time: LocalDateTime, latitude: Double, placeSeed: Int, modifier: Modifier = Modifier) {
+fun WeatherSketch(
+    code: Int,
+    isDay: Boolean,
+    time: LocalDateTime,
+    latitude: Double,
+    placeSeed: Int,
+    terrain: TerrainProfile?,
+    modifier: Modifier = Modifier,
+) {
     val dark = LocalChartColors.current.darkTheme
-    val graphite = if (dark) Color(0xFFE6ECF4).copy(alpha = 0.20f) else Color(0xFF2E3644).copy(alpha = 0.24f)
+    val graphite = if (dark) Color(0xFFE6ECF4).copy(alpha = 0.22f) else Color(0xFF2E3644).copy(alpha = 0.26f)
     val taps = remember(placeSeed, time.toLocalDate()) { mutableIntStateOf(0) }
-    val scene = remember(code, isDay, time, placeSeed, taps.intValue) { SketchScenes.scene(code, isDay, time, placeSeed, taps.intValue) }
+    val snowing = SketchSky.of(code) == SketchSky.SNOW
+    val relief = remember(terrain, time.monthValue, snowing) { SketchTerrains.from(terrain, time.monthValue, snowing) }
+    val scene = remember(code, isDay, time, placeSeed, relief, taps.intValue) {
+        SketchScenes.scene(code, isDay, time, placeSeed, relief, taps.intValue)
+    }
     val moonAge = remember(time) { SketchScenes.moonAge(time) }
     Canvas(
         modifier
@@ -49,17 +64,17 @@ fun WeatherSketch(code: Int, isDay: Boolean, time: LocalDateTime, latitude: Doub
             .pointerInput(taps) { detectTapGestures { taps.intValue++ } },
     ) {
         // Toujours le même dessin pour la même scène : pas de scintillement à chaque recomposition.
-        val pencil = Pencil(this, graphite, Random(scene.seed * 31 + code))
-        drawScene(pencil, scene, isDay, moonAge, southern = latitude < 0)
+        val pencil = Pencil(this, graphite, Random(scene.seed * 31 + code), dark)
+        drawScene(pencil, scene, isDay, moonAge, southern = latitude < 0, month = time.monthValue)
     }
 }
 
-private fun DrawScope.drawScene(pencil: Pencil, scene: SketchScene, isDay: Boolean, moonAge: Double, southern: Boolean) {
+private fun DrawScope.drawScene(pencil: Pencil, scene: SketchScene, isDay: Boolean, moonAge: Double, southern: Boolean, month: Int) {
     val w = size.width
     val h = size.height
     val u = density
     val s = scene.surprises
-    landscape(pencil, scene, w, h)
+    landscape(pencil, scene, w, h, month)
     // Le dessin occupe l'espace libre : entre la grande température (à gauche) et le ciel en toutes lettres (à
     // droite), sous la ligne du lieu et au-dessus du ressenti.
     val celestial = Offset(w * 0.57f, h * 0.47f)
@@ -101,18 +116,50 @@ private fun DrawScope.drawScene(pencil: Pencil, scene: SketchScene, isDay: Boole
     surprises(pencil, scene, w, h)
 }
 
+/** Les crayons de couleur de la boîte (adoucis au trait par [Pencil.ink]). */
+internal object Crayon {
+    val FOREST = Color(0xFF3E8A4C)
+    val MEADOW = Color(0xFF79B04F)
+    val ROCK = Color(0xFF8C7866)
+    val SNOW = Color(0xFF7DA6D6)
+    val FAR = Color(0xFF7F95B8)
+    val WATER = Color(0xFF2F7DCC)
+    val SUN = Color(0xFFF09A1E)
+    val MOON = Color(0xFFD8B23C)
+    val CLOUD = Color(0xFF6C82A3)
+    val RAIN = Color(0xFF2E74CF)
+    val BOLT = Color(0xFFF2B705)
+    val ROOF = Color(0xFFC4532F)
+    val DOME = Color(0xFF2F7D6E)
+    val WOOD = Color(0xFF9A6A3C)
+    val WHEAT = Color(0xFFD9A632)
+    val EARTH = Color(0xFF9C7452)
+    val AUTUMN = Color(0xFFE2862C)
+    val RED = Color(0xFFD9443A)
+    val ORANGE = Color(0xFFEE7F2D)
+    val PINK = Color(0xFFE47FA6)
+    val YELLOW = Color(0xFFF0BE1E)
+    val BLUE = Color(0xFF4F8FDB)
+    val GREEN = Color(0xFF45A257)
+    val VIOLET = Color(0xFF8D6CC9)
+}
+
 /** Trait de crayon : chaque ligne repassée deux fois, avec un léger tremblé. */
-internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random) {
+internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, private val dark: Boolean) {
     val d = scope.density
+
+    /** Le même crayon dans une autre couleur, adoucie pour rester en fond (plus claire en thème sombre). */
+    fun ink(crayon: Color): Pencil =
+        Pencil(scope, if (dark) lerp(crayon, Color.White, 0.12f).copy(alpha = 0.6f) else crayon.copy(alpha = 0.5f), rnd, dark)
 
     fun jitter(amount: Float) = (rnd.nextFloat() * 2 - 1) * amount * d
 
-    fun stroke(points: List<Offset>, width: Float = 1.1f, passes: Int = 2, close: Boolean = false) {
+    fun stroke(points: List<Offset>, width: Float = 1.1f, passes: Int = 2, close: Boolean = false, shake: Float = 0.7f) {
         if (points.size < 2) return
         repeat(passes) { pass ->
             val path = Path()
             points.forEachIndexed { i, p ->
-                val q = Offset(p.x + jitter(0.7f), p.y + jitter(0.7f))
+                val q = Offset(p.x + jitter(shake), p.y + jitter(shake))
                 if (i == 0) path.moveTo(q.x, q.y) else path.lineTo(q.x, q.y)
             }
             if (close) path.close()
@@ -166,13 +213,16 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random) {
 }
 
 internal fun DrawScope.sun(pencil: Pencil, center: Offset, radius: Float, rays: Boolean = true) {
-    pencil.outline(Path().apply { addOval(Rect(center, radius)) })
+    val gold = pencil.ink(Crayon.SUN)
+    val disc = Path().apply { addOval(Rect(center, radius)) }
+    gold.outline(disc, width = 1.4f)
+    gold.hatch(disc, Rect(center, radius), spacing = if (rays) 3.5f else 5f, width = 0.7f)
     if (!rays) return
     for (k in 0 until 12) {
         val a = (k * 30.0 + 8) * PI / 180
         val r0 = radius + 6f * density
         val r1 = radius + (if (k % 2 == 0) 17f else 11f) * density
-        pencil.line(
+        gold.line(
             Offset(center.x + (r0 * cos(a)).toFloat(), center.y + (r0 * sin(a)).toFloat()),
             Offset(center.x + (r1 * cos(a)).toFloat(), center.y + (r1 * sin(a)).toFloat()),
         )
@@ -186,9 +236,11 @@ internal fun DrawScope.sun(pencil: Pencil, center: Offset, radius: Float, rays: 
 private fun DrawScope.moon(pencil: Pencil, center: Offset, radius: Float, age: Double, southern: Boolean) {
     val lit = SketchScenes.moonIllumination(age).toFloat()
     if (lit < 0.03f) return
+    val gold = pencil.ink(Crayon.MOON)
     val disc = Path().apply { addOval(Rect(center, radius)) }
     if (lit > 0.97f) {
-        pencil.outline(disc)
+        gold.outline(disc, width = 1.3f)
+        gold.hatch(disc, Rect(center, radius), spacing = 5f, width = 0.6f)
         listOf(Triple(-0.3f, -0.25f, 0.22f), Triple(0.28f, 0.1f, 0.16f), Triple(-0.05f, 0.42f, 0.12f)).forEach { (x, y, r) ->
             val mare = Path().apply { addOval(Rect(center + Offset(radius * x, radius * y), radius * r)) }
             pencil.hatch(mare, Rect(center, radius), spacing = 1.8f, width = 0.6f)
@@ -200,8 +252,8 @@ private fun DrawScope.moon(pencil: Pencil, center: Offset, radius: Float, age: D
     val shift = 2 * radius * lit * if (litOnRight) -1 else 1
     val shadow = Path().apply { addOval(Rect(center + Offset(shift, -radius * 0.25f * (1 - lit)), radius)) }
     val shape = Path().apply { op(disc, shadow, PathOperation.Difference) }
-    pencil.outline(shape)
-    pencil.hatch(shape, Rect(center, radius), spacing = 4f)
+    gold.outline(shape, width = 1.3f)
+    gold.hatch(shape, Rect(center, radius), spacing = 3f)
 }
 
 private fun DrawScope.night(pencil: Pencil, center: Offset, w: Float, h: Float, moonAge: Double, southern: Boolean) {
@@ -209,11 +261,12 @@ private fun DrawScope.night(pencil: Pencil, center: Offset, w: Float, h: Float, 
     val stars = mutableListOf(0.43f to 0.36f, 0.47f to 0.62f, 0.68f to 0.34f, 0.72f to 0.58f, 0.62f to 0.66f)
     // Sans lune, le ciel est plus étoilé.
     if (SketchScenes.moonIllumination(moonAge) < 0.03) stars += listOf(0.55f to 0.40f, 0.52f to 0.54f, 0.64f to 0.47f)
+    val gold = pencil.ink(Crayon.MOON)
     stars.forEach { (x, y) ->
         val c = Offset(w * x, h * y)
         val r = 4f * density
-        pencil.line(c + Offset(-r, 0f), c + Offset(r, 0f), passes = 1)
-        pencil.line(c + Offset(0f, -r), c + Offset(0f, r), passes = 1)
+        gold.line(c + Offset(-r, 0f), c + Offset(r, 0f), passes = 1, width = 1.2f)
+        gold.line(c + Offset(0f, -r), c + Offset(0f, r), passes = 1, width = 1.2f)
     }
 }
 
@@ -231,15 +284,16 @@ private fun DrawScope.cloud(pencil: Pencil, center: Offset, width: Float, shade:
     val bounds = shape.getBounds()
     // Ombre du dessous du nuage, plus haute et plus serrée quand il est sombre.
     val top = bounds.bottom - bounds.height * (0.35f + 0.25f * shade.coerceAtMost(1.6f))
-    pencil.hatch(shape, Rect(bounds.left, top, bounds.right, bounds.bottom), spacing = (6.5f - 2f * shade).coerceAtLeast(3f))
+    pencil.ink(Crayon.CLOUD).hatch(shape, Rect(bounds.left, top, bounds.right, bounds.bottom), spacing = (6.5f - 2f * shade).coerceAtLeast(3f))
 }
 
 private fun DrawScope.rain(pencil: Pencil, w: Float, h: Float, from: Float = 0.42f, to: Float = 0.66f) {
+    val blue = pencil.ink(Crayon.RAIN)
     val drops = ((to - from) / 0.024f).toInt() + 1
     for (k in 0 until drops) {
         val x = w * (from + 0.024f * k) + pencil.jitter(3f)
         val y = h * (0.62f + if (k % 2 == 0) 0f else 0.07f)
-        pencil.line(Offset(x, y), Offset(x - 5f * density, y + 14f * density), passes = 1)
+        blue.line(Offset(x, y), Offset(x - 5f * density, y + 14f * density), passes = 1, width = 1.2f)
     }
 }
 
@@ -250,16 +304,16 @@ private fun DrawScope.snow(pencil: Pencil, w: Float, h: Float) {
         for (a in listOf(0.0, 60.0, 120.0)) {
             val dx = (r * cos(a * PI / 180)).toFloat()
             val dy = (r * sin(a * PI / 180)).toFloat()
-            pencil.line(c + Offset(-dx, -dy), c + Offset(dx, dy), width = 0.9f, passes = 1, wobble = 0.2f)
+            pencil.ink(Crayon.SNOW).line(c + Offset(-dx, -dy), c + Offset(dx, dy), width = 1.1f, passes = 1, wobble = 0.2f)
         }
     }
 }
 
 private fun DrawScope.lightning(pencil: Pencil, top: Offset, height: Float) {
     val s = height / 4
-    pencil.stroke(
+    pencil.ink(Crayon.BOLT).stroke(
         listOf(top, top + Offset(-s * 0.6f, s * 1.6f), top + Offset(s * 0.1f, s * 1.5f), top + Offset(-s * 0.7f, s * 3.6f)),
-        width = 1.6f,
+        width = 2.2f,
     )
 }
 
@@ -272,15 +326,15 @@ private fun DrawScope.fog(pencil: Pencil, w: Float, h: Float) {
     }
 }
 
-/** Arc-en-ciel : trois arcs concentriques, celui du milieu repassé. */
+/** Arc-en-ciel : rouge, jaune, vert et bleu, de l'extérieur vers l'intérieur. */
 private fun DrawScope.rainbow(pencil: Pencil, center: Offset, radius: Float) {
-    val gap = 4f * density
-    for (k in 0..2) {
+    val gap = 3f * density
+    listOf(Crayon.RED, Crayon.YELLOW, Crayon.GREEN, Crayon.BLUE).forEachIndexed { k, color ->
         val r = radius - k * gap
         val points = (0..24).map { i ->
             val a = PI + PI * i / 24
             Offset(center.x + (r * cos(a)).toFloat(), center.y + (r * sin(a)).toFloat())
         }
-        pencil.stroke(points, width = if (k == 1) 1.4f else 1f, passes = if (k == 1) 2 else 1)
+        pencil.ink(color).stroke(points, width = 2f, passes = 1)
     }
 }

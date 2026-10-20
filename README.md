@@ -22,12 +22,15 @@ Cinq onglets dans la barre du bas, ou en glissant d'une page à l'autre (sauf su
 la carte) :
 
 - **Aujourd'hui**, sur un seul écran sans défiler : le lieu, son département et son altitude, l'étoile des favoris
-  (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel, les
-  extrêmes du jour (maxi en orange, mini en bleu) et leur **écart aux normales** de saison (« +2° vs normales »,
-  moyennes 1991-2020) ; en fond, un **dessin au crayon** du temps qu'il fait (soleil, lune dans sa vraie phase et
-  étoiles, nuages, pluie, neige, orage ou brouillard), devant un paysage qui change d'un jour à l'autre (montagnes,
-  lac, forêt de sapins ou village au clocher comtois), avec parfois une petite surprise selon le temps ou certains
-  jours de fête — et toucher le dessin en montre une autre version ; de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
+  (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel en toutes
+  lettres (sans pictogramme), les extrêmes du jour (maxi en orange, mini en bleu) et leur **écart aux normales** de
+  saison (« +2° vs normales », moyennes 1991-2020) ; en fond, un **dessin aux crayons de couleur** du temps qu'il
+  fait (soleil, lune dans sa vraie phase et étoiles, nuages, pluie, neige, orage ou brouillard) devant **le relief
+  du lieu tel qu'il est** : la coupe du terrain vers le sommet qui le domine (plaine et ses champs, collines,
+  montagnes, haute montagne), avec ses prés et ses forêts, sa roche et sa neige selon la saison, le relief lointain
+  bleuté, et le lac ou la mer quand il y en a ; un village au clocher comtois, un chalet, des sapins ou des arbres
+  selon le jour ; parfois une petite surprise selon le temps ou certains jours de fête — et toucher le dessin en
+  montre une autre version ; de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
   (avec l'iso 0 °C actuel) qui ouvre la page du même nom ; vent, rafales, humidité, pression (et sa tendance),
   indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
   qui reste (pictogramme, courbe de température, probabilité et barres de pluie).
@@ -42,6 +45,9 @@ la carte) :
   - **14 jours**, en grand, à faire glisser du doigt : pictogramme, indice de confiance,
     mini-maxi, cumul de pluie et vent du jour (flèche de la direction dominante et vitesse maximale) ;
   - **Modèles** : comparaison de 8 modèles avec leur moyenne.
+
+  En très grand texte, les graphiques s'agrandissent avec lui (rangées plus hautes, journées plus larges, dates
+  raccourcies si besoin) pour que rien ne se chevauche.
 - **Neige & altitude** (depuis la ligne du même nom dans Aujourd'hui), par jour ou par tranche de 3 heures : une
   coupe du relief de la vallée vers le sommet qui domine le lieu (le Mont Vouillot pour Morteau, le Grand Veymont pour
   Valence) avec la température à chaque altitude, l'iso 0, la limite pluie-neige, les
@@ -113,7 +119,8 @@ Comment l'altitude est calculée :
   −0,65 °C par 100 m. Ressenti en altitude : formule du refroidissement éolien d'Environnement Canada.
 - **Limite pluie-neige** : 300 m sous l'iso 0 °C. **Neige à une altitude** : la pluie prévue sur le lieu, quand
   elle tombe au-dessus de la limite pluie-neige (1 mm d'eau ≈ 1 cm de neige fraîche).
-- **Coupe du relief** : sommets nommés d'OpenStreetMap (API Overpass, sans clé, avec deux serveurs de secours) et
+- **Coupe du relief** (aussi pour le dessin d'Aujourd'hui : le modèle de terrain rend les lacs et la mer parfaitement
+  plats, ce qui suffit à les reconnaître) : sommets nommés d'OpenStreetMap (API Overpass, sans clé, avec deux serveurs de secours) et
   altitudes du terrain (modèle Copernicus à 90 m, via l'API d'altitude d'Open-Meteo), téléchargées une seule fois
   par lieu. La coupe va vers le sommet qui domine le lieu, cherché jusqu'à 60 km : le plus grand dénivelé rapporté à
   la distance plus 10 km (une colline voisine ne passe pas devant une montagne) ; les sommets traversés sont nommés.

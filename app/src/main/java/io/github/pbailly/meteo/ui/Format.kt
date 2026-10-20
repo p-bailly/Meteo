@@ -87,6 +87,9 @@ object Fmt {
 
     fun dayShort(date: LocalDate): String = date.format(dayShort)
 
+    /** « ma 20 » : la date courte quand la place manque (texte agrandi). */
+    fun dayTiny(date: LocalDate): String = dayName(date).take(2) + " " + date.dayOfMonth
+
     fun dayName(date: LocalDate): String = date.format(dayName)
 
     fun dayLong(date: LocalDate): String = date.format(dayLong).replaceFirstChar { it.titlecase(FR) }

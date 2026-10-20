@@ -72,12 +72,13 @@ private class BandBox(val titleTop: Float, val top: Float, val bottom: Float) {
     val height get() = bottom - top
 }
 
-private fun layoutBands(density: Float): Pair<Map<Band, BandBox>, Float> {
+/** Bandes empilées ; [scale] agrandit titres et tracés avec le texte, pour que les graduations restent espacées. */
+private fun layoutBands(density: Float, scale: Float): Pair<Map<Band, BandBox>, Float> {
     var y = 0f
     val boxes = Band.entries.associateWith { band ->
         val titleTop = y
-        val top = y + band.titleHeight * density
-        val bottom = top + band.plotHeight * density
+        val top = y + band.titleHeight * density * scale
+        val bottom = top + band.plotHeight * density * scale
         y = bottom + 4f * density
         BandBox(titleTop, top, bottom)
     }
@@ -104,7 +105,9 @@ fun MeteogramTab(forecast: Forecast, modifier: Modifier = Modifier) {
     val density = LocalDensity.current
     val hourPx = with(density) { HOUR_WIDTH.toPx() }
     val now = remember(forecast) { nowIndex(hourly.time, forecast.utcOffsetSeconds) }
-    val (bands, totalHeightPx) = remember(density.density) { layoutBands(density.density) }
+    val k = textScale()
+    val axisWidth = AXIS_WIDTH * k
+    val (bands, totalHeightPx) = remember(density.density, k) { layoutBands(density.density, k) }
     val totalHeight = with(density) { totalHeightPx.toDp() }
     val scroll = rememberScrollState()
     val measurer = rememberTextMeasurer()
@@ -119,16 +122,16 @@ fun MeteogramTab(forecast: Forecast, modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth()) {
             Row {
-                Spacer(Modifier.width(AXIS_WIDTH))
+                Spacer(Modifier.width(axisWidth))
                 Box(Modifier.horizontalScroll(scroll)) {
                     Canvas(Modifier.size(width = HOUR_WIDTH * hours, height = totalHeight)) {
-                        drawMeteogram(forecast, hours, hourPx, bands, scales, colors, now, measurer, scroll.value.toFloat())
+                        drawMeteogram(forecast, hours, hourPx, bands, scales, colors, now, measurer, scroll.value.toFloat(), k)
                     }
                 }
             }
             // Axes et titres restent fixes pendant le défilement horizontal.
-            Canvas(Modifier.size(width = AXIS_WIDTH + 260.dp, height = totalHeight)) {
-                drawAxes(bands, scales, colors, measurer, AXIS_WIDTH.toPx())
+            Canvas(Modifier.size(width = axisWidth + 260.dp * k, height = totalHeight)) {
+                drawAxes(bands, scales, colors, measurer, axisWidth.toPx(), k)
             }
         }
     }
@@ -174,9 +177,12 @@ private fun DrawScope.drawMeteogram(
     now: Int,
     measurer: TextMeasurer,
     scrollX: Float,
+    /** Agrandissement du texte : marges verticales et pictogrammes suivent. */
+    grow: Float,
 ) {
     val h = forecast.hourly
     val d = density
+    val u = d * grow
     val x = { i: Int -> (i + 0.5f) * hourPx }
 
     // Fond et nuit (heures où is_day = 0) dans chaque tracé, pas sous les titres.
@@ -203,8 +209,8 @@ private fun DrawScope.drawMeteogram(
         ticks.forEach { t -> drawLine(c.grid, Offset(0f, scale.y(t)), Offset(size.width, scale.y(t)), 1f * d) }
     }
     grid(scales.temperatureTicks, bands.getValue(Band.TEMPERATURE))
-    grid(scales.precipitationTicks, bands.getValue(Band.PRECIPITATION), 14f * d)
-    grid(scales.windTicks, bands.getValue(Band.WIND), WIND_TOP * d)
+    grid(scales.precipitationTicks, bands.getValue(Band.PRECIPITATION), 14f * u)
+    grid(scales.windTicks, bands.getValue(Band.WIND), WIND_TOP * u)
     grid(scales.pressureTicks, bands.getValue(Band.PRESSURE))
 
     // Jours : séparateurs, et nom du jour qui reste visible au bord gauche pendant le défilement.
@@ -244,7 +250,7 @@ private fun DrawScope.drawMeteogram(
 
     // Pictogrammes toutes les 6 heures.
     val iconsBox = bands.getValue(Band.ICONS)
-    val iconSize = 22f * d
+    val iconSize = 22f * u
     for (k in 0 until hours) {
         if (!everySixHours(h.time[k])) continue
         drawWeatherIcon(
@@ -264,7 +270,7 @@ private fun DrawScope.drawMeteogram(
 
     // Précipitations : barres horaires (neige en violet) et probabilité toutes les 3 h.
     val pBox = bands.getValue(Band.PRECIPITATION)
-    val pScale = ticksScale(scales.precipitationTicks, pBox, 14f * d)
+    val pScale = ticksScale(scales.precipitationTicks, pBox, 14f * u)
     val gap = 1f * d
     for (k in 0 until hours) {
         val v = h.precipitation[k]
@@ -300,7 +306,7 @@ private fun DrawScope.drawMeteogram(
     // Vent : vitesse (trait plein), rafales (pointillés), et sur la courbe du vent moyen une flèche toutes les
     // 6 heures qui montre où il va, détourée pour rester lisible sur la courbe et les rafales.
     val wBox = bands.getValue(Band.WIND)
-    val wScale = ticksScale(scales.windTicks, wBox, WIND_TOP * d)
+    val wScale = ticksScale(scales.windTicks, wBox, WIND_TOP * u)
     drawSeries(h.windGusts, x, wScale::y, c.wind.copy(alpha = 0.7f), 1.5f * d, dashed = true, range = 0 until hours)
     drawSeries(h.windSpeed, x, wScale::y, c.wind, 2f * d, range = 0 until hours)
     for (k in 0 until hours) {
@@ -323,8 +329,10 @@ private fun DrawScope.drawAxes(
     c: ChartColors,
     measurer: TextMeasurer,
     axisWidth: Float,
+    grow: Float,
 ) {
     val d = density
+    val u = d * grow
     fun axis(ticks: List<Double>, box: BandBox, topPadding: Float = 0f, every: Int = 1) {
         val scale = ticksScale(ticks, box, topPadding)
         ticks.forEachIndexed { index, t ->
@@ -334,8 +342,8 @@ private fun DrawScope.drawAxes(
         }
     }
     axis(scales.temperatureTicks, bands.getValue(Band.TEMPERATURE))
-    axis(scales.precipitationTicks, bands.getValue(Band.PRECIPITATION), 14f * d)
-    axis(scales.windTicks, bands.getValue(Band.WIND), WIND_TOP * d)
+    axis(scales.precipitationTicks, bands.getValue(Band.PRECIPITATION), 14f * u)
+    axis(scales.windTicks, bands.getValue(Band.WIND), WIND_TOP * u)
     axis(scales.pressureTicks, bands.getValue(Band.PRESSURE))
 
     // Titres de bande, avec la légende des séries quand il y en a deux.
@@ -343,7 +351,7 @@ private fun DrawScope.drawAxes(
         val title = band.title ?: return@forEach
         val box = bands.getValue(band)
         // Titre et légende sur la ligne du titre, mesurés dans la police où ils sont dessinés.
-        val start = Offset(axisWidth + 4f * d, box.titleTop + (band.titleHeight + 4f) * d / 2)
+        val start = Offset(axisWidth + 4f * d, (box.titleTop + box.top) / 2 + 2f * d)
         val layout = measurer.measure(title, TextStyle(color = c.ink, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, fontFamily = AppSans))
         drawText(layout, topLeft = Offset(start.x, start.y - layout.size.height / 2))
         val legend = when (band) {

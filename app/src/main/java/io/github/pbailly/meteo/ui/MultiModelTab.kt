@@ -36,13 +36,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.ModelSeries
 import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.WeatherModel
+import io.github.pbailly.meteo.ui.theme.AppMono
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
 import androidx.compose.foundation.background
 import kotlin.math.max
@@ -174,6 +177,8 @@ private fun ModelChart(
     val lo = if (spec.fromZero) 0.0 else (all.minOrNull() ?: 0.0) - 1
     val hi = max((all.maxOrNull() ?: spec.minRange) + if (spec.fromZero) 0.0 else 1.0, lo + spec.minRange)
     val ticks = niceTicks(lo, hi, 4)
+    // Texte agrandi : graphique plus haut, axe plus large et dates raccourcies si elles ne tiennent plus.
+    val k = textScale()
 
     Text(
         spec.title,
@@ -184,24 +189,28 @@ private fun ModelChart(
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(170.dp)
+            .height(170.dp * k)
             .padding(end = 12.dp)
-            .pointerInput(n) {
-                val axis = 34.dp.toPx()
+            .pointerInput(n, k) {
+                val axis = 34.dp.toPx() * k
                 fun indexAt(x: Float) = ((x - axis) / (size.width - axis) * (n - 1)).toInt().coerceIn(0, n - 1)
                 detectTapGestures { onSelect(indexAt(it.x)) }
             }
-            .pointerInput(n) {
-                val axis = 34.dp.toPx()
+            .pointerInput(n, k) {
+                val axis = 34.dp.toPx() * k
                 fun indexAt(x: Float) = ((x - axis) / (size.width - axis) * (n - 1)).toInt().coerceIn(0, n - 1)
                 detectHorizontalDragGestures { change, _ -> onSelect(indexAt(change.position.x)) }
             },
     ) {
         val dp = density
-        val axis = 34f * dp
-        val top = 18f * dp
+        val axis = 34f * dp * k
+        val top = 18f * dp * k
         val bottom = size.height - 2f * dp
         val x = { i: Int -> axis + i * (size.width - axis) / (n - 1) }
+        val dayWidth = 24 * (size.width - axis) / (n - 1)
+        val roomy = mm.time.map { it.toLocalDate() }.distinct().all { day ->
+            measurer.measure(Fmt.dayShort(day), TextStyle(fontSize = 9.sp, fontFamily = AppMono)).size.width < dayWidth - 6f * dp
+        }
         val scale = LinearScale(ticks.first(), ticks.last(), top, bottom)
 
         ticks.forEach { t ->
@@ -212,7 +221,10 @@ private fun ModelChart(
         for (i in 0 until n) {
             val t = mm.time[i]
             if (t.hour == 0 && i > 0) drawLine(colors.axis, Offset(x(i), top), Offset(x(i), bottom), 1f * dp)
-            if (t.hour == 12) drawLabel(measurer, Fmt.dayShort(t.toLocalDate()), Offset(x(i), 0f), colors.secondaryInk, 9f, 0.5f, 0f)
+            if (t.hour == 12) {
+                val day = t.toLocalDate()
+                drawLabel(measurer, if (roomy) Fmt.dayShort(day) else Fmt.dayTiny(day), Offset(x(i), 0f), colors.secondaryInk, 9f, 0.5f, 0f)
+            }
         }
 
         series.forEach { (model, values) ->
@@ -266,10 +278,10 @@ private fun TableRow(color: Color?, name: String, a: String, b: String, c: Strin
     val weight = if (header) FontWeight.SemiBold else null
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(16.dp)) { if (color != null) ColorDot(color) }
-        Text(name, style = MaterialTheme.typography.bodySmall, fontWeight = weight, modifier = Modifier.weight(1f))
-        Text(a, style = MaterialTheme.typography.bodySmall, fontWeight = weight, modifier = Modifier.width(48.dp), textAlign = TextAlign.End)
-        Text(b, style = MaterialTheme.typography.bodySmall, fontWeight = weight, modifier = Modifier.width(64.dp), textAlign = TextAlign.End)
-        Text(c, style = MaterialTheme.typography.bodySmall, fontWeight = weight, modifier = Modifier.width(72.dp), textAlign = TextAlign.End)
+        Text(name, style = MaterialTheme.typography.bodySmall, fontWeight = weight, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        Text(a, style = MaterialTheme.typography.bodySmall, fontWeight = weight, modifier = Modifier.width(36.sp.asWidth()), textAlign = TextAlign.End, maxLines = 1)
+        Text(b, style = MaterialTheme.typography.bodySmall, fontWeight = weight, modifier = Modifier.width(56.sp.asWidth()), textAlign = TextAlign.End, maxLines = 1)
+        Text(c, style = MaterialTheme.typography.bodySmall, fontWeight = weight, modifier = Modifier.width(60.sp.asWidth()), textAlign = TextAlign.End, maxLines = 1)
     }
 }
 
@@ -285,26 +297,29 @@ private fun DailyModelTable(mm: MultiModelForecast, visible: List<WeatherModel>)
         modifier = Modifier.padding(horizontal = 18.dp),
     )
     Spacer(Modifier.height(6.dp))
+    // Largeurs et hauteurs en sp : elles suivent la taille du texte.
+    val header = 20.sp.asWidth()
+    val row = 40.sp.asWidth()
     Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         Column {
-            Text("", style = MaterialTheme.typography.labelSmall, modifier = Modifier.height(20.dp))
+            Text("", style = MaterialTheme.typography.labelSmall, modifier = Modifier.height(header))
             visible.forEach { model ->
-                Row(Modifier.height(40.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.height(row), verticalAlignment = Alignment.CenterVertically) {
                     ColorDot(colors.series[model.ordinal])
                     Spacer(Modifier.width(6.dp))
-                    Text(model.label, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(96.dp))
+                    Text(model.label, style = MaterialTheme.typography.bodySmall, maxLines = 1, modifier = Modifier.width(96.sp.asWidth()))
                 }
             }
         }
         days.forEach { day ->
             val idx = mm.time.indices.filter { mm.time[it].toLocalDate() == day }
-            Column(Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(Fmt.dayShort(day), style = MaterialTheme.typography.labelSmall, modifier = Modifier.height(20.dp))
+            Column(Modifier.width(66.sp.asWidth()), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(Fmt.dayShort(day), style = MaterialTheme.typography.labelSmall, maxLines = 1, modifier = Modifier.height(header))
                 visible.forEach { model ->
                     val s = mm.series.getValue(model)
                     val temps = idx.map { s.temperature[it] }.filter { !it.isNaN() }
                     val rain = idx.map { s.precipitation[it] }.filter { !it.isNaN() }
-                    Column(Modifier.height(40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Column(Modifier.height(row), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         Text(
                             if (temps.isEmpty()) "–" else "${Fmt.temp(temps.max())} / ${Fmt.temp(temps.min())}",
                             style = MaterialTheme.typography.bodySmall,
