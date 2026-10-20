@@ -1,7 +1,6 @@
 package io.github.pbailly.meteo.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AcUnit
 import androidx.compose.material.icons.outlined.WaterDrop
@@ -29,7 +27,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -49,8 +46,8 @@ import io.github.pbailly.meteo.ui.theme.LocalChartColors
 import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.roundToInt
-import io.github.pbailly.meteo.ui.theme.predictabilityColor
 import io.github.pbailly.meteo.data.Predictability
+import io.github.pbailly.meteo.data.EnsembleForecast
 import io.github.pbailly.meteo.data.MultiModelForecast
 import androidx.compose.runtime.LaunchedEffect
 
@@ -69,8 +66,8 @@ private class DayLine(
     val sunshine: Double,
     val altitude: AltitudeDay?,
     val snow: Double,
-    /** Accord des modèles (%), quand la comparaison des modèles est chargée. */
-    val predictability: Int?,
+    /** Indice de confiance de 1 à 5, quand l'ensemble (ou la comparaison des modèles) est chargé. */
+    val confidence: Int?,
 )
 
 /**
@@ -91,8 +88,9 @@ fun DaysScreen(
     val remote = state.forecast
     val terrain = state.terrain.data
     val multiModel = state.multiModel.data
-    val lines = remember(remote.data, terrain, multiModel) {
-        remote.data?.let { dayLines(it, snowReference(it, terrain), multiModel) }.orEmpty()
+    val ensemble = state.ensemble.data
+    val lines = remember(remote.data, terrain, multiModel, ensemble) {
+        remote.data?.let { dayLines(it, snowReference(it, terrain), ensemble, multiModel) }.orEmpty()
     }
     PullToRefreshBox(isRefreshing = remote.loading && remote.data != null, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
         val f = remote.data
@@ -132,7 +130,7 @@ fun DaysScreen(
 private fun snowReference(f: Forecast, terrain: TerrainProfile?): Double =
     Outlook.snowReference(Altitude.ground(f), terrain?.elevations?.maxOrNull())
 
-private fun dayLines(f: Forecast, reference: Double, multiModel: MultiModelForecast?): List<DayLine> {
+private fun dayLines(f: Forecast, reference: Double, ensemble: EnsembleForecast?, multiModel: MultiModelForecast?): List<DayLine> {
     val d = f.daily
     val altitudeDays = Altitude.days(f).associateBy { it.date }
     return (0 until minOf(d.size, 14)).map { i ->
@@ -149,7 +147,7 @@ private fun dayLines(f: Forecast, reference: Double, multiModel: MultiModelForec
             sunshine = d.sunshineDuration[i],
             altitude = alt,
             snow = alt?.let { Altitude.snow(f, it.hours, reference) } ?: 0.0,
-            predictability = multiModel?.let { Predictability.daily(it, d.date[i]) },
+            confidence = Predictability.daily(ensemble, multiModel, d.date[i]),
         )
     }
 }
@@ -214,10 +212,12 @@ private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Doub
                 Detail(icon = { Icon(Icons.Outlined.WbSunny, null, tint = chart.accent, modifier = Modifier.size(13.dp)) }) {
                     MonoText("${sunshineHours(line.sunshine)} h", color = colors.onBackground, size = 11.5.sp)
                 }
-                // Indice de confiance : pastille de couleur (vert = modèles d'accord) et note sur 5.
-                line.predictability?.let { p ->
-                    Detail(icon = { Box(Modifier.size(10.dp).clip(CircleShape).background(predictabilityColor(p))) }) {
-                        MonoText("conf. ${Predictability.confidence(p)}/5", color = colors.onBackground, size = 11.5.sp)
+                // Indice de confiance : jauge à cinq barres et note sur 5.
+                line.confidence?.let { level ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+                        ConfidenceGauge(level)
+                        Spacer(Modifier.width(6.dp))
+                        MonoText("$level/5", color = colors.onBackground, size = 11.5.sp)
                     }
                 }
             }

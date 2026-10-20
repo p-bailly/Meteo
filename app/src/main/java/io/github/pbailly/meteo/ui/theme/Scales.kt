@@ -35,14 +35,6 @@ fun temperatureColor(celsius: Double): Color {
 /** Texte des cases de température. */
 val OnTemperature = Color(0xFF0F2133)
 
-/** Prévisibilité : vert (sûr), jaune, orange, rouge (incertain), comme les barres de Meteoblue. */
-fun predictabilityColor(percent: Int): Color = when {
-    percent >= 70 -> Color(0xFF7CC24A)
-    percent >= 50 -> Color(0xFFE6D445)
-    percent >= 30 -> Color(0xFFEBA83A)
-    else -> Color(0xFFE5483B)
-}
-
 /** Couleurs de l'indice UV (échelle OMS). */
 fun uvColor(index: Double): Color = when {
     index.isNaN() -> Color.White

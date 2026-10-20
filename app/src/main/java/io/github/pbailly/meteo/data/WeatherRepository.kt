@@ -30,6 +30,11 @@ class WeatherRepository(
         }
     }
 
+    suspend fun ensemble(place: Place, force: Boolean): Loaded<EnsembleForecast> =
+        cached("ensemble_${place.id}", OpenMeteoApi.ensembleUrl(place), ENSEMBLE_MAX_AGE_MS, force) {
+            OpenMeteoApi.parseEnsemble(it)
+        }
+
     /** Prévision courte de tous les lieux de la liste, en un seul appel ; dans l'ordre de [places]. */
     suspend fun summaries(places: List<Place>, force: Boolean): Loaded<List<Forecast>> {
         val key = "summary_" + Integer.toHexString(places.joinToString("|") { it.id }.hashCode())
@@ -75,6 +80,8 @@ class WeatherRepository(
     companion object {
         const val FORECAST_MAX_AGE_MS = 30 * 60 * 1000L
         const val MULTI_MODEL_MAX_AGE_MS = 60 * 60 * 1000L
+        /** L'ensemble est recalculé toutes les 6 heures (et pèse plus lourd dans le quota d'Open-Meteo). */
+        const val ENSEMBLE_MAX_AGE_MS = 3 * 60 * 60 * 1000L
     }
 }
 

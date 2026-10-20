@@ -23,6 +23,7 @@ object OpenMeteoApi {
     private const val FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
     private const val GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
     private const val ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
+    private const val ENSEMBLE_URL = "https://ensemble-api.open-meteo.com/v1/ensemble"
 
     /** Niveaux de pression demandés : de 925 hPa (vers 750 m) à 500 hPa (vers 5 500 m, au-dessus du mont Blanc). */
     val PRESSURE_LEVELS = listOf(925, 850, 700, 600, 500)
@@ -243,6 +244,33 @@ object OpenMeteoApi {
      * Avec plusieurs modèles, Open-Meteo suffixe chaque variable par l'identifiant du modèle :
      * `temperature_2m_icon_seamless`, `temperature_2m_gfs_seamless`, etc.
      */
+    /** Ensemble ECMWF (51 scénarios), température et pluie horaires sur 15 jours. */
+    fun ensembleUrl(place: Place): String = buildUrl(
+        ENSEMBLE_URL,
+        "latitude" to coord(place.latitude),
+        "longitude" to coord(place.longitude),
+        "hourly" to "temperature_2m,precipitation",
+        "models" to "ecmwf_ifs025",
+        "forecast_days" to "15",
+        "timezone" to "auto",
+    )
+
+    /** Les scénarios : « temperature_2m » (le contrôle) puis « temperature_2m_member01 », « …02 »… */
+    fun parseEnsemble(body: String): EnsembleForecast {
+        val root = parseRoot(body)
+        val h = root.obj("hourly")
+        val times = h.strings("time").map { LocalDateTime.parse(it) }
+        val n = times.size
+        fun members(variable: String) = h.keys
+            .filter { it == variable || it.startsWith("${variable}_member") }
+            .sorted()
+            .map { h.doubles(it, n) }
+        val temperature = members("temperature_2m")
+        val precipitation = members("precipitation")
+        if (temperature.isEmpty() || temperature.size != precipitation.size) throw OpenMeteoException("Réponse incomplète : scénarios manquants")
+        return EnsembleForecast(times, temperature, precipitation)
+    }
+
     fun parseMultiModel(body: String, models: List<WeatherModel>): MultiModelForecast {
         val root = parseRoot(body)
         val h = root.obj("hourly")

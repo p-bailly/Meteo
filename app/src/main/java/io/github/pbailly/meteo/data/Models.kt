@@ -130,3 +130,14 @@ class MultiModelForecast(
     val utcOffsetSeconds: Int,
     val series: Map<WeatherModel, ModelSeries>,
 )
+
+/**
+ * Prévision d'ensemble du centre européen (ECMWF IFS ENS) : 51 scénarios du même modèle, aux conditions de départ
+ * légèrement différentes. Leur dispersion mesure l'incertitude de la prévision.
+ */
+class EnsembleForecast(
+    val time: List<LocalDateTime>,
+    /** Une série horaire par scénario. */
+    val temperature: List<DoubleArray>,
+    val precipitation: List<DoubleArray>,
+)

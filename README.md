@@ -21,20 +21,22 @@ Cinq onglets dans la barre du bas, ou en glissant d'une page à l'autre (sauf su
 la carte) :
 
 - **Aujourd'hui**, sur un seul écran sans défiler : le lieu, son département et son altitude, l'étoile des favoris
-  (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel et les
-  extrêmes du jour (maxi en orange, mini en bleu) ; de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
+  (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel, les
+  extrêmes du jour (maxi en orange, mini en bleu) et leur **écart aux normales** de saison (« +2° vs normales »,
+  moyennes 1991-2020) ; en fond, un **dessin au crayon** du temps qu'il fait (soleil, lune et étoiles, nuages, pluie,
+  neige, orage ou brouillard au-dessus des montagnes) ; de la mi-octobre à la mi-mars, une ligne **Neige & altitude**
   (avec l'iso 0 °C actuel) qui ouvre la page du même nom ; vent, rafales, humidité, pression (et sa tendance),
   indice UV, coucher et lever du soleil ; et les **48 prochaines heures** à faire défiler, dans toute la hauteur
   qui reste (pictogramme, courbe de température, probabilité et barres de pluie).
 - **Prévisions** (14 jours) : pour chaque jour, le pictogramme, la barre mini-maxi (du bleu à l'orange), et l'un
   sous l'autre la pluie (goutte, mm), le vent maximal (flèche dans la direction où il souffle, km/h, en rouge à
-  partir de 40), l'ensoleillement (soleil, heures) et l'**indice de confiance** sur 5 (pastille de couleur), tiré de
-  l'accord des 8 modèles ; la neige attendue s'il en tombe. Toucher un jour ouvre son **détail heure par heure**.
+  partir de 40), l'ensoleillement (soleil, heures) et l'**indice de confiance** sur 5 (jauge à cinq barres) ; la
+  neige attendue s'il en tombe. Toucher un jour ouvre son **détail heure par heure**.
 - **Météogramme** :
   - **7 jours**, heure par heure : température et ressenti, pluie et sa probabilité, nuages, vent moyen et rafales,
     pression ; sur la courbe du vent moyen, une flèche toutes les 6 heures montre où va le vent ; trait orange :
     maintenant ;
-  - **14 jours**, en grand, à faire glisser du doigt : pictogramme, indice de confiance (accord des modèles),
+  - **14 jours**, en grand, à faire glisser du doigt : pictogramme, indice de confiance,
     mini-maxi, cumul de pluie et vent du jour (flèche de la direction dominante et vitesse maximale) ;
   - **Modèles** : comparaison de 8 modèles avec leur moyenne.
 - **Neige & altitude** (depuis la ligne du même nom dans Aujourd'hui), par jour ou par tranche de 3 heures : une
@@ -71,6 +73,17 @@ Comment la prévision est résumée :
   affichés comme des orages.
 - **En plaine** (aucun relief au-dessus de 1 500 m autour du lieu), la neige est comptée sur le lieu et non à
   2 000 m.
+
+Comment l'indice de confiance et les normales sont calculés :
+
+- **Indice de confiance** (1 à 5) : dispersion des 51 scénarios de la prévision d'ensemble du centre européen
+  (ECMWF ENS, via Open-Meteo, rechargée toutes les 3 heures) ; à défaut, des 8 modèles. Pour chaque jour, moitié
+  température (écart-type des maxima : sûr sous 0,5 °C, incertain à 4 °C), moitié pluie (scénarios d'accord pour
+  « sec » ou « au moins 1 mm », et sur les cumuls s'il pleut) ; 5/5 au-dessus de 80 %, 4/5 de 65 %, 3/5 de 50 %,
+  2/5 de 35 %. La confiance baisse donc naturellement avec l'échéance, quand les scénarios s'écartent.
+- **Normales** : températures maximales et minimales 1991-2020 (réanalyse ERA5 d'Open-Meteo, ramenée à l'altitude
+  du lieu) sur deux semaines autour de la date, une requête par année (30 en tout, téléchargées une fois par lieu et
+  par semaine, pour ménager le quota gratuit d'Open-Meteo). L'écart compare la moyenne du maxi et du mini du jour.
 
 Comment l'altitude est calculée :
 
@@ -137,7 +150,8 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 
 - `data/` : appels Open-Meteo et lecture des réponses (`OpenMeteoApi`), cache (`WeatherRepository`),
   favoris (`PlacesStore`), position (`DeviceLocation`), nouvelles tentatives et messages d'erreur réseau
-  (`Http`), décompression bzip2 (`Bzip2`) ; indice de confiance (`Predictability`) ; météo en altitude, limite pluie-neige et neige (`Altitude`), pictogramme du jour et moment de la pluie
+  (`Http`), décompression bzip2 (`Bzip2`) ; indice de confiance (`Predictability`), normales de saison
+  (`Climate`) ; météo en altitude, limite pluie-neige et neige (`Altitude`), pictogramme du jour et moment de la pluie
   (`Outlook`), coupe du relief (`Terrain`, avec Overpass pour les sommets).
 - `data/maps/` : couches des cartes (`MapLayers`), lecture des fichiers GRIB2 du DWD avec leur compression CCSDS
   (`Grib2`) et relevés des stations (`Observations` : Météo-France, MétéoSuisse, METAR, répartition des pastilles
@@ -149,7 +163,8 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
 - `ui/` : navigation et barre du bas (`MeteoApp`, `Glacier`), onglets (`TodayScreen`, `DaysScreen`,
   `AltitudeScreen`, `radar/RadarScreen`, `PlacesScreen`), comparaison des lieux (`CompareScreen`), détail d'un jour (`DayDetailScreen`), météogrammes
   (`MeteogramsScreen`, `DaysTab`, `MeteogramTab`, `MultiModelTab`), réglages (`SettingsScreen`), pictogrammes
-  dessinés au trait (`WeatherIcon`), outils de graphique (`ChartKit`), carte MapLibre
+  dessinés au trait (`WeatherIcon`), dessin au crayon d'Aujourd'hui (`WeatherSketch`), outils de graphique
+  (`ChartKit`, dont la jauge de confiance), carte MapLibre
   (`radar/RadarMap`).
 - `ui/theme/` : couleurs (`Theme`) et polices Archivo et Martian Mono (`Type`, fichiers dans `res/font/`).
 

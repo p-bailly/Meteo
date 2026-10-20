@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Compress
@@ -47,22 +46,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.Moon
 import io.github.pbailly.meteo.data.Outlook
+import io.github.pbailly.meteo.data.EnsembleForecast
 import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.Predictability
-import io.github.pbailly.meteo.ui.theme.AppMono
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
-import io.github.pbailly.meteo.ui.theme.OnTemperature
-import io.github.pbailly.meteo.ui.theme.predictabilityColor
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import io.github.pbailly.meteo.ui.theme.LocalTextSize
@@ -81,17 +76,19 @@ private class HourLine(
     val windGusts: Double,
     val precipitation: Double,
     val probability: Double,
-    val predictability: Int?,
+    /** Indice de confiance de 1 à 5 (le plus bas des heures regroupées). */
+    val confidence: Int?,
 )
 
 /**
  * Détail d'une journée : choix du jour (ou glisser d'un jour à l'autre, comme sur Meteoblue), résumé et
- * prévisibilité du jour, soleil et Lune, puis la prévision heure par heure (ou par 3 heures).
+ * indice de confiance du jour, soleil et Lune, puis la prévision heure par heure (ou par 3 heures).
  */
 @Composable
 fun DayDetailScreen(
     forecast: Forecast,
     multiModel: MultiModelForecast?,
+    ensemble: EnsembleForecast?,
     place: Place,
     initialDay: Int,
     onBack: () -> Unit,
@@ -107,16 +104,16 @@ fun DayDetailScreen(
             SegmentedToggle(listOf("1 h", "3 h"), if (step == 1) 0 else 1, { step = if (it == 0) 1 else 3 })
         }
         PlaceLine(place.name, place.elevation ?: forecast.elevation)
-        DayChips(forecast, multiModel, pager.currentPage) { scope.launch { pager.animateScrollToPage(it) } }
+        DayChips(forecast, pager.currentPage) { scope.launch { pager.animateScrollToPage(it) } }
         HorizontalPager(pager, Modifier.weight(1f)) { day ->
-            DayPage(forecast, multiModel, place, day, step)
+            DayPage(forecast, multiModel, ensemble, place, day, step)
         }
     }
 }
 
-/** Jours de la prévision ; le point sous le jour a la couleur de sa prévisibilité. */
+/** Jours de la prévision. */
 @Composable
-private fun DayChips(forecast: Forecast, multiModel: MultiModelForecast?, selected: Int, onSelect: (Int) -> Unit) {
+private fun DayChips(forecast: Forecast, selected: Int, onSelect: (Int) -> Unit) {
     val colors = MaterialTheme.colorScheme
     val d = forecast.daily
     val state = rememberLazyListState()
@@ -129,7 +126,6 @@ private fun DayChips(forecast: Forecast, multiModel: MultiModelForecast?, select
     ) {
         itemsIndexed(d.date) { k, date ->
             val active = k == selected
-            val percent = multiModel?.let { Predictability.daily(it, date) }
             Column(
                 Modifier
                     .width(42.dp)
@@ -147,13 +143,6 @@ private fun DayChips(forecast: Forecast, multiModel: MultiModelForecast?, select
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 17.sp,
                 )
-                Box(
-                    Modifier
-                        .padding(top = 3.dp)
-                        .size(6.dp)
-                        .clip(CircleShape)
-                        .background(percent?.let { predictabilityColor(it) } ?: Color.Transparent),
-                )
             }
         }
     }
@@ -163,13 +152,14 @@ private fun DayChips(forecast: Forecast, multiModel: MultiModelForecast?, select
 private fun DayPage(
     forecast: Forecast,
     multiModel: MultiModelForecast?,
+    ensemble: EnsembleForecast?,
     place: Place,
     day: Int,
     step: Int,
 ) {
     val d = forecast.daily
     val date = d.date[day]
-    val lines = remember(forecast, multiModel, day, step) { hourLines(forecast, multiModel, day, step) }
+    val lines = remember(forecast, multiModel, ensemble, day, step) { hourLines(forecast, ensemble, multiModel, day, step) }
     val code = remember(forecast, day) { Outlook.dayCode(forecast, date) }
     val colors = MaterialTheme.colorScheme
     LazyColumn(Modifier.fillMaxSize()) {
@@ -190,7 +180,7 @@ private fun DayPage(
                         size = 11.5.sp,
                     )
                 }
-                PredictabilityBadge(multiModel?.let { Predictability.daily(it, date) }, 46.dp)
+                ConfidenceBadge(Predictability.daily(ensemble, multiModel, date))
             }
         }
         item(key = "almanac") { AlmanacCard(forecast, place, day) }
@@ -208,7 +198,7 @@ private fun DayPage(
                 ColumnLabel("VENT", null, modifier = Modifier.weight(1f))
                 ColumnLabel("PLUIE", RAIN_WIDTH, TextAlign.End)
                 ColumnLabel("PROB.", PROB_WIDTH, TextAlign.End)
-                ColumnLabel("PRÉV.", PRED_WIDTH, TextAlign.End)
+                ColumnLabel("CONF.", PRED_WIDTH, TextAlign.End)
             }
             HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = colors.outlineVariant)
         }
@@ -218,7 +208,7 @@ private fun DayPage(
         }
         item(key = "note") {
             MonoText(
-                "vent : moyen-rafales en km/h · pluie en mm · prévisibilité : accord entre 8 modèles (vert : sûr, rouge : incertain)",
+                "vent : moyen-rafales en km/h · pluie en mm · confiance : accord des 51 scénarios de l'ensemble européen",
                 size = 10.sp,
                 maxLines = 3,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
@@ -241,21 +231,14 @@ private fun ColumnLabel(text: String, width: TextUnit?, align: TextAlign = TextA
     MonoText(text, size = 9.5.sp, align = align, modifier = if (width != null) modifier.width(width.asWidth()) else modifier)
 }
 
-/** Prévisibilité : carré à la couleur du niveau (vert sûr → rouge incertain), avec le pourcentage. */
+/** Indice de confiance du jour : jauge à cinq barres et note sur 5. */
 @Composable
-private fun PredictabilityBadge(percent: Int?, size: Dp) {
-    val colors = MaterialTheme.colorScheme
+private fun ConfidenceBadge(level: Int?) {
+    if (level == null) return
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            Modifier
-                .size(size)
-                .clip(RoundedCornerShape(10.dp))
-                .background(percent?.let { predictabilityColor(it) } ?: colors.surfaceContainer),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(percent?.let { "$it %" } ?: "–", color = OnTemperature, fontFamily = AppMono, fontWeight = FontWeight.Medium, fontSize = 12.sp)
-        }
-        MonoText("PRÉVIS.", size = 9.sp, modifier = Modifier.padding(top = 3.dp))
+        ConfidenceGauge(level, Modifier.size(width = 34.dp, height = 18.dp))
+        MonoText("$level/5", color = MaterialTheme.colorScheme.onBackground, bold = true, size = 12.sp, modifier = Modifier.padding(top = 3.dp))
+        MonoText("CONFIANCE", size = 8.5.sp)
     }
 }
 
@@ -301,7 +284,7 @@ private fun AlmanacTile(icon: androidx.compose.ui.graphics.vector.ImageVector, l
     }
 }
 
-/** Heure, ciel, température, ressenti, vent moyen et rafales, pluie, probabilité et prévisibilité. */
+/** Heure, ciel, température, ressenti, vent moyen et rafales, pluie, probabilité et indice de confiance. */
 @Composable
 private fun HourRow(line: HourLine, feel: Boolean) {
     val colors = MaterialTheme.colorScheme
@@ -340,15 +323,7 @@ private fun HourRow(line: HourLine, feel: Boolean) {
             modifier = Modifier.width(PROB_WIDTH.asWidth()),
         )
         Box(Modifier.width(PRED_WIDTH.asWidth()), contentAlignment = Alignment.CenterEnd) {
-            Box(
-                Modifier
-                    .size(width = 30.dp, height = 22.dp)
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(line.predictability?.let { predictabilityColor(it) } ?: colors.surfaceContainer),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(line.predictability?.toString() ?: "–", color = OnTemperature, fontFamily = AppMono, fontSize = 10.5.sp)
-            }
+            line.confidence?.let { ConfidenceGauge(it, Modifier.size(width = 20.dp, height = 11.dp)) } ?: MonoText("–")
         }
     }
 }
@@ -361,7 +336,7 @@ private fun hourRain(mm: Double): String = when {
 }
 
 /** Lignes du jour : à partir de l'heure en cours pour aujourd'hui ; par heure ou par blocs de 3 heures. */
-private fun hourLines(forecast: Forecast, multiModel: MultiModelForecast?, day: Int, step: Int): List<HourLine> {
+private fun hourLines(forecast: Forecast, ensemble: EnsembleForecast?, multiModel: MultiModelForecast?, day: Int, step: Int): List<HourLine> {
     val h = forecast.hourly
     val date = forecast.daily.date[day]
     val now = nowIndex(h.time, forecast.utcOffsetSeconds)
@@ -382,9 +357,7 @@ private fun hourLines(forecast: Forecast, multiModel: MultiModelForecast?, day: 
             windGusts = block.maxOf { h.windGusts[it].takeIf { v -> !v.isNaN() } ?: 0.0 },
             precipitation = if (rain.isEmpty()) Double.NaN else rain.sum(),
             probability = block.map { h.precipitationProbability[it] }.filter { !it.isNaN() }.maxOrNull() ?: Double.NaN,
-            predictability = multiModel?.let { mm ->
-                block.mapNotNull { Predictability.hourly(mm, h.time[it]) }.minOrNull()
-            },
+            confidence = block.mapNotNull { Predictability.hourly(ensemble, multiModel, h.time[it]) }.minOrNull(),
         )
     }
 }

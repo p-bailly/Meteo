@@ -37,19 +37,28 @@ class MoonAndPredictabilityTest {
     }
 
     @Test
-    fun `models in agreement give a high predictability`() {
+    fun `models in agreement give a high confidence`() {
         val mm = forecast(15.0 to 0.0, 15.3 to 0.0, 14.8 to 0.0, 15.1 to 0.0)
-        val p = Predictability.daily(mm, LocalDate.of(2026, 10, 20))!!
-        assertTrue("prévisibilité $p", p >= 90)
-        assertEquals(4, Predictability.level(p))
+        assertEquals(5, Predictability.daily(null, mm, LocalDate.of(2026, 10, 20)))
     }
 
     @Test
-    fun `models that disagree on rain give a low predictability`() {
+    fun `models that disagree on rain give a low confidence`() {
         val mm = forecast(15.0 to 0.0, 11.0 to 0.5, 17.0 to 0.0, 13.0 to 0.4)
-        val p = Predictability.daily(mm, LocalDate.of(2026, 10, 20))!!
-        assertTrue("prévisibilité $p", p < 35)
-        assertEquals(1, Predictability.level(p))
+        assertEquals(1, Predictability.daily(null, mm, LocalDate.of(2026, 10, 20)))
+    }
+
+    @Test
+    fun `the ensemble is preferred and its spread lowers the confidence`() {
+        val mm = forecast(15.0 to 0.0, 15.3 to 0.0, 14.8 to 0.0, 15.1 to 0.0)
+        val start = LocalDateTime.of(2026, 10, 20, 0, 0)
+        val times = (0 until 24).map { start.plusHours(it.toLong()) }
+        // 51 scénarios secs dont les maxima s'étalent de 11 à 19 °C (écart-type 2,4 °C) : les modèles d'accord
+        // donneraient 5, l'ensemble ne donne que 4.
+        val temps = (0 until 51).map { m -> DoubleArray(24) { h -> 3 + m * 0.16 + 8 * kotlin.math.sin(Math.PI * h / 24) } }
+        val ensemble = EnsembleForecast(times, temps, List(51) { DoubleArray(24) })
+        assertEquals(4, Predictability.daily(ensemble, mm, LocalDate.of(2026, 10, 20)))
+        assertEquals(2, Predictability.level(0.4))
     }
 
     @Test
@@ -64,6 +73,6 @@ class MoonAndPredictabilityTest {
     @Test
     fun `too few models means no predictability`() {
         val mm = forecast(15.0 to 0.0, 15.0 to 0.0)
-        assertEquals(null, Predictability.daily(mm, LocalDate.of(2026, 10, 20)))
+        assertEquals(null, Predictability.daily(null, mm, LocalDate.of(2026, 10, 20)))
     }
 }

@@ -3,85 +3,91 @@ package io.github.pbailly.meteo.data
 import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.math.abs
-import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /** Fourchette de pluie d'une journée selon les modèles (quartiles des cumuls), en mm. */
 data class RainRange(val low: Double, val high: Double)
 
 /**
- * Prévisibilité, de 0 à 100 % : plus les modèles s'accordent, plus la prévision est sûre.
- * On regarde l'écart entre leurs températures et leur accord sur « pluie ou pas pluie »,
- * comme le fait Meteoblue avec son ensemble de modèles.
+ * Indice de confiance, de 1 à 5 comme celui de Météo-France, mesuré par la dispersion des 51 scénarios de l'ensemble
+ * ECMWF ; à défaut (ensemble pas encore chargé), par celle des 8 modèles, qui s'accordent plus souvent qu'ils ne le
+ * devraient. Deux critères à parts égales :
+ * - la température maximale : sûre quand les scénarios s'écartent de moins de 0,5 °C (écart-type), incertaine à 4 °C ;
+ * - la pluie (au moins 1 mm) : sûre quand presque tous disent « sec » ou presque tous « pluie », incertaine quand ils se
+ *   partagent ; s'il pleut, la dispersion des cumuls compte aussi.
  */
 object Predictability {
-    /** Il faut au moins 3 modèles qui couvrent la période pour parler d'accord. */
-    private const val MIN_MODELS = 3
+    /** Il faut au moins 3 scénarios (ou modèles) qui couvrent la période pour parler d'accord. */
+    private const val MIN_MEMBERS = 3
 
-    fun daily(mm: MultiModelForecast, date: LocalDate): Int? {
-        val days = dailyTotals(mm, date)
-        if (days.size < MIN_MODELS) return null
-        val tempScore = (1 - std(days.map { it.first }) / 4.0).coerceIn(0.0, 1.0)
-        val sums = days.map { it.second }
-        val wet = sums.count { it >= 1.0 }.toDouble() / sums.size
-        var rainScore = abs(2 * wet - 1)
-        if (wet > 0.5) {
-            // Tous d'accord pour de la pluie : reste à savoir combien.
-            val rainy = sums.filter { it >= 1.0 }
-            val variation = std(rainy) / rainy.average()
-            rainScore *= 0.5 + 0.5 * (1 - variation).coerceIn(0.0, 1.0)
-        }
-        return (100 * (0.45 * tempScore + 0.55 * rainScore)).roundToInt()
+    fun daily(ensemble: EnsembleForecast?, multiModel: MultiModelForecast?, date: LocalDate): Int? {
+        val members = ensemble?.let { dailyTotals(it.time, it.temperature, it.precipitation, date) }?.takeIf { it.size >= MIN_MEMBERS }
+            ?: multiModel?.let { dailyTotals(it, date) }?.takeIf { it.size >= MIN_MEMBERS }
+            ?: return null
+        return level(score(members.map { it.first }, members.map { it.second }, wetMm = 1.0, sureSpread = 0.5, unsureSpread = 4.0))
     }
 
-    /** Indice de confiance sur 5, comme celui de Météo-France, à partir de l'accord des modèles (en %). */
-    fun confidence(percent: Int): Int = when {
-        percent >= 80 -> 5
-        percent >= 65 -> 4
-        percent >= 50 -> 3
-        percent >= 35 -> 2
+    /** Même indice pour une heure : température et pluie (au moins 0,1 mm) de cette heure. */
+    fun hourly(ensemble: EnsembleForecast?, multiModel: MultiModelForecast?, time: LocalDateTime): Int? {
+        fun at(times: List<LocalDateTime>, temps: List<DoubleArray>, rains: List<DoubleArray>): List<Pair<Double, Double>> {
+            val i = times.indexOf(time)
+            if (i < 0) return emptyList()
+            return temps.indices.mapNotNull { m ->
+                val t = temps[m].getOrElse(i) { Double.NaN }
+                val p = rains[m].getOrElse(i) { Double.NaN }
+                if (t.isNaN() || p.isNaN()) null else t to p
+            }
+        }
+        val members = ensemble?.let { at(it.time, it.temperature, it.precipitation) }?.takeIf { it.size >= MIN_MEMBERS }
+            ?: multiModel?.let { mm -> at(mm.time, mm.series.values.map { it.temperature }, mm.series.values.map { it.precipitation }) }
+                ?.takeIf { it.size >= MIN_MEMBERS }
+            ?: return null
+        return level(score(members.map { it.first }, members.map { it.second }, wetMm = 0.1, sureSpread = 0.3, unsureSpread = 3.0))
+    }
+
+    /** Note sur 5 d'un score d'accord de 0 à 1. */
+    fun level(score: Double): Int = when {
+        score >= 0.8 -> 5
+        score >= 0.65 -> 4
+        score >= 0.5 -> 3
+        score >= 0.35 -> 2
         else -> 1
     }
 
-    fun hourly(mm: MultiModelForecast, time: LocalDateTime): Int? {
-        val i = mm.time.indexOf(time)
-        if (i < 0) return null
-        val values = mm.series.values.mapNotNull { s ->
-            val t = s.temperature.getOrElse(i) { Double.NaN }
-            val p = s.precipitation.getOrElse(i) { Double.NaN }
-            if (t.isNaN() || p.isNaN()) null else t to p
+    /** Accord des scénarios, de 0 à 1 : moitié température, moitié pluie. */
+    internal fun score(temps: List<Double>, rains: List<Double>, wetMm: Double, sureSpread: Double, unsureSpread: Double): Double {
+        val tempScore = (1 - (std(temps) - sureSpread) / (unsureSpread - sureSpread)).coerceIn(0.0, 1.0)
+        val wet = rains.count { it >= wetMm }.toDouble() / rains.size
+        var rainScore = abs(2 * wet - 1)
+        if (wet > 0.5) {
+            // D'accord pour de la pluie : reste à savoir combien.
+            val rainy = rains.filter { it >= wetMm }
+            val variation = std(rainy) / rainy.average()
+            rainScore *= 0.6 + 0.4 * (1 - variation).coerceIn(0.0, 1.0)
         }
-        if (values.size < MIN_MODELS) return null
-        val tempScore = (1 - std(values.map { it.first }) / 3.0).coerceIn(0.0, 1.0)
-        val wet = values.count { it.second >= 0.1 }.toDouble() / values.size
-        val rainScore = abs(2 * wet - 1)
-        return (100 * (0.5 * tempScore + 0.5 * rainScore)).roundToInt()
+        return 0.5 * tempScore + 0.5 * rainScore
     }
 
     /** Cumul de pluie probable (du 1er au 3e quartile des modèles). */
     fun rainRange(mm: MultiModelForecast, date: LocalDate): RainRange? {
         val sums = dailyTotals(mm, date).map { it.second }.sorted()
-        if (sums.size < MIN_MODELS) return null
+        if (sums.size < MIN_MEMBERS) return null
         return RainRange(quantile(sums, 0.25), quantile(sums, 0.75))
     }
 
-    /** Niveau de 1 à 4 pour les pictogrammes de cible. */
-    fun level(percent: Int): Int = when {
-        percent >= 75 -> 4
-        percent >= 55 -> 3
-        percent >= 35 -> 2
-        else -> 1
-    }
-
     /** Pour chaque modèle couvrant la journée : (température maxi, cumul de pluie). */
-    private fun dailyTotals(mm: MultiModelForecast, date: LocalDate): List<Pair<Double, Double>> {
-        val hours = mm.time.indices.filter { mm.time[it].toLocalDate() == date }
+    private fun dailyTotals(mm: MultiModelForecast, date: LocalDate): List<Pair<Double, Double>> =
+        dailyTotals(mm.time, mm.series.values.map { it.temperature }, mm.series.values.map { it.precipitation }, date)
+
+    /** Maximum de température et cumul de pluie du jour, pour chaque scénario ou modèle qui couvre la journée. */
+    private fun dailyTotals(times: List<LocalDateTime>, temps: List<DoubleArray>, rains: List<DoubleArray>, date: LocalDate): List<Pair<Double, Double>> {
+        val hours = times.indices.filter { times[it].toLocalDate() == date }
         if (hours.isEmpty()) return emptyList()
-        return mm.series.values.mapNotNull { s ->
-            val temps = hours.map { s.temperature.getOrElse(it) { Double.NaN } }.filter { !it.isNaN() }
-            val rain = hours.map { s.precipitation.getOrElse(it) { Double.NaN } }.filter { !it.isNaN() }
-            // Un modèle qui s'arrête en cours de journée ne compte pas.
-            if (temps.size < hours.size * 0.9 || rain.size < hours.size * 0.9) null else temps.max() to rain.sum()
+        return temps.indices.mapNotNull { m ->
+            val t = hours.map { temps[m].getOrElse(it) { Double.NaN } }.filter { !it.isNaN() }
+            val r = hours.map { rains[m].getOrElse(it) { Double.NaN } }.filter { !it.isNaN() }
+            // Un scénario qui s'arrête en cours de journée ne compte pas.
+            if (t.size < hours.size * 0.9 || r.size < hours.size * 0.9) null else t.max() to r.sum()
         }
     }
 

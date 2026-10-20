@@ -79,6 +79,18 @@ class OpenMeteoApiTest {
     }
 
     @Test
+    fun `ensemble members are read as separate series`() {
+        val body = """{"hourly":{"time":["2026-10-20T00:00","2026-10-20T01:00"],
+            "temperature_2m":[10.0,11.0],"temperature_2m_member01":[9.5,10.5],"temperature_2m_member02":[10.5,11.5],
+            "precipitation":[0.0,0.2],"precipitation_member01":[0.0,0.0],"precipitation_member02":[0.4,0.6]}}"""
+        val ensemble = OpenMeteoApi.parseEnsemble(body)
+        assertEquals(3, ensemble.temperature.size)
+        assertEquals(3, ensemble.precipitation.size)
+        assertEquals(11.5, ensemble.temperature[2][1], 0.0)
+        assertTrue(OpenMeteoApi.ensembleUrl(Place("Annecy", 45.9, 6.13)).contains("models=ecmwf_ifs025"))
+    }
+
+    @Test
     fun `unknown elevation from the geocoder is dropped`() {
         // Open-Meteo renvoie -9999 quand il ne connaît pas l'altitude (Tromsø).
         val body = """{"results":[{"name":"Tromsø","latitude":69.6489,"longitude":18.95508,"elevation":-9999.0,"admin1":"Troms"}]}"""

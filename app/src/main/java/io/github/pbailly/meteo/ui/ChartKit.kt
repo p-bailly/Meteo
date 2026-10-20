@@ -1,6 +1,13 @@
 package io.github.pbailly.meteo.ui
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -12,6 +19,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.ui.theme.AppMono
 import kotlin.math.ceil
@@ -107,4 +115,31 @@ fun DrawScope.drawWindArrow(center: Offset, directionFrom: Double, length: Float
         drawLine(color, Offset(center.x, center.y - half), Offset(center.x - head, center.y - half + head), width, StrokeCap.Round)
         drawLine(color, Offset(center.x, center.y - half), Offset(center.x + head, center.y - half + head), width, StrokeCap.Round)
     }
+}
+
+/**
+ * Indice de confiance (1 à 5) : cinq barres montantes, pleines jusqu'au niveau, comme le signal d'un téléphone.
+ * Les barres vides restent visibles en [empty].
+ */
+fun DrawScope.drawConfidence(level: Int, topLeft: Offset, size: Size, filled: Color, empty: Color) {
+    val bars = 5
+    val gap = size.width * 0.07f
+    val width = (size.width - gap * (bars - 1)) / bars
+    for (k in 0 until bars) {
+        val height = size.height * (k + 2) / (bars + 1)
+        drawRoundRect(
+            if (k < level) filled else empty,
+            topLeft = Offset(topLeft.x + k * (width + gap), topLeft.y + size.height - height),
+            size = Size(width, height),
+            cornerRadius = CornerRadius(width * 0.35f),
+        )
+    }
+}
+
+/** Jauge de confiance (voir [drawConfidence]). */
+@Composable
+fun ConfidenceGauge(level: Int, modifier: Modifier = Modifier) {
+    val filled = MaterialTheme.colorScheme.primary
+    val empty = MaterialTheme.colorScheme.outlineVariant
+    Canvas(modifier.size(width = 22.dp, height = 12.dp)) { drawConfidence(level, Offset.Zero, size, filled, empty) }
 }

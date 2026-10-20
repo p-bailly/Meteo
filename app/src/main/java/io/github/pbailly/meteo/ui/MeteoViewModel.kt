@@ -4,12 +4,15 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.pbailly.meteo.data.DeviceLocation
+import io.github.pbailly.meteo.data.EnsembleForecast
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.OpenMeteoException
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.PlacesStore
 import io.github.pbailly.meteo.data.SettingsStore
+import io.github.pbailly.meteo.data.Normals
+import io.github.pbailly.meteo.data.ClimateRepository
 import io.github.pbailly.meteo.data.Terrain
 import io.github.pbailly.meteo.data.TerrainProfile
 import io.github.pbailly.meteo.data.TerrainRepository
@@ -49,6 +52,8 @@ data class MeteoUiState(
     val favorites: List<Place> = emptyList(),
     val forecast: Remote<Forecast> = Remote(),
     val multiModel: Remote<MultiModelForecast> = Remote(),
+    /** Ensemble ECMWF (51 scénarios), pour l'indice de confiance. */
+    val ensemble: Remote<EnsembleForecast> = Remote(),
     val search: SearchState = SearchState(),
     val locating: Boolean = false,
     val locationError: String? = null,
@@ -56,6 +61,8 @@ data class MeteoUiState(
     val hiddenModels: Set<WeatherModel> = emptySet(),
     /** Coupe du relief autour du lieu (vallée → sommets). */
     val terrain: Remote<TerrainProfile> = Remote(),
+    /** Normales de saison du lieu (1991-2020). */
+    val normals: Remote<Normals> = Remote(),
     /** Prévision courte de chaque favori, par identifiant de lieu. */
     val summaries: Remote<Map<String, Forecast>> = Remote(),
     /** Lieux consultés, du plus récent au plus ancien (favoris compris). */
@@ -70,6 +77,7 @@ data class MeteoUiState(
 class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = WeatherRepository(File(app.cacheDir, "openmeteo"))
     private val terrainRepository = TerrainRepository(File(app.filesDir, "terrain"), repository.httpGet)
+    private val climateRepository = ClimateRepository(File(app.filesDir, "normals"), repository.httpGet)
     private val store = PlacesStore(app)
     private val settings = SettingsStore(app)
     private val deviceLocation = DeviceLocation(app)
@@ -88,8 +96,10 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
 
     private var forecastJob: Job? = null
     private var multiModelJob: Job? = null
+    private var ensembleJob: Job? = null
     private var searchJob: Job? = null
     private var terrainJob: Job? = null
+    private var normalsJob: Job? = null
     private var summariesJob: Job? = null
 
     init {
@@ -97,6 +107,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
             loadForecast(it, force = false)
             loadMultiModel(it, force = false)
             loadTerrain(it)
+            loadNormals(it)
         }
         loadSummaries(force = false)
         backfillDepartments()
@@ -138,11 +149,14 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         store.saveRecents(recents)
         _state.update { it.copy(recents = recents) }
         multiModelJob?.cancel()
-        _state.update { it.copy(place = place, forecast = Remote(), multiModel = Remote(), terrain = Remote(), search = SearchState()) }
+        _state.update {
+            it.copy(place = place, forecast = Remote(), multiModel = Remote(), ensemble = Remote(), terrain = Remote(), normals = Remote(), search = SearchState())
+        }
         loadForecast(place, force = false)
         // Les modèles servent aussi à la page principale : prévisibilité et fourchettes de pluie.
         loadMultiModel(place, force = false)
         loadTerrain(place)
+        loadNormals(place)
     }
 
     fun refresh() {
@@ -159,7 +173,11 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     fun ensureMultiModel() {
         val place = _state.value.place ?: return
         val multiModel = _state.value.multiModel
-        if (multiModel.data == null && !multiModel.loading) loadMultiModel(place, force = false)
+        if (multiModel.data == null && !multiModel.loading) {
+            loadMultiModel(place, force = false)
+        } else if (_state.value.ensemble.data == null && ensembleJob?.isActive != true) {
+            loadEnsemble(place, force = false)
+        }
     }
 
     fun retryMultiModel() {
@@ -270,6 +288,21 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Normales de saison : téléchargées une fois par lieu ; sans elles, Aujourd'hui n'affiche simplement pas d'écart. */
+    private fun loadNormals(place: Place) {
+        normalsJob?.cancel()
+        normalsJob = viewModelScope.launch {
+            val result = runLoading { climateRepository.normals(place, java.time.LocalDate.now()) }
+            _state.update { state ->
+                if (state.place?.id != place.id) return@update state
+                result.fold(
+                    onSuccess = { state.copy(normals = Remote(it, System.currentTimeMillis())) },
+                    onFailure = { state.copy(normals = Remote(error = (it as Exception).userMessage())) },
+                )
+            }
+        }
+    }
+
     /** Retire un lieu de la liste des lieux consultés. */
     fun forgetRecent(place: Place) {
         val recents = _state.value.recents.filterNot { it.id == place.id }
@@ -301,6 +334,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun loadMultiModel(place: Place, force: Boolean) {
+        loadEnsemble(place, force)
         multiModelJob?.cancel()
         _state.update { it.copy(multiModel = it.multiModel.copy(loading = true, error = null)) }
         multiModelJob = viewModelScope.launch {
@@ -310,6 +344,21 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
                 result.fold(
                     onSuccess = { state.copy(multiModel = Remote(it.value, it.fetchedAt, stale = it.stale)) },
                     onFailure = { state.copy(multiModel = state.multiModel.copy(loading = false, error = (it as Exception).userMessage())) },
+                )
+            }
+        }
+    }
+
+    /** L'ensemble se charge avec la comparaison des modèles ; sans lui, l'indice de confiance se rabat sur les modèles. */
+    private fun loadEnsemble(place: Place, force: Boolean) {
+        ensembleJob?.cancel()
+        ensembleJob = viewModelScope.launch {
+            val result = runLoading { repository.ensemble(place, force) }
+            _state.update { state ->
+                if (state.place?.id != place.id) return@update state
+                result.fold(
+                    onSuccess = { state.copy(ensemble = Remote(it.value, it.fetchedAt, stale = it.stale)) },
+                    onFailure = { state.copy(ensemble = Remote(error = (it as Exception).userMessage())) },
                 )
             }
         }

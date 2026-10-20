@@ -49,7 +49,7 @@ fun MeteogramsScreen(
             Spacer(Modifier.height(12.dp))
             when (tab) {
                 0 -> MeteogramTab(data)
-                1 -> DaysTab(data, state.multiModel.data)
+                1 -> DaysTab(data, state.multiModel.data, state.ensemble.data)
                 else -> MultiModelTab(state.multiModel, state.hiddenModels, onRetry = onRetryMultiModel)
             }
             Spacer(Modifier.height(16.dp))

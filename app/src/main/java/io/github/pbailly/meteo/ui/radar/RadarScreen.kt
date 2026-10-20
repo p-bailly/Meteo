@@ -273,7 +273,8 @@ fun RadarScreen(
                 selected = state.selected,
                 playing = state.playing,
                 header = rainHeader(state.frames.getOrNull(state.selected)),
-                note = state.forecastNote.takeIf { state.frames.getOrNull(state.selected)?.isForecast != true },
+                // Toujours affichée, même sur les images prévues : la frise et la carte ne bougent pas.
+                note = state.forecastNote,
                 label = { clock.format(it.atZone(ZoneId.systemDefault())) },
                 onSelect = onSelect,
                 onTogglePlay = onTogglePlay,
@@ -323,10 +324,13 @@ private fun LayerTabs(selected: MapLayer, onLayer: (MapLayer) -> Unit) {
     }
 }
 
+/** En-tête de la frise : toujours une ligne, pour que la carte ne bouge pas en passant aux prévisions. */
 private fun rainHeader(slot: RadarSlot?): String = when {
     slot == null -> "Radar Météo-France"
-    // Pas de texte pour les prévisions : la frise suffit (on garde la ligne pour que la carte ne bouge pas).
-    slot.isForecast -> ""
+    slot.isForecast -> {
+        val ahead = Duration.between(Instant.now(), slot.time).toMinutes()
+        "Prévision pour ${clock.format(slot.time.atZone(ZoneId.systemDefault()))}" + if (ahead > 0) " · dans $ahead min" else ""
+    }
     else -> {
         val ago = Duration.between(slot.time, Instant.now()).toMinutes()
         "Radar de ${clock.format(slot.time.atZone(ZoneId.systemDefault()))}" +
@@ -457,7 +461,7 @@ private fun Timeline(
     val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().background(colors.surfaceContainerLowest).navigationBarsPadding()) {
         HorizontalDivider(color = colors.outlineVariant)
-        if (!header.isNullOrEmpty()) {
+        if (header != null) {
             Text(
                 header,
                 color = colors.onSurfaceVariant,

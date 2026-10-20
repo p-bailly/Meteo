@@ -107,7 +107,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
                     onBack = { showCompare = false },
                 )
                 forecast != null && openDay >= 0 ->
-                    DayDetailScreen(forecast, state.multiModel.data, place, initialDay = openDay, onBack = { openDay = -1 })
+                    DayDetailScreen(forecast, state.multiModel.data, state.ensemble.data, place, initialDay = openDay, onBack = { openDay = -1 })
                 showAltitude -> AltitudeScreen(state = state, place = place, onRefresh = viewModel::refresh, onBack = { showAltitude = false })
                 else -> HorizontalPager(
                     state = pager,

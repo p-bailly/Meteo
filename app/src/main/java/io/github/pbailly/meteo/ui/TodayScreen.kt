@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Altitude
 import io.github.pbailly.meteo.data.Forecast
+import io.github.pbailly.meteo.data.Normals
 import io.github.pbailly.meteo.data.Outlook
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.ui.theme.AppCondensed
@@ -106,9 +107,15 @@ fun TodayScreen(
                     minFill = 250.dp,
                     modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                     top = {
-                        TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces)
-                        StatusLine(statusText(remote))
-                        NowBlock(f)
+                        // Le haut de l'écran, avec en fond un dessin au crayon du temps qu'il fait.
+                        Box {
+                            f.current?.let { WeatherSketch(it.weatherCode, it.isDay, Modifier.matchParentSize()) }
+                            Column {
+                                TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces)
+                                StatusLine(statusText(remote))
+                                NowBlock(f, state.normals.data)
+                            }
+                        }
                         // Neige & altitude seulement à la saison de la neige.
                         if (snowSeason(f)) AltitudeLink(f, onOpenAltitude)
                         MetricsGrid(f)
@@ -174,7 +181,7 @@ private fun TodayHeader(f: Forecast, place: Place, favorite: Boolean, onToggleFa
 
 /** « 14 °C » en grand, le ciel à droite, le ressenti et les extrêmes du jour. */
 @Composable
-private fun NowBlock(f: Forecast) {
+private fun NowBlock(f: Forecast, normals: Normals?) {
     val c = f.current ?: return
     val today = f.daily.date.indexOf(c.time.toLocalDate()).coerceAtLeast(0)
     val accent = LocalChartColors.current.accent
@@ -197,9 +204,32 @@ private fun NowBlock(f: Forecast) {
         Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(top = 20.dp)) {
             WeatherIcon(c.weatherCode, c.isDay, size = 50.dp)
             Text(weatherDescription(c.weatherCode), fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1)
+            val high = f.daily.temperatureMax.getOrElse(today) { Double.NaN }
+            val low = f.daily.temperatureMin.getOrElse(today) { Double.NaN }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                MonoText(Fmt.temp(f.daily.temperatureMax.getOrElse(today) { Double.NaN }), color = accent, bold = true, size = 13.sp)
-                MonoText(" / " + Fmt.temp(f.daily.temperatureMin.getOrElse(today) { Double.NaN }), color = MaterialTheme.colorScheme.primary, bold = true, size = 13.sp)
+                MonoText(Fmt.temp(high), color = accent, bold = true, size = 13.sp)
+                MonoText(" / " + Fmt.temp(low), color = MaterialTheme.colorScheme.primary, bold = true, size = 13.sp)
+            }
+            // Écart de la journée (moyenne du maxi et du mini) aux normales 1991-2020 de la saison.
+            normals?.on(c.time.toLocalDate())?.let { (normalHigh, normalLow) ->
+                val gap = ((high + low) - (normalHigh + normalLow)) / 2
+                if (!gap.isNaN()) {
+                    val rounded = gap.roundToInt()
+                    MonoText(
+                        when {
+                            rounded > 0 -> "+$rounded° vs normales"
+                            rounded < 0 -> "−${-rounded}° vs normales"
+                            else -> "de saison"
+                        },
+                        color = when {
+                            rounded > 0 -> accent
+                            rounded < 0 -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        size = 11.5.sp,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
         }
     }
