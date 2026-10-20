@@ -126,6 +126,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private var airJob: Job? = null
     private var summariesJob: Job? = null
     private var pickJob: Job? = null
+    private var favoritesJob: Job? = null
 
     init {
         _state.value.place?.let {
@@ -136,6 +137,34 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         }
         loadSummaries(force = false)
         backfillDepartments()
+        prepareFavorites()
+    }
+
+    /**
+     * Le relief et les environs des favoris, préparés en arrière-plan et gardés sur le téléphone : en passant d'un
+     * favori à l'autre, le dessin est tout de suite complet. Un favori à la fois, après le lieu affiché ; ce qui est
+     * déjà gardé n'est pas redemandé (sauf des environs incomplets, ou une coupe sans noms de sommets).
+     */
+    private fun prepareFavorites() {
+        favoritesJob?.cancel()
+        favoritesJob = viewModelScope.launch {
+            // Laisser passer d'abord le lieu affiché.
+            delay(5_000)
+            for (place in _state.value.favorites) {
+                if (place.id == _state.value.place?.id) continue
+                val around = runCatching { surroundingsRepository.cached(place) }.getOrNull()
+                if (around == null) runLoading { surroundingsRepository.quick(place) }
+                if (around == null || around.second) runLoading { surroundingsRepository.full(place) }
+                val terrain = runCatching { terrainRepository.cached(place) }.getOrNull()
+                when {
+                    terrain == null -> {
+                        val quick = runLoading { terrainRepository.quick(place) }.getOrNull()
+                        runLoading { terrainRepository.profile(place, quick) }
+                    }
+                    !terrain.named -> runLoading { terrainRepository.rename(place, terrain) }
+                }
+            }
+        }
     }
 
     /** Les lieux enregistrés avant l'ajout du département le retrouvent par une recherche, une seule fois. */
@@ -216,6 +245,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         store.saveFavorites(updated)
         _state.update { it.copy(favorites = updated) }
         loadSummaries(force = false)
+        prepareFavorites()
     }
 
     fun setTheme(theme: Int) {

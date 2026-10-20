@@ -175,7 +175,8 @@ Comment l'altitude est calculée :
   −0,65 °C par 100 m. Ressenti en altitude : formule du refroidissement éolien d'Environnement Canada.
 - **Limite pluie-neige** : 300 m sous l'iso 0 °C. **Neige à une altitude** : la pluie prévue sur le lieu, quand
   elle tombe au-dessus de la limite pluie-neige (1 mm d'eau ≈ 1 cm de neige fraîche).
-- **Relief et environs du lieu**, pour le dessin d'Aujourd'hui, gardés sur le téléphone. La première fois, le dessin
+- **Relief et environs du lieu**, pour le dessin d'Aujourd'hui, gardés sur le téléphone ; ceux des **favoris** sont
+  préparés en arrière-plan à l'ouverture de l'appli (et dès qu'on ajoute un favori). La première fois, le dessin
   est juste en une seconde : une coupe rapide d'après une grille d'altitudes d'Open-Meteo (100 km de côté, le point qui
   domine le lieu) et la taille de la ville d'après le géocodeur d'Open-Meteo (sa population). OpenStreetMap (Overpass),
   lent (15 à 25 s), complète ensuite, ses deux requêtes en même temps : les sommets nommés, et une requête des environs ;
