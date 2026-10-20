@@ -15,7 +15,12 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -92,7 +97,7 @@ fun WeatherSketch(
                 // Toujours le même trait pour la même scène : pas de scintillement.
                 val still = ImageBitmap(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
                 CanvasDrawScope().draw(this, layoutDirection, Canvas(still), size) {
-                    val pencil = Pencil(this, graphite, Random(scene.seed * 31 + code), dark, strength)
+                    val pencil = Pencil(this, graphite, Random(scene.seed * 31 + code), dark, strength).also { it.write = handwriting }
                     drawScene(pencil, scene, isDay, moonAge, southern = latitude < 0, month = month, part = SketchPart.STILL)
                 }
                 onDrawBehind {
@@ -132,8 +137,19 @@ fun sketchImage(
     val image = ImageBitmap(widthPx.coerceAtLeast(1), heightPx.coerceAtLeast(1))
     val size = Size(image.width.toFloat(), image.height.toFloat())
     CanvasDrawScope().draw(Density(density), LayoutDirection.Ltr, Canvas(image), size) {
-        val pencil = Pencil(this, sketchGraphite(dark, strength), Random(scene.seed * 31 + code), dark, strength)
+        val pencil = Pencil(this, sketchGraphite(dark, strength), Random(scene.seed * 31 + code), dark, strength).also { it.write = handwriting }
         drawScene(pencil, scene, isDay, SketchScenes.moonAge(time), southern = latitude < 0, month = month)
     }
     return image
+}
+
+/** L'écriture à la main du dessin (les noms des sommets) : la police manuscrite d'Android, centrée. */
+private val handwriting: (DrawScope, String, Offset, Color, Float) -> Unit = { scope, text, at, color, size ->
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        this.color = color.toArgb()
+        textSize = size * scope.density
+        typeface = android.graphics.Typeface.create("casual", android.graphics.Typeface.NORMAL)
+        textAlign = android.graphics.Paint.Align.CENTER
+    }
+    scope.drawContext.canvas.nativeCanvas.drawText(text, at.x, at.y, paint)
 }

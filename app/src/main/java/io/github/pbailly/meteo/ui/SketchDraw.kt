@@ -401,6 +401,17 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
     var snowyRoofs = false
 
     /**
+     * L'écriture à la main (noms des sommets), fournie par l'appli : du texte centré sur [at] (sa ligne de base), de
+     * [size] dp ; sans elle, rien n'est écrit.
+     */
+    var write: ((scope: DrawScope, text: String, at: Offset, color: Color, size: Float) -> Unit)? = null
+
+    /** Écrit [text] au crayon, centré au-dessus de [at]. */
+    fun write(text: String, at: Offset, size: Float) {
+        write?.invoke(scope, text, at, color.copy(alpha = (color.alpha * 2.2f).coerceAtMost(0.85f)), size)
+    }
+
+    /**
      * Le même crayon dans une autre couleur, adoucie pour rester en fond (plus claire en thème sombre), plus ou moins
      * appuyée selon le réglage du dessin ([strength]).
      */
@@ -410,7 +421,10 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
         rnd,
         dark,
         strength,
-    ).also { it.snowyRoofs = snowyRoofs }
+    ).also {
+        it.snowyRoofs = snowyRoofs
+        it.write = write
+    }
 
     /** Le crayon d'un toit : sa couleur, ou la neige. */
     fun roofInk(crayon: Color): Pencil = ink(if (snowyRoofs) Crayon.SNOW else crayon)

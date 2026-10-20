@@ -86,14 +86,69 @@ internal enum class Decor {
     GARLANDS, LAMPS,
 }
 
-/** Les monuments de quelques grandes villes, dessinés parmi les immeubles. */
-internal enum class Landmark(val latitude: Double, val longitude: Double, val radiusKm: Double) {
+/**
+ * La silhouette d'un monument : dessiné pour lui seul ([OWN]), ou d'une famille de monuments (cathédrale à deux tours,
+ * à deux flèches, à flèche centrale, beffroi, dôme, tour de télévision, remparts…), dessinée à la manière du lieu.
+ */
+internal enum class Silhouette {
+    OWN, TWO_TOWERS, TWO_SPIRES, CENTRAL_SPIRE, BELFRY, BRICK_BELFRY, DOME, NEEDLE, RAMPARTS, MOUNT, CLOCK_TOWER, LEANING_TOWER,
+    SPIRES, ATOMIUM, OCTAGON,
+}
+
+/**
+ * Les monuments qui font la silhouette d'une ville, vus de loin : dessinés parmi les immeubles d'une grande ville, ou
+ * à la place de l'église d'une petite ville ou d'un village.
+ */
+internal enum class Landmark(val latitude: Double, val longitude: Double, val radiusKm: Double, val look: Silhouette = Silhouette.OWN) {
     EIFFEL_TOWER(48.8584, 2.2945, 12.0),
     FOURVIERE(45.7623, 4.8225, 8.0),
     BONNE_MERE(43.2840, 5.3713, 9.0),
     STRASBOURG_CATHEDRAL(48.5818, 7.7509, 7.0),
     JET_D_EAU(46.2073, 6.1557, 7.0),
-    EMPIRE_STATE(40.7484, -73.9857, 15.0);
+    EMPIRE_STATE(40.7484, -73.9857, 15.0),
+
+    // Les cathédrales.
+    REIMS(49.2536, 4.0341, 8.0, Silhouette.TWO_TOWERS),
+    AMIENS(49.8945, 2.3022, 7.0, Silhouette.TWO_TOWERS),
+    METZ(49.1202, 6.1757, 7.0, Silhouette.CENTRAL_SPIRE),
+    BOURGES(47.0822, 2.3995, 6.0, Silhouette.TWO_TOWERS),
+    ORLEANS(47.9017, 1.9101, 7.0, Silhouette.TWO_TOWERS),
+    NANTES(47.2181, -1.5508, 9.0, Silhouette.TWO_TOWERS),
+    TOURS(47.3956, 0.6926, 7.0, Silhouette.TWO_TOWERS),
+    CHARTRES(48.4477, 1.4878, 6.0, Silhouette.TWO_SPIRES),
+    CLERMONT(45.7788, 3.0860, 8.0, Silhouette.TWO_SPIRES),
+    COLOGNE(50.9413, 6.9583, 10.0, Silhouette.TWO_SPIRES),
+    ROUEN(49.4402, 1.0951, 8.0, Silhouette.CENTRAL_SPIRE),
+    BORDEAUX(44.8358, -0.5730, 10.0, Silhouette.CENTRAL_SPIRE),
+    LOURDES(43.0976, -0.0587, 4.0, Silhouette.CENTRAL_SPIRE),
+    QUIMPER(47.9960, -4.1024, 5.0, Silhouette.TWO_SPIRES),
+
+    // Les beffrois du Nord et de Belgique, la cathédrale de brique d'Albi.
+    LILLE(50.6308, 3.0705, 9.0, Silhouette.BELFRY),
+    ARRAS(50.2913, 2.7774, 5.0, Silhouette.BELFRY),
+    DOUAI(50.3700, 3.0790, 5.0, Silhouette.BELFRY),
+    CALAIS(50.9513, 1.8542, 6.0, Silhouette.BELFRY),
+    DUNKERQUE(51.0343, 2.3768, 7.0, Silhouette.BELFRY),
+    BRUGES(51.2081, 3.2246, 5.0, Silhouette.BELFRY),
+    ALBI(43.9286, 2.1424, 5.0, Silhouette.BRICK_BELFRY),
+    TOULOUSE(43.6085, 1.4420, 10.0, Silhouette.OCTAGON),
+
+    // Les remparts et le Mont.
+    CARCASSONNE(43.2063, 2.3637, 5.0, Silhouette.RAMPARTS),
+    AVIGNON(43.9508, 4.8075, 6.0, Silhouette.RAMPARTS),
+    SAINT_MALO(48.6493, -2.0257, 5.0, Silhouette.RAMPARTS),
+    MONT_SAINT_MICHEL(48.6361, -1.5115, 5.0, Silhouette.MOUNT),
+
+    // Ailleurs en Europe et dans le monde.
+    BRUSSELS(50.8467, 4.3525, 12.0, Silhouette.ATOMIUM),
+    LONDON(51.5007, -0.1246, 15.0, Silhouette.CLOCK_TOWER),
+    PISA(43.7230, 10.3966, 6.0, Silhouette.LEANING_TOWER),
+    ROME(41.9022, 12.4539, 15.0, Silhouette.DOME),
+    FLORENCE(43.7731, 11.2560, 7.0, Silhouette.DOME),
+    BARCELONA(41.4036, 2.1744, 12.0, Silhouette.SPIRES),
+    BERLIN(52.5208, 13.4094, 15.0, Silhouette.NEEDLE),
+    TORONTO(43.6426, -79.3871, 15.0, Silhouette.NEEDLE),
+    ;
 
     companion object {
         fun near(latitude: Double, longitude: Double): Landmark? = entries.firstOrNull {
@@ -133,6 +188,9 @@ data class SketchConditions(
     /** Décalage de l'heure du lieu sur le temps universel, en secondes. */
     val utcOffsetSeconds: Int? = null,
 )
+
+/** Un sommet nommé, à l'abscisse [x] de la crête : « Mont Vouillot », 1 145 m. */
+internal class PeakName(val x: Float, val name: String, val elevation: Double)
 
 /** Petites surprises du dessin : certaines selon le temps, d'autres seulement certains jours. */
 internal enum class Surprise {
@@ -183,6 +241,8 @@ internal class SketchTerrain(
     val bearing: Double = 90.0,
     /** Une autre chaîne, au loin, derrière le relief : (x, hauteur) comme [ridge], vide s'il n'y en a pas. */
     val backdrop: List<Pair<Float, Float>> = emptyList(),
+    /** Les sommets nommés de la coupe (OpenStreetMap), à écrire au crayon au-dessus de la crête. */
+    val labels: List<PeakName> = emptyList(),
 ) {
     /** La direction où l'on regarde (le fond du dessin), en degrés depuis le nord. */
     val view: Double get() = ((bearing - 90) % 360 + 360) % 360
@@ -222,7 +282,7 @@ internal class SketchTerrain(
         sea: Boolean = this.sea,
         river: Boolean = this.river,
         island: Boolean = this.island,
-    ) = SketchTerrain(ridge, relief, water, sea, treeline, snowline, rockline, glacierline, placeX, farX, river, island, onWater, known, bearing, backdrop)
+    ) = SketchTerrain(ridge, relief, water, sea, treeline, snowline, rockline, glacierline, placeX, farX, river, island, onWater, known, bearing, backdrop, labels)
 }
 
 internal object SketchTerrains {
@@ -406,6 +466,7 @@ internal object SketchTerrains {
             onWater = runs.any { (a, b) -> p in a..b },
             bearing = profile.bearing ?: 90.0,
             backdrop = profile.backdrop?.let { backdrop(it, ground) }.orEmpty(),
+            labels = profile.labels.mapNotNull { l -> l.name?.takeIf { l.index in 0 until n }?.let { PeakName(x(l.index), it, l.elevation) } },
         )
     }
 
@@ -871,7 +932,11 @@ internal object SketchScenes {
         if (around?.ski == true && relief.mountains) decor += Decor.SKI
         if (conditions.windKmh >= 15 && relief != Relief.SUMMIT && !terrain.onWater) decor += Decor.WINDSOCK
         // Le monument de la grande ville, quand on y est.
-        val monument = landmark?.takeIf { around == null || Decor.CITY in decor || Decor.TOWN in decor }
+        // Les monuments propres à une grande ville seulement avec elle ; les autres aussi à la place de l'église du village.
+        val monument = landmark?.takeIf {
+            around == null || Decor.CITY in decor || Decor.TOWN in decor ||
+                it.look != Silhouette.OWN && (Decor.VILLAGE in decor || Decor.HAMLET in decor)
+        }
         val chimneys = decor.any { it in CHIMNEYS }
         if (chimneys && (!wet || sky == SketchSky.SNOW) && rnd.nextFloat() < 0.6f) surprises += Surprise.SMOKE
         val light = lightAt(time, isDay, conditions.sunrise, conditions.sunset)

@@ -170,3 +170,40 @@ class SketchSkyTest {
     /** Une plaine à 120 m, la coupe vers l'est. */
     private fun flat() = TerrainProfile(DoubleArray(100) { 120.0 + (it % 3) }, 40.0, 25, emptyList(), emptyList(), bearing = 90.0)
 }
+
+/** Les noms des sommets et les silhouettes des villes. */
+class SketchNamesTest {
+    @Test
+    fun `named peaks are placed on the ridge`() {
+        val e = DoubleArray(100) { 500.0 + if (it in 60..70) 600.0 else 0.0 + it % 3 }
+        val profile = TerrainProfile(
+            e, 30.0, 25,
+            listOf(io.github.pbailly.meteo.data.ProfileLabel(65, "Mont Vouillot", 1145.0), io.github.pbailly.meteo.data.ProfileLabel(80, null, 900.0)),
+            emptyList(),
+        )
+        val t = SketchTerrains.from(profile, 10, snowing = false)
+        assertEquals(listOf("Mont Vouillot"), t.labels.map { it.name })
+        // Le nom est au-dessus du relief qui monte, à droite du lieu.
+        val x = t.labels.first().x
+        assertTrue(x > t.placeX && t.heightAt(x) > t.heightAt(t.placeX))
+    }
+
+    @Test
+    fun `cities are recognised by their monuments`() {
+        assertEquals(Landmark.REIMS, Landmark.near(49.258, 4.03))
+        assertEquals(Landmark.LILLE, Landmark.near(50.63, 3.06))
+        assertEquals(Landmark.MONT_SAINT_MICHEL, Landmark.near(48.636, -1.51))
+        assertEquals(Landmark.LONDON, Landmark.near(51.507, -0.128))
+        assertEquals(Landmark.EIFFEL_TOWER, Landmark.near(48.86, 2.35))
+        assertNull(Landmark.near(47.06, 6.6))
+        assertEquals(Silhouette.BELFRY, Landmark.ARRAS.look)
+        // Le monument remplace l'église du village (pas la tour Eiffel, qui reste à la grande ville).
+        val time = LocalDateTime.of(2026, 7, 10, 14, 0)
+        val village = Surroundings(Settlement.HAMLET, population = 30)
+        assertEquals(Landmark.MONT_SAINT_MICHEL, SketchScenes.scene(0, true, time, 1, flatTerrain(village), around = village, landmark = Landmark.MONT_SAINT_MICHEL).landmark)
+        assertNull(SketchScenes.scene(0, true, time, 1, flatTerrain(village), around = village, landmark = Landmark.EIFFEL_TOWER).landmark)
+    }
+
+    private fun flatTerrain(around: Surroundings) =
+        SketchTerrains.from(TerrainProfile(DoubleArray(100) { 100.0 + it % 3 }, 30.0, 25, emptyList(), emptyList(), bearing = 90.0), 7, snowing = false, around = around)
+}
