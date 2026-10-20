@@ -25,7 +25,7 @@ import io.github.pbailly.meteo.ui.radar.RadarViewModel
 import kotlinx.coroutines.launch
 
 /**
- * Navigation : cinq onglets (Aujourd'hui, Prévisions, Météogramme, Radar, Lieux), dans la barre du bas ou en
+ * Navigation : cinq onglets (Aujourd'hui, Prévisions, Courbes, Cartes, Lieux), dans la barre du bas ou en
  * glissant d'une page à l'autre (sauf sur la carte, où le glissement déplace la carte). Le détail d'un jour, la page
  * « Neige & altitude », la comparaison des lieux et les réglages s'ouvrent par-dessus, avec un bouton retour ; le
  * retour arrière ramène ensuite à l'onglet Aujourd'hui.

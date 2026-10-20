@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
 private val TABS = listOf("7 jours", "14 jours", "Modèles")
 
 /**
- * Onglet « Météogramme » : météogramme horaire, graphique 14 jours et comparaison des modèles.
+ * Onglet « Courbes » : météogramme horaire, graphique 14 jours et comparaison des modèles.
  * Avec [onBack], il s'ouvre aussi par-dessus un onglet, avec une flèche retour.
  */
 @Composable
@@ -37,7 +37,7 @@ fun MeteogramsScreen(
     var tab by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { onMultiModelNeeded() }
     Column(Modifier.fillMaxSize()) {
-        if (onBack != null) DetailHeader("Météogramme", onBack) else ScreenHeader("Météogramme")
+        if (onBack != null) DetailHeader("Courbes", onBack) else ScreenHeader("Courbes")
         state.place?.let { PlaceLine(it.name, elevation = null) }
         SegmentedToggle(TABS, tab, { tab = it }, Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), fill = true)
         val data = state.forecast.data
