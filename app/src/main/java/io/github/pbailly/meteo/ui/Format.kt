@@ -66,6 +66,10 @@ object Fmt {
     /** Altitude : « 2 800 m » (arrondie à [step] mètres). */
     fun altitude(v: Double, step: Int = 1): String = if (v.isNaN()) DASH else thousands(v, step) + "\u00A0m"
 
+    /** Coordonnées d'un point sans nom : « 47,053° N, 1,554° O ». */
+    fun coordinates(latitude: Double, longitude: Double): String =
+        String.format(FR, "%.3f° %s, %.3f° %s", kotlin.math.abs(latitude), if (latitude < 0) "S" else "N", kotlin.math.abs(longitude), if (longitude < 0) "O" else "E")
+
     /** Une décimale à la française, sans « ,0 » : « 2,1 », « 0 », « 12 ». */
     fun decimal(v: Double): String = when {
         v.isNaN() -> DASH

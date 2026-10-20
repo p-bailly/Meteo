@@ -9,6 +9,7 @@ import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.OpenMeteoException
 import io.github.pbailly.meteo.data.Place
+import io.github.pbailly.meteo.data.PlaceNames
 import io.github.pbailly.meteo.data.PlacesStore
 import io.github.pbailly.meteo.data.SettingsStore
 import io.github.pbailly.meteo.data.Normals
@@ -22,6 +23,7 @@ import io.github.pbailly.meteo.data.WeatherModel
 import io.github.pbailly.meteo.data.WeatherRepository
 import io.github.pbailly.meteo.widget.Widgets
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -50,6 +52,9 @@ data class SearchState(
     val error: String? = null,
 )
 
+/** Point touché sur la carte de l'onglet Lieux ; [naming] tant qu'on cherche son nom et son altitude. */
+data class MapPick(val place: Place, val naming: Boolean)
+
 data class MeteoUiState(
     val place: Place? = null,
     val favorites: List<Place> = emptyList(),
@@ -60,6 +65,7 @@ data class MeteoUiState(
     val search: SearchState = SearchState(),
     val locating: Boolean = false,
     val locationError: String? = null,
+    val mapPick: MapPick? = null,
     /** Modèles masqués dans l'onglet MultiModèle (choisis dans les Réglages). */
     val hiddenModels: Set<WeatherModel> = emptySet(),
     /** Coupe du relief autour du lieu (vallée → sommets). */
@@ -86,7 +92,8 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private val climateRepository = ClimateRepository(File(app.filesDir, "normals"), repository.httpGet)
     private val store = PlacesStore(app)
     private val settings = SettingsStore(app)
-    private val deviceLocation = DeviceLocation(app)
+    private val placeNames = PlaceNames(app, repository.httpGet)
+    private val deviceLocation = DeviceLocation(app, placeNames)
 
     private val _state = MutableStateFlow(
         MeteoUiState(
@@ -107,6 +114,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private var terrainJob: Job? = null
     private var normalsJob: Job? = null
     private var summariesJob: Job? = null
+    private var pickJob: Job? = null
 
     init {
         _state.value.place?.let {
@@ -262,6 +270,28 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
 
     fun onLocationDenied() {
         _state.update { it.copy(locationError = "Permission de localisation refusée.") }
+    }
+
+    /**
+     * Carte de l'onglet Lieux : le point touché devient un lieu, au nom de la commune (ses coordonnées s'il n'en a
+     * pas) et à l'altitude du terrain. On attend un instant : toucher plusieurs fois de suite ne fait qu'une recherche.
+     */
+    fun pickOnMap(latitude: Double, longitude: Double) {
+        pickJob?.cancel()
+        val point = Place(Fmt.coordinates(latitude, longitude), latitude, longitude, admin2 = "")
+        _state.update { it.copy(mapPick = MapPick(point, naming = true)) }
+        pickJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            val elevation = async { runLoading { repository.elevation(latitude, longitude) }.getOrNull() }
+            val named = placeNames.at(latitude, longitude) ?: point
+            val place = named.copy(elevation = elevation.await())
+            _state.update { if (it.mapPick?.place?.id == point.id) it.copy(mapPick = MapPick(place, naming = false)) else it }
+        }
+    }
+
+    fun clearMapPick() {
+        pickJob?.cancel()
+        _state.update { it.copy(mapPick = null) }
     }
 
     private fun loadForecast(place: Place, force: Boolean) {

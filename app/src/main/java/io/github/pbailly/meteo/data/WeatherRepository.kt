@@ -49,6 +49,11 @@ class WeatherRepository(
         OpenMeteoApi.parseSearch(httpGet(OpenMeteoApi.searchUrl(query)))
     }
 
+    /** Altitude d'un point (modèle de terrain Copernicus à 90 m) ; null si l'API n'en donne pas. */
+    suspend fun elevation(latitude: Double, longitude: Double): Double? = withContext(Dispatchers.IO) {
+        OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(listOf(latitude to longitude)))).firstOrNull()?.takeIf { !it.isNaN() }
+    }
+
     private suspend fun <T> cached(
         key: String,
         url: String,

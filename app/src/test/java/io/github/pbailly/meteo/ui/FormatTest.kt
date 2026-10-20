@@ -27,6 +27,12 @@ class FormatTest {
     }
 
     @Test
+    fun `coordinates of a nameless point`() {
+        assertEquals("47,039° N, 6,611° E", Fmt.coordinates(47.0386, 6.6114))
+        assertEquals("33,868° S, 1,554° O", Fmt.coordinates(-33.8679, -1.5536))
+    }
+
+    @Test
     fun `relative day names`() {
         val today = LocalDate.of(2026, 10, 19)
         assertEquals("Aujourd'hui", Fmt.relativeDay(today, today))

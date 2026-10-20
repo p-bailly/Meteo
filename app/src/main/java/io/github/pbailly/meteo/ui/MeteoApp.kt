@@ -27,8 +27,8 @@ import kotlinx.coroutines.launch
 /**
  * Navigation : cinq onglets (Aujourd'hui, Prévisions, Courbes, Cartes, Lieux), dans la barre du bas ou en
  * glissant d'une page à l'autre (sauf sur la carte, où le glissement déplace la carte). Le détail d'un jour, la page
- * « Neige & altitude », la comparaison des lieux et les réglages s'ouvrent par-dessus, avec un bouton retour ; le
- * retour arrière ramène ensuite à l'onglet Aujourd'hui.
+ * « Neige & altitude », la comparaison des lieux, le choix d'un lieu sur la carte et les réglages s'ouvrent
+ * par-dessus, avec un bouton retour ; le retour arrière ramène ensuite à l'onglet Aujourd'hui.
  */
 @Composable
 fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
@@ -38,6 +38,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showAltitude by rememberSaveable { mutableStateOf(false) }
     var showCompare by rememberSaveable { mutableStateOf(false) }
+    var showMapPick by rememberSaveable { mutableStateOf(false) }
     var openDay by rememberSaveable { mutableIntStateOf(-1) }
     val place = state.place
     val forecast = state.forecast.data
@@ -48,6 +49,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
         showSettings = false
         showAltitude = false
         showCompare = false
+        showMapPick = false
         openDay = -1
         // Sans animation : on ne traverse pas les pages intermédiaires (la carte est lourde à afficher).
         scope.launch { pager.scrollToPage(tab.ordinal) }
@@ -71,6 +73,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
                     onQueryChange = viewModel::onSearchQueryChange,
                     onLocate = { viewModel.locate { goTo(Tab.TODAY) } },
                     onLocationDenied = viewModel::onLocationDenied,
+                    onOpenMap = { showMapPick = true },
                     onOpenSettings = { showSettings = true },
                     onMoveFavorite = viewModel::moveFavorite,
                     onOpenCompare = { showCompare = true },
@@ -96,6 +99,21 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
                         onBack = { showSettings = false },
                     )
                 }
+                // Avant « pas encore de lieu » : on peut choisir son premier lieu sur la carte.
+                showMapPick -> MapPickScreen(
+                    state = state,
+                    onPick = viewModel::pickOnMap,
+                    onSelect = {
+                        viewModel.selectPlace(it)
+                        viewModel.clearMapPick()
+                        goTo(Tab.TODAY)
+                    },
+                    onToggleFavorite = viewModel::toggleFavorite,
+                    onBack = {
+                        showMapPick = false
+                        viewModel.clearMapPick()
+                    },
+                )
                 place == null -> placesScreen()
                 showCompare -> CompareScreen(
                     state = state,
