@@ -111,4 +111,20 @@ class TerrainTest {
         // À Chamonix, toujours le sommet qui domine.
         assertEquals("Mont Blanc", Terrain.viewTarget(chamonix.latitude, chamonix.longitude, 1035.0, listOf(montBlanc, midi, brevent))?.name)
     }
+
+    @Test
+    fun `quick profile looks towards what dominates on the grid`() {
+        val grid = Terrain.gridPoints(chamonix.latitude, chamonix.longitude, Terrain.QUICK_RADIUS_KM)
+        // Une grille plate à 1 000 m, avec un point à 4 000 m au sud et un autre à 1 300 m tout près.
+        val heights = DoubleArray(grid.size) { 1000.0 }
+        val south = grid.indices.minBy { Terrain.distanceKm(montBlanc.latitude, montBlanc.longitude, grid[it].first, grid[it].second) }
+        heights[south] = 4000.0
+        val near = grid.indices.filter { Terrain.distanceKm(chamonix.latitude, chamonix.longitude, grid[it].first, grid[it].second) >= 3 }
+            .minBy { Terrain.distanceKm(chamonix.latitude, chamonix.longitude, grid[it].first, grid[it].second) }
+        heights[near] = 1300.0
+        assertEquals(grid[south], Terrain.dominantPoint(chamonix.latitude, chamonix.longitude, 1035.0, grid, heights))
+        // En plaine sans relief : le plus haut point, au moins à 3 km.
+        val flat = DoubleArray(grid.size) { 100.0 }.also { it[near] = 120.0 }
+        assertEquals(grid[near], Terrain.dominantPoint(chamonix.latitude, chamonix.longitude, 100.0, grid, flat))
+    }
 }

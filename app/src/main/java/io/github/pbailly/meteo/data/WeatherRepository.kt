@@ -94,9 +94,9 @@ private fun defaultHttpGet(url: String): String = retryOnNetworkError { httpGetO
 
 /**
  * Pour OpenStreetMap (Overpass) : une requête sur les environs d'un lieu prend souvent 15 à 25 s, au-delà des 20 s
- * accordées à Open-Meteo.
+ * accordées à Open-Meteo. Un serveur qui ne répond pas en 30 s n'est pas réessayé : on passe au suivant.
  */
-fun slowHttpGet(url: String): String = retryOnNetworkError { httpGetOnce(url, readTimeoutMs = 60_000) }
+fun slowHttpGet(url: String): String = httpGetOnce(url, readTimeoutMs = 30_000)
 
 private fun httpGetOnce(url: String, readTimeoutMs: Int = 20_000): String {
     val connection = URL(url).openConnection() as HttpURLConnection

@@ -146,8 +146,12 @@ Comment l'altitude est calculée :
   −0,65 °C par 100 m. Ressenti en altitude : formule du refroidissement éolien d'Environnement Canada.
 - **Limite pluie-neige** : 300 m sous l'iso 0 °C. **Neige à une altitude** : la pluie prévue sur le lieu, quand
   elle tombe au-dessus de la limite pluie-neige (1 mm d'eau ≈ 1 cm de neige fraîche).
-- **Environs du lieu**, pour le dessin d'Aujourd'hui : une seule requête Overpass (OpenStreetMap), gardée sur le
-  téléphone ; elle prend souvent 15 à 25 s, l'appli l'attend jusqu'à une minute, sur quatre serveurs tour à tour. Le lieu habité est le plus grand qui couvre le lieu, une ville s'étendant d'autant plus loin de son centre
+- **Relief et environs du lieu**, pour le dessin d'Aujourd'hui, gardés sur le téléphone. La première fois, le dessin
+  est juste en une seconde : une coupe rapide d'après une grille d'altitudes d'Open-Meteo (100 km de côté, le point qui
+  domine le lieu) et la taille de la ville d'après le géocodeur d'Open-Meteo (sa population). OpenStreetMap (Overpass),
+  lent (15 à 25 s), complète ensuite, ses deux requêtes en même temps : les sommets nommés, et une requête des environs ;
+  un serveur qui ne répond pas en 30 s est laissé pour le suivant, sans réessayer. En attendant, un sol plat, sans
+  collines ni village inventés. La ville dessinée grandit avec sa population (plus de maisons, d'étages, d'immeubles). Le lieu habité est le plus grand qui couvre le lieu, une ville s'étendant d'autant plus loin de son centre
   qu'elle est peuplée (Paris sur 8 km, 50 000 habitants sur 2 km, un village sur 700 m) : grande ville à partir de
   50 000 habitants, petite ville à partir de 2 000, village à partir de 150, sinon hameau. Forêt à moins de 1,5 km,
   rivière à moins de 1 km, lac à moins de 2 km, côte à moins de 3 km ; île si le lieu est sur une île de moins de 350 km

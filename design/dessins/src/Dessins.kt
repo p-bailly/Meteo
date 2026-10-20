@@ -87,13 +87,13 @@ private fun summit(top: Double): TerrainProfile {
 }
 
 private fun spots(p: Map<String, TerrainProfile>): Map<String, Spot> {
-    fun at(s: Settlement, forest: Boolean = false, river: Boolean = false, lake: Boolean = false, coast: Boolean = false, island: Boolean = false, ski: Boolean = false) =
-        Surroundings(s, forest, river, lake, coast, island, ski)
+    fun at(s: Settlement, forest: Boolean = false, river: Boolean = false, lake: Boolean = false, coast: Boolean = false, island: Boolean = false, ski: Boolean = false, people: Long? = null) =
+        Surroundings(s, forest, river, lake, coast, island, ski, people)
     val low = p.getValue("morteau").remap { 300 + (it - 771) * 1.5 }
     val high = p.getValue("chamonix").remap { 1041 + (it - 1041) * 0.58 }
     return listOf(
-        Spot("paris", "Paris : plaine, grande ville, la Seine", p["paris"], 48.86, at(Settlement.CITY, river = true), Landmark.EIFFEL_TOWER),
-        Spot("newyork", "New York : grande ville au bord de la mer", p["newyork"], 40.71, at(Settlement.CITY, coast = true), Landmark.EMPIRE_STATE),
+        Spot("paris", "Paris : plaine, grande ville, la Seine", p["paris"], 48.86, at(Settlement.CITY, river = true, people = 2_100_000), Landmark.EIFFEL_TOWER),
+        Spot("newyork", "New York : grande ville au bord de la mer", p["newyork"], 40.71, at(Settlement.CITY, coast = true, people = 8_800_000), Landmark.EMPIRE_STATE),
         Spot("lyon", "Lyon : Fourvière au-dessus de la ville", p["paris"], 45.76, at(Settlement.CITY, river = true), Landmark.FOURVIERE),
         Spot("marseille", "Marseille : la Bonne Mère et la mer", p["nice"], 43.30, at(Settlement.CITY, coast = true), Landmark.BONNE_MERE),
         Spot("strasbourg", "Strasbourg : la cathédrale", p["paris"], 48.58, at(Settlement.CITY, river = true), Landmark.STRASBOURG_CATHEDRAL),
@@ -102,15 +102,15 @@ private fun spots(p: Map<String, TerrainProfile>): Map<String, Spot> {
         Spot("alpage", "Alpage : chalet isolé", p["annecy"], 45.85, at(Settlement.NONE)),
         Spot("beauce", "Beauce : plaine, ferme isolée", p["paris"], 48.3, at(Settlement.NONE)),
         Spot("bourg", "Plaine : village, rivière, bois", p["paris"], 47.0, at(Settlement.VILLAGE, forest = true, river = true)),
-        Spot("valence", "Valence : plaine du Rhône, le Vercors au loin", p["valence"], 44.93, at(Settlement.CITY, river = true)),
+        Spot("valence", "Valence : plaine du Rhône, le Vercors au loin", p["valence"], 44.93, at(Settlement.CITY, river = true, people = 64_000)),
         Spot("morvan", "Basse montagne : petite ville et forêt", low, 47.1, at(Settlement.TOWN, forest = true)),
         Spot("morvan-hameau", "Basse montagne : hameau", low, 47.1, at(Settlement.HAMLET)),
-        Spot("nice", "Nice : basse montagne, grande ville, la mer", p["nice"], 43.70, at(Settlement.CITY, coast = true)),
+        Spot("nice", "Nice : basse montagne, grande ville, la mer", p["nice"], 43.70, at(Settlement.CITY, coast = true, people = 340_000)),
         Spot("tromso", "Tromsø : collines du Grand Nord, la mer", p["tromso"], 69.65, at(Settlement.CITY, coast = true)),
-        Spot("morteau", "Morteau : moyenne montagne, petite ville, forêt", p["morteau"], 47.06, at(Settlement.TOWN, forest = true, river = true)),
+        Spot("morteau", "Morteau : moyenne montagne, petite ville, forêt", p["morteau"], 47.06, at(Settlement.TOWN, forest = true, river = true, people = 6_343)),
         Spot("jura", "Moyenne montagne : village au clocher comtois", p["morteau"], 47.0, at(Settlement.VILLAGE)),
         Spot("jura-ferme", "Moyenne montagne : ferme isolée, lac", p["morteau"], 46.9, at(Settlement.NONE, lake = true)),
-        Spot("annecy", "Annecy : moyenne montagne, grande ville, le lac", p["annecy"], 45.90, at(Settlement.CITY)),
+        Spot("annecy", "Annecy : moyenne montagne, grande ville, le lac", p["annecy"], 45.90, at(Settlement.CITY, people = 130_000)),
         Spot("talloires", "Bord du lac : village", p["annecy"], 45.84, at(Settlement.VILLAGE, forest = true)),
         Spot("haute", "Haute montagne : village, sapins", high, 45.45, at(Settlement.VILLAGE, forest = true)),
         Spot("haute-chalet", "Haute montagne : chalet isolé", high, 45.45, at(Settlement.NONE)),
@@ -120,6 +120,13 @@ private fun spots(p: Map<String, TerrainProfile>): Map<String, Spot> {
         Spot("puy", "Au sommet d'un puy (1 460 m)", summit(1460.0), 45.77, at(Settlement.NONE, forest = true)),
         Spot("corse", "Île : petite ville au bord de la mer", p["nice"], 42.7, at(Settlement.TOWN, coast = true, island = true)),
         Spot("ile", "Île : village de pêcheurs", p["tromso"], 47.3, at(Settlement.VILLAGE, coast = true, island = true)),
+        Spot("asnans", "Asnans-Beauvoisin : plaine, village", p["asnans"], 46.95, at(Settlement.VILLAGE, people = 560)),
+        Spot("v200", "Village de 200 habitants", p["paris"], 47.0, at(Settlement.VILLAGE, people = 200)),
+        Spot("v1800", "Village de 1 800 habitants", p["paris"], 47.0, at(Settlement.VILLAGE, people = 1_800)),
+        Spot("t3000", "Petite ville de 3 000 habitants", p["paris"], 47.0, at(Settlement.TOWN, people = 3_000)),
+        Spot("t40000", "Ville de 40 000 habitants", p["paris"], 47.0, at(Settlement.TOWN, people = 40_000)),
+        Spot("c60000", "Grande ville de 60 000 habitants", p["paris"], 47.0, at(Settlement.CITY, people = 60_000)),
+        Spot("c2m", "Grande ville de 2 millions d'habitants", p["paris"], 47.0, at(Settlement.CITY, people = 2_000_000)),
         Spot("sans", "Morteau : avant de connaître ses environs", p["morteau"], 47.06, null),
         Spot("montblanc", "Mont Blanc : au sommet, 4 808 m", p["montblanc"], 45.83, at(Settlement.NONE)),
         Spot("montblanc-hl", "Mont Blanc, sans OpenStreetMap", p["montblanc"], 45.83, null),
@@ -157,6 +164,9 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
     add(section, s.getValue("bourg").label, "bourg", 2, spring, sky = 2)
     add(section, s.getValue("corse").label, "corse", 0, sky = 1, temperature = 28)
     add(section, s.getValue("ile").label + " · nuit", "ile", 0, nightTime, sky = 0)
+
+    section = "3 bis. La taille selon la population"
+    for (name in listOf("v200", "v1800", "t3000", "t40000", "c60000", "c2m", "asnans")) add(section, s.getValue(name).label, name, 1, summer, sky = 0, temperature = 22)
 
     section = "3. Les lieux habités"
     add(section, s.getValue("paris").label + " · jour", "paris", 2, autumn, sky = 0)
@@ -295,7 +305,7 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
     add(section, "Thème sombre, de jour : Annecy", "annecy", 2, summer, isDay = true, sky = 2, dark = true)
     add(section, "Thème sombre, de jour : Chamonix sous la neige", "chamonix", 73, winter, isDay = true, sky = 0, dark = true)
     add(section, s.getValue("sans").label, "sans", 0, summer, sky = 0)
-    add(section, s.getValue("defaut").label, "defaut", 2, summer, sky = 0)
+    add(section, s.getValue("defaut").label + " (en attendant la coupe)", "defaut", 2, summer, sky = 0)
     return items
 }
 

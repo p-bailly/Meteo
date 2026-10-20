@@ -11,6 +11,8 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.ln
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
@@ -59,14 +61,34 @@ internal fun DrawScope.skyAbove(t: SketchTerrain, w: Float, h: Float): Path {
 }
 
 /** Demi-largeur du lieu habité dessiné, en fraction de la largeur. */
-private fun settlementHalfWidth(decor: Set<Decor>): Float? = when {
-    Decor.CITY in decor -> 0.13f
-    Decor.TOWN in decor -> 0.10f
-    Decor.VILLAGE in decor -> 0.075f
-    Decor.HAMLET in decor -> 0.05f
-    Decor.FARM in decor -> 0.04f
-    Decor.CHALET in decor || Decor.REFUGE in decor -> 0.025f
-    else -> null
+/**
+ * La taille du lieu habité dans sa catégorie, de 0 (le plus petit) à 1 (le plus grand), d'après le nombre d'habitants
+ * (en échelle logarithmique : un village de 150 à 2 000, une petite ville de 2 000 à 50 000, une grande ville de
+ * 50 000 à 10 millions). Sans population connue, la taille moyenne.
+ */
+internal fun settlementSize(scene: SketchScene): Float {
+    val people = scene.population?.takeIf { it > 0 } ?: return 0.5f
+    val (from, to) = when {
+        Decor.CITY in scene.decor -> 50_000.0 to 10_000_000.0
+        Decor.TOWN in scene.decor -> 2_000.0 to 50_000.0
+        else -> 150.0 to 2_000.0
+    }
+    return (ln(people / from) / ln(to / from)).coerceIn(0.0, 1.0).toFloat()
+}
+
+/** Demi-largeur du lieu habité dessiné, en fraction de la largeur : plus grande avec plus d'habitants. */
+private fun settlementHalfWidth(scene: SketchScene): Float? {
+    val size = settlementSize(scene)
+    val decor = scene.decor
+    return when {
+        Decor.CITY in decor -> 0.11f + 0.06f * size
+        Decor.TOWN in decor -> 0.075f + 0.05f * size
+        Decor.VILLAGE in decor -> 0.06f + 0.04f * size
+        Decor.HAMLET in decor -> 0.05f
+        Decor.FARM in decor -> 0.04f
+        Decor.CHALET in decor || Decor.REFUGE in decor -> 0.025f
+        else -> null
+    }
 }
 
 /** Où poser les choses : le lieu habité près du lieu, l'objet du premier plan ailleurs, jamais sur l'eau. */
@@ -76,7 +98,7 @@ internal fun layoutOf(scene: SketchScene): Layout {
     scene.layout?.let { return it }
     val t = scene.terrain
     fun dry(x: Float) = !t.isWater(x, 0.02f)
-    val full = settlementHalfWidth(scene.decor) ?: 0f
+    val full = settlementHalfWidth(scene) ?: 0f
     var half = full
     fun span(x: Float) = (0..8).map { x - half + 2 * half * it / 8 }
     fun bumpiness(x: Float) = span(x).map { t.heightAt(it) }.let { it.max() - it.min() }
@@ -224,13 +246,21 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
         val lit = !isDay
         val half = layout.half
         val chimney = when {
-            Decor.CITY in scene.decor -> city(pencil, at, x, half, w, rnd, lit, scene.landmark)
-            Decor.TOWN in scene.decor -> town(pencil, at, x, half, rnd, lit)
+            Decor.CITY in scene.decor -> city(pencil, at, x, half, w, rnd, lit, scene.landmark, settlementSize(scene))
+            Decor.TOWN in scene.decor -> town(pencil, at, x, half, rnd, lit, settlementSize(scene))
             Decor.VILLAGE in scene.decor -> {
-                // Clocher comtois en montagne (et parfois ailleurs), sinon une flèche d'ardoise.
+                // Clocher comtois en montagne (et parfois ailleurs), sinon une flèche d'ardoise ; de deux à cinq
+                // maisons autour, selon le nombre d'habitants.
                 if (relief.mountains || rnd.nextFloat() < 0.35f) church(pencil, at(x)) else spireChurch(pencil, at(x), 1f)
-                house(pencil, at(x - 0.07f), 13f * u, chimney = false, lit = lit)
-                house(pencil, at(x + 0.075f), 15f * u, chimney = true, lit = lit)
+                val houses = 2 + (3 * settlementSize(scene)).roundToInt()
+                var smoking: Offset? = null
+                for (k in 0 until houses) {
+                    val side = if (k % 2 == 0) 1f else -1f
+                    val p = at(x + side * (0.065f + 0.035f * (k / 2)) * (half / 0.08f).coerceAtMost(1.3f))
+                    val chimney = house(pencil, p, (13f + (k % 3)) * u, chimney = k == 0, lit = lit)
+                    if (k == 0) smoking = chimney
+                }
+                smoking
             }
             Decor.HAMLET in scene.decor -> if (relief.mountains) {
                 chalet(pencil, at(x - 0.025f), 15f * u)
@@ -590,14 +620,21 @@ private fun DrawScope.windows(pencil: Pencil, facade: Rect, rows: Int, columns: 
 }
 
 /** Petite ville : l'église et son clocher au milieu, des maisons à étages autour, plus basses vers les bords. */
-private fun DrawScope.town(pencil: Pencil, at: (Float) -> Offset, x: Float, half: Float, rnd: Random, lit: Boolean): Offset? {
+private fun DrawScope.town(pencil: Pencil, at: (Float) -> Offset, x: Float, half: Float, rnd: Random, lit: Boolean, size: Float = 0.5f): Offset? {
     val u = density
     var chimney: Offset? = null
-    // Du bord vers le milieu : les maisons du milieu, plus hautes, passent devant celles des bords.
-    val slots = listOf(-0.95f to 1, 0.95f to 1, -0.65f to 2, 0.7f to 2, -0.35f to 3, 0.4f to 3)
+    // Du bord vers le milieu : les maisons du milieu, plus hautes, passent devant celles des bords. Plus la ville est
+    // peuplée, plus il y a de maisons et d'étages.
+    val pairs = 2 + (2 * size).roundToInt()
+    val tallest = 2 + (2 * size).roundToInt()
+    val slots = (0 until pairs).flatMap { k ->
+        val f = 0.95f - 0.6f * k / maxOf(pairs - 1, 1)
+        val floors = (1 + (tallest - 1) * k / maxOf(pairs - 1, 1)).coerceAtLeast(1)
+        listOf(-f to floors, f + 0.03f to floors)
+    }
     slots.forEach { (k, floors) ->
         val p = townHouse(pencil, at(x + half * k), (11f + rnd.nextFloat() * 4f) * u, floors, lit, rnd)
-        if (k > 0 && floors == 2) chimney = p
+        if (k > 0 && chimney == null) chimney = p
     }
     spireChurch(pencil, at(x - 0.03f), 1.1f)
     return chimney
@@ -616,6 +653,7 @@ private fun DrawScope.city(
     rnd: Random,
     lit: Boolean,
     landmark: Landmark? = null,
+    size: Float = 0.5f,
 ): Offset? {
     val u = density
     val n = (2 * half / 0.0325f).toInt().coerceAtLeast(4)
@@ -638,7 +676,8 @@ private fun DrawScope.city(
     // Les plus hauts derrière : on dessine d'abord les tours du centre, puis les plus basses devant.
     val buildings = (0 until n).map { i ->
         val edge = 1 - abs(i - (n - 1) / 2f) / (n / 2f)
-        val height = if (i == tallest) 44f else 12f + 22f * edge + rnd.nextFloat() * 8f
+        // Plus la ville est peuplée, plus ses immeubles et sa tour montent haut.
+        val height = if (i == tallest) 38f + 34f * size else 12f + (16f + 22f * size) * edge + rnd.nextFloat() * 8f
         Triple(i, height, (slot * w * (0.8f + rnd.nextFloat() * 0.25f)))
     }.sortedByDescending { it.second }
     buildings.forEach { (i, height, width) ->
