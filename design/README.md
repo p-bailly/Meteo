@@ -34,6 +34,21 @@ icônes à thème d'Android 13+ (seul l'alpha compte).
   des graphiques). Le M° est très lisible à petite taille, mais il ne dit pas « météo » au premier coup
   d'œil.
 
+## Nouvelles pistes (`logos/nouvelles-pistes/`)
+
+Six logos de plus, dessinés dans la palette Glacier déjà appliquée à l'app (fond `#1C6497`, glace `#9BCBE9`,
+blanc, nuit `#0F2133`, balise rouge `#C8202A`). Choisir l'un d'eux ne change donc que l'icône, pas le thème.
+Les calques monochromes restent à faire pour celui qui sera retenu.
+
+| | Piste | Logo | Points forts | Risques |
+|---|---|---|---|---|
+| 06 | **Météogramme** | Courbe de température au-dessus des barres de pluie, point rouge « maintenant » | Montre la fonction phare de l'app, esprit Meteoblue | Peut évoquer une app de bourse ou de statistiques |
+| 07 | **Abri** | L'abri à persiennes blanc des stations météo, sur ses pieds | Original, dit « station météo » à qui en a vu une | Moins parlant pour qui n'en a jamais vu ; détails fins à 24 dp |
+| 08 | **Courbes** | Courbes de niveau d'un sommet, balise rouge au point haut | Prolonge le thème montagne et altitude de Glacier | Évoque d'abord la randonnée ou la topographie |
+| 09 | **Hublot** | Une fenêtre ronde, moitié jour (soleil), moitié nuit (lune, étoiles) | Très lisible en petit, symétrique, mémorisable | Assez générique (thème clair/sombre, horloge) |
+| 10 | **Barbule** | Pointé de station synoptique : ciel à 4/8 couvert, vent en barbules et fanion | Clin d'œil pointu pour les passionnés de cartes | Illisible pour le grand public |
+| 11 | **Pluviomètre** | Une goutte tombe dans un pluviomètre gradué, niveau en rouge | Simple, concret, met la pluie au centre | Moins de place pour le soleil et la température |
+
 ## Changer de direction
 
 1. Convertir le SVG choisi en vector drawable pour `app/src/main/res/drawable/ic_launcher_foreground.xml`

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Météo, piste Barbule : pointé de station synoptique, ciel à moitié couvert et vent en barbules">
+  <rect width="108" height="108" fill="#1C6497"/>
+  <g transform="translate(54 54) scale(0.86) translate(-54 -54)">
+  <path d="M44.6 62.8L72 32M64 41L53.5 31.7M59.4 46.2L54.2 41.6" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M72 32L61.5 22.7L66.7 38Z" fill="#C8202A" stroke="#C8202A" stroke-width="1.2" stroke-linejoin="round"/>
+  <path d="M40 61A7 7 0 0 0 40 75Z" fill="#FFFFFF"/>
+  <circle cx="40" cy="68" r="7" fill="none" stroke="#FFFFFF" stroke-width="3.2"/>
+  </g>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Météo, piste Météogramme : courbe de température au-dessus des barres de pluie">
+  <rect width="108" height="108" fill="#1C6497"/>
+  <g transform="translate(54 54) scale(0.86) translate(-54 -54)">
+  <path d="M28 76V70M37 76V64M46 76V56M55 76V67M64 76V72M73 76V62" stroke="#9BCBE9" stroke-width="6"/>
+  <path d="M27 58C34 44 42 42 50 50S68 62 80 40" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="80" cy="40" r="5.2" fill="#C8202A" stroke="#FFFFFF" stroke-width="1.85"/>
+  </g>
+</svg>

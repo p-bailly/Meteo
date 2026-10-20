@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Météo, piste Pluviomètre : une goutte tombe dans un pluviomètre gradué">
+  <rect width="108" height="108" fill="#1C6497"/>
+  <g transform="translate(54 54) scale(0.86) translate(-54 -54)">
+  <path d="M54 21C51 25 49 28 49 30.5A5 5 0 0 0 59 30.5C59 28 57 25 54 21Z" fill="#FFFFFF"/>
+  <path d="M37 39H71L61 49H47Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="49.5" y="67" width="9" height="11.5" fill="#9BCBE9"/>
+  <rect x="48" y="49" width="12" height="31" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+  <path d="M40 55H45M40 61H45M40 73H45" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+  <path d="M41 67H66" stroke="#C8202A" stroke-width="2.6" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Météo, piste Courbes : courbes de niveau d'un sommet, balise au point haut">
+  <rect width="108" height="108" fill="#1C6497"/>
+  <g transform="translate(54 54) scale(0.86) translate(-54 -54)">
+  <g fill="none" stroke-width="3.4">
+    <path d="M26 62C26 46 40 36 56 36C72 36 84 46 82 60C80 74 66 80 52 80C36 80 26 74 26 62Z" stroke="#9BCBE9"/>
+    <path d="M36 60C36 50 46 44 57 44C68 44 74 50 73 58C72 67 63 71 54 71C44 71 36 68 36 60Z" stroke="#D6EAF7"/>
+    <path d="M47 57C47 52 52 50 58 50C63 50 66 53 65 57C64 61 60 63 56 63C51 63 47 61 47 57Z" stroke="#FFFFFF"/>
+  </g>
+  <circle cx="56.5" cy="56.5" r="3" fill="#C8202A"/>
+  </g>
+</svg>

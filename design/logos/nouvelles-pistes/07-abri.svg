@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" role="img" aria-label="Météo, piste Abri : l'abri à persiennes des stations météo">
+  <rect width="108" height="108" fill="#1C6497"/>
+  <g transform="translate(54 54) scale(0.86) translate(-54 -54)">
+  <path d="M41 63V80M67 63V80M35 80H73" stroke="#9BCBE9" stroke-width="3.2" stroke-linecap="round"/>
+  <path d="M30 37L54 26L78 37Z" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/>
+  <rect x="35" y="39" width="38" height="25" rx="1.5" fill="#FFFFFF"/>
+  <path d="M39 44.5H65M39 50H65M39 55.5H65M39 61H65" stroke="#9BCBE9" stroke-width="2.4"/>
+  <circle cx="69" cy="52.7" r="2.2" fill="#C8202A"/>
+  </g>
+</svg>
