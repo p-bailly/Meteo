@@ -187,6 +187,46 @@ class SketchSceneTest {
     }
 
     @Test
+    fun `a plain rounded to the metre is not a lake`() {
+        // La plaine qui monte doucement, arrondie au mètre (152, 152, 152 m) : la rive d'un côté est plus basse.
+        val plain = DoubleArray(100) { k -> if (k in 20..22) 152.0 else 130.0 + k }
+        assertTrue(SketchTerrains.waterRuns(plain, 148.0, 0.7).isEmpty())
+        // Un vrai lac : les rives montent des deux côtés.
+        val lake = DoubleArray(100) { k -> if (k in 20..30) 100.0 else 130.0 + k }
+        assertEquals(listOf(20 to 30), SketchTerrains.waterRuns(lake, 148.0, 0.7))
+    }
+
+    @Test
+    fun `the city stands by the river the terrain model makes flat`() {
+        // Valence, la coupe vers l'ouest : le Rhône tout plat contre la ville, puis Crussol.
+        val e = DoubleArray(100) { k ->
+            when {
+                k < 18 -> 180.0 - k * 3
+                k == 18 -> 126.0
+                k <= 32 -> 106.0
+                k <= 46 -> 106.0 + (k - 32) * 21.0
+                else -> 400.0
+            }
+        }
+        val profile = TerrainProfile(e, 22.0, 18, emptyList(), emptyList(), bearing = 285.0)
+        val day = LocalDateTime.of(2026, 10, 21, 14, 0)
+        // Une rivière et pas de lac : l'eau plate est le fleuve, la ville a toute sa place.
+        val river = Surroundings(Settlement.CITY, river = true, population = 64_000)
+        val t = SketchTerrains.from(profile, 10, snowing = false, around = river)
+        assertTrue(t.river && t.water.isEmpty())
+        val full = SketchScenes.scene(0, true, day, 3, t, around = river).layout!!
+        assertTrue(full.half > 0.1f)
+        // Avec un lac déclaré, la ville est là quand même, et l'eau n'est pas sous ses maisons.
+        val lake = river.copy(lake = true)
+        val scene = SketchScenes.scene(0, true, day, 3, SketchTerrains.from(profile, 10, snowing = false, around = lake), around = lake)
+        val x = scene.layout!!.settlement!!
+        val half = scene.layout!!.half
+        assertTrue((0..10).none { scene.terrain.isWater(x - half + 2 * half * it / 10) })
+        // Valence sait qu'elle n'a pas de lac, même si OpenStreetMap en trouve un.
+        assertFalse(Landmark.VALENCE.completed(lake)!!.lake)
+    }
+
+    @Test
     fun `water from the surroundings shows in the drawing`() {
         // Une rivière qui passe à Paris, un lac que la coupe ne traverse pas, la mer d'une île.
         assertTrue(SketchTerrains.from(profile("paris"), 6, false, around = Surroundings(Settlement.CITY, river = true)).river)

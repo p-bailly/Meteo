@@ -113,8 +113,11 @@ internal class SketchAnchors {
     }
 }
 
-/** Où poser les choses : le lieu habité près du lieu, l'objet du premier plan ailleurs, jamais sur l'eau. */
-internal class Layout(val settlement: Float?, val half: Float, val foreground: Float)
+/**
+ * Où poser les choses : le lieu habité près du lieu, l'objet du premier plan ailleurs, jamais sur l'eau ; [wet] quand il
+ * n'y avait de place qu'en empiétant sur l'eau (elle reculera jusqu'au-delà du lieu habité).
+ */
+internal class Layout(val settlement: Float?, val half: Float, val foreground: Float, val wet: Boolean = false)
 
 internal fun layoutOf(scene: SketchScene): Layout {
     scene.layout?.let { return it }
@@ -125,28 +128,35 @@ internal fun layoutOf(scene: SketchScene): Layout {
     fun span(x: Float) = (0..8).map { x - half + 2 * half * it / 8 }
     fun bumpiness(x: Float) = span(x).map { t.heightAt(it) }.let { it.max() - it.min() }
     var settlement: Float? = null
+    var wet = false
     if (Decor.REFUGE in scene.decor && t.relief == Relief.SUMMIT) {
         // Le refuge, juste sous le sommet.
         settlement = t.placeX + 0.06f
     } else if (full > 0f) {
         // Au fond de la vallée, juste à côté du lieu ; le refuge, lui, est sur la pente. Entre un lac et la montagne,
         // la ville se resserre.
+        // Les immeubles d'une ville montent haut : ils restent à gauche du texte de droite (le ciel, les extrêmes).
+        val right = if (Decor.CITY in scene.decor || Decor.TOWN in scene.decor) 0.62f else 0.74f
+        fun spots() = (listOf(0.06f, 0.09f, 0.12f, 0.15f, 0.03f, 0f, 0.18f).map { t.placeX + it } + listOf(0.47f, 0.55f))
+            .map { it.coerceIn(0.33f + half, maxOf(0.33f + half, right - half)) }
         for (shrink in listOf(1f, 0.75f, 0.55f)) {
             half = full * shrink
-            // Les immeubles d'une ville montent haut : ils restent à gauche du texte de droite (le ciel, les extrêmes).
-            val right = if (Decor.CITY in scene.decor || Decor.TOWN in scene.decor) 0.62f else 0.74f
-            val candidates = (listOf(0.06f, 0.09f, 0.12f, 0.15f, 0.03f, 0f, 0.18f).map { t.placeX + it } + listOf(0.47f, 0.55f))
-                .map { it.coerceIn(0.33f + half, maxOf(0.33f + half, right - half)) }
-                .filter { x -> span(x).all(::dry) }
+            val candidates = spots().filter { x -> span(x).all(::dry) }
             settlement = candidates.firstOrNull { x -> Decor.REFUGE in scene.decor || t.heightAt(x) < 0.09f && bumpiness(x) < 0.06f }
                 ?: candidates.minByOrNull { t.heightAt(it) + bumpiness(it) }
             if (settlement != null) break
+        }
+        // Pas de place au sec dans les terres (la coupe met un lac, ou le fleuve rendu plat, contre le lieu) : le lieu
+        // habité est là quand même, le moins possible sur l'eau, qui recule devant lui (SketchTerrain.dried).
+        if (settlement == null && !t.sea && !t.island) {
+            settlement = spots().minByOrNull { x -> span(x).count { !dry(it) } + abs(x - t.placeX) }
+            wet = true
         }
     }
     val placed = settlement
     val foreground = listOf(0.57f, 0.50f, 0.63f, 0.44f, 0.68f)
         .firstOrNull { x -> dry(x) && (placed == null || abs(x - placed) > half + 0.04f) } ?: 0.57f
-    return Layout(placed, half, foreground)
+    return Layout(placed, half, foreground, wet)
 }
 
 /** Feuillus : verts l'été, roux à l'automne, bruns et nus l'hiver. */
@@ -286,7 +296,7 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
         }
     }
     if (Decor.TREES in scene.decor) {
-        listOf(0.47f, 0.555f, 0.65f).filter(::free).forEachIndexed { k, x ->
+        TREE_SPOTS.filter(::free).forEachIndexed { k, x ->
             val base = Offset(w * x, y(t.heightAt(x)) + 2f * u)
             val size = (14f + rnd.nextFloat() * 6f) * u
             // En Provence, des pins parasols et un cyprès.
@@ -2023,18 +2033,38 @@ private fun DrawScope.rotor(pencil: Pencil, hub: Offset, length: Float, angle: F
     pencil.dot(hub, 1.1f)
 }
 
+/** Où poussent les feuillus du décor. */
+private val TREE_SPOTS = listOf(0.47f, 0.555f, 0.65f)
+
+/** Direction de Crussol depuis Valence, en degrés depuis le nord. */
+private const val CRUSSOL_BEARING = 290.0
+
 /** Le château (ou des ruines) sur une hauteur, l'abbaye au fond du vallon, là où il reste de la place. */
 private fun DrawScope.heritage(pencil: Pencil, scene: SketchScene, w: Float, h: Float, taken: MutableList<ClosedFloatingPointRange<Float>>) {
     val t = scene.terrain
     val u = density
-    // En plaine, le lointain est plat : le château peut y être aussi.
-    fun open(x: Float) = !t.isWater(x, 0.03f) && taken.none { x in it } && (x < t.farX || t.relief == Relief.PLAIN) && t.heightAt(x) < t.snowline - 0.005f
+    // En plaine, le lointain est plat : le château peut y être aussi, mais pas sur les montagnes de l'horizon.
+    fun open(x: Float) = !t.isWater(x, 0.03f) && taken.none { x in it } && (x < t.farX || t.relief == Relief.PLAIN && t.heightAt(x) < 0.02f) &&
+        t.heightAt(x) < t.snowline - 0.005f
     fun ground(x: Float) = Offset(w * x, h * (FOOT - t.heightAt(x)) + 1f * u)
     val xs = (0..30).map { 0.40f + it * 0.01f }
-    if (Decor.CASTLE in scene.decor || Decor.RUINS in scene.decor) {
+    if (scene.landmark?.look == Silhouette.APOLLINAIRE) {
+        // Valence : Crussol est à l'ouest-nord-ouest, de l'autre côté du Rhône. Quand la coupe va vers lui, ses ruines
+        // sont sur la colline de la coupe ; sinon (vers le Vercors), la montagne est à gauche de la ville.
+        val toward = abs(((t.bearing - CRUSSOL_BEARING) % 360 + 540) % 360 - 180) < 90
+        // Le calcaire est nu au sommet : pas sous un des arbres.
+        val bare = { x: Float -> Decor.TREES !in scene.decor || TREE_SPOTS.none { abs(it - x) < 0.03f } }
+        val hilltop = xs.filter { x -> toward && open(x - 0.025f) && open(x) && open(x + 0.025f) && t.heightAt(x) > 0.03f && bare(x) }.maxByOrNull { t.heightAt(it) }
+        if (hilltop != null) {
+            crussol(pencil, ground(hilltop), hill = false)
+            taken += (hilltop - 0.03f)..(hilltop + 0.03f)
+        } else {
+            crussol(pencil, ground(0.27f), hill = true)
+        }
+    } else if (Decor.CASTLE in scene.decor || Decor.RUINS in scene.decor) {
         xs.filter { x -> open(x - 0.025f) && open(x) && open(x + 0.025f) }.maxByOrNull { t.heightAt(it) }?.let { x ->
-            // En plaine, sur une butte rocheuse (Crussol au-dessus du Rhône, en face de Valence).
-            val g = if (t.relief == Relief.PLAIN) butte(pencil, ground(x)) else ground(x)
+            // En plaine, sur une butte rocheuse ; sur une colline, la colline suffit.
+            val g = if (t.relief == Relief.PLAIN && t.heightAt(x) < 0.02f) butte(pencil, ground(x)) else ground(x)
             if (Decor.CASTLE in scene.decor) castle(pencil, g, 1f) else ruins(pencil, g)
             taken += (x - 0.04f)..(x + 0.04f)
         }
@@ -3165,6 +3195,53 @@ private fun DrawScope.butte(pencil: Pencil, ground: Offset): Offset {
     pencil.ink(Crayon.ROCK).hatch(shape, shape.getBounds(), spacing = 2.4f, width = 0.5f)
     pencil.ink(Crayon.FOREST).hatch(shape, Rect(ground.x - 22f * u, ground.y - 6f * u, ground.x + 24f * u, ground.y), spacing = 2.2f, width = 0.5f, rising = false)
     return ground + Offset(2f * u, -14f * u)
+}
+
+/**
+ * Crussol, vu de Valence : la montagne monte doucement par la garrigue et tombe sur le Rhône par sa falaise de
+ * calcaire ; tout en haut, au bord de la falaise, les deux « cornes » du donjon en ruine, et les pans de mur du vieux
+ * bourg dans la pente. Sans [hill], seulement les ruines, sur la colline que la coupe dessine déjà.
+ */
+private fun DrawScope.crussol(pencil: Pencil, ground: Offset, hill: Boolean) {
+    val u = density
+    fun p(dx: Float, dy: Float) = Offset(ground.x + dx * u, ground.y + dy * u)
+    // Le haut de la montagne, où sont les ruines.
+    val top = if (hill) p(0f, -21f) else ground
+    fun q(dx: Float, dy: Float) = top + Offset(dx * u, dy * u)
+    if (hill) {
+        val crest = listOf(p(-34f, 0f), p(-27f, -5f), p(-18f, -11f), p(-9f, -17f), p(-2f, -21f), p(5f, -22f), p(9f, -21f))
+        val cliff = listOf(p(10.5f, -17f), p(11f, -10f), p(14f, -6f), p(20f, 0f))
+        val shape = polygon(crest + cliff)
+        pencil.erase(shape)
+        pencil.outline(shape, width = 1f)
+        // La garrigue sur la pente, le calcaire nu en haut et sur la falaise, ses strates.
+        pencil.ink(Crayon.FOREST).hatch(shape, Rect(ground.x - 34f * u, ground.y - 13f * u, ground.x - 2f * u, ground.y), spacing = 2.2f, width = 0.5f, rising = false)
+        pencil.ink(Crayon.ROCK).hatch(shape, Rect(ground.x - 2f * u, ground.y - 23f * u, ground.x + 20f * u, ground.y), spacing = 2f, width = 0.5f)
+        listOf(Triple(-17f, 4f, 10f), Triple(-12f, 3f, 10.5f), Triple(-7f, 2f, 12.5f)).forEach { (dy, from, to) -> pencil.line(p(from, dy), p(to, dy + 0.8f), width = 0.5f, passes = 1) }
+        // Le vieux bourg abandonné, en gradins dans la pente.
+        listOf(Triple(-8f, -17f, 4f), Triple(-14f, -13f, 3f), Triple(-20f, -9.5f, 3.5f)).forEach { (dx, dy, height) ->
+            val wall = polygon(listOf(p(dx - 2.5f, dy + 1.5f), p(dx - 2.5f, dy - height), p(dx - 0.5f, dy - height + 1f), p(dx + 1f, dy - height - 0.5f), p(dx + 2.5f, dy - height + 1.5f), p(dx + 2.5f, dy + 1f)))
+            pencil.erase(wall)
+            pencil.outline(wall, width = 0.6f, passes = 1)
+            pencil.ink(Crayon.WHEAT).hatch(wall, wall.getBounds(), spacing = 1.6f, width = 0.4f)
+        }
+    }
+    // Les cornes du donjon, une baie en arc entre les deux.
+    val keep = polygon(listOf(q(-1f, 0.5f), q(-1f, -8f), q(0f, -13f), q(1.2f, -17f), q(2.4f, -10f), q(3.6f, -9f), q(5f, -14f), q(6f, -8f), q(7.5f, -5f), q(8.5f, 0.5f)))
+    pencil.erase(keep)
+    pencil.outline(keep, width = 0.9f)
+    pencil.ink(Crayon.WHEAT).hatch(keep, keep.getBounds(), spacing = 1.8f, width = 0.5f)
+    val bay = Path().apply {
+        val x = top.x
+        val g = top.y
+        moveTo(x + 2.4f * u, g - 2f * u)
+        lineTo(x + 2.4f * u, g - 5f * u)
+        quadraticTo(x + 3.4f * u, g - 7f * u, x + 4.4f * u, g - 5f * u)
+        lineTo(x + 4.4f * u, g - 2f * u)
+        close()
+    }
+    pencil.erase(bay)
+    pencil.outline(bay, width = 0.5f, passes = 1)
 }
 
 /** Les îles au large (Porquerolles, Port-Cros) : de longues bosses bleutées sur la mer. */
