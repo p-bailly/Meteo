@@ -217,6 +217,23 @@ nouvel appel pendant 30 min, affichage hors ligne). Une connexion coupée en ple
 instable, erreur « SSL… BAD_DECRYPT ») est retentée deux fois ; si elle échoue encore, l'app affiche un message
 simple (« Connexion interrompue, touche ↻ pour réessayer ») au lieu de l'erreur brute.
 
+## Partage avec Nimbus
+
+Nimbus, le launcher de l'utilisateur (paquet `fr.perso.nimbus`), montre sur sa page de déverrouillage la météo du lieu
+ouvert dans l'app et le dessin d'Aujourd'hui. Météo les lui donne par un fournisseur de contenu
+(`content://io.github.pbailly.meteo.nimbus`), en lecture seule et réservé à Nimbus et à l'app elle-même : toute autre
+appli est refusée.
+
+- `now` : le lieu et son département, la température et le ressenti, le ciel en toutes lettres, le maxi et le mini du
+  jour, le code météo, jour ou nuit, l'heure de la prévision et si c'est le cache faute de réseau. Ce sont les données
+  des widgets : le cache de moins de 30 minutes, sinon un appel à Open-Meteo, attendu 10 secondes au plus.
+- `sketch?width=…&height=…` : le dessin en PNG, fond transparent, sur papier clair, dans le style choisi dans les
+  Réglages, avec le relief et les environs déjà gardés (rien n'est téléchargé pour lui) ; de 64 à 2048 pixels de côté,
+  1027 × 717 par défaut.
+
+À chaque nouvelle prévision, et quand le style du dessin change, Météo prévient Nimbus, qui relit les deux. Rien
+d'autre n'est partagé : ni les favoris, ni la position du téléphone.
+
 ## Radar Météo-France : la clé
 
 Le radar vient de l'API publique « DonneesPubliquesRadar » de Météo-France : gratuite, mais avec une clé personnelle.
@@ -286,6 +303,7 @@ Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
   (`radar/RadarMap`).
 - `widget/` : widgets de l'écran d'accueil avec Jetpack Glance (`NowWidget`, `ForecastWidget`, `HoursWidget`, `SketchWidget`),
   chargement et couleurs (`WidgetData`), pictogrammes et graphique dessinés en images (`WidgetDrawing`).
+- `share/` : la météo et le dessin donnés à Nimbus (`NimbusProvider`).
 - `ui/theme/` : couleurs (`Theme`) et polices Archivo et Martian Mono (`Type`, fichiers dans `res/font/`).
 
 La clé de signature `app/meteo-perso.jks` est volontairement dans le dépôt pour que chaque APK compilé

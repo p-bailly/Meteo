@@ -81,6 +81,13 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_sketch" />
         </receiver>
+
+        <!-- Météo du lieu ouvert et dessin d'Aujourd'hui pour la page de déverrouillage de Nimbus (le launcher,
+             fr.perso.nimbus), en lecture seule : le fournisseur refuse toute autre appli. -->
+        <provider
+            android:name=".share.NimbusProvider"
+            android:authorities="io.github.pbailly.meteo.nimbus"
+            android:exported="true" />
     </application>
 
 </manifest>

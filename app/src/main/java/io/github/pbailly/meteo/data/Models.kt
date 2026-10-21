@@ -21,6 +21,9 @@ data class Place(
     /** Le département, ou à défaut la région : « Drôme », « Haute-Savoie ». */
     val department: String? get() = admin2?.takeIf { it.isNotBlank() } ?: admin1?.takeIf { it.isNotBlank() }
 
+    /** Sous le nom du lieu, dans Aujourd'hui : le département (ou la région), à défaut le pays. */
+    val departmentOrCountry: String? get() = department ?: country?.takeIf { it.isNotBlank() }
+
     val subtitle: String get() = listOfNotNull(department, country).distinct().joinToString(", ")
 }
 

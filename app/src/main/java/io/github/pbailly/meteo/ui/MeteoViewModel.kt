@@ -23,6 +23,7 @@ import io.github.pbailly.meteo.data.TerrainProfile
 import io.github.pbailly.meteo.data.TerrainRepository
 import io.github.pbailly.meteo.data.WeatherModel
 import io.github.pbailly.meteo.data.WeatherRepository
+import io.github.pbailly.meteo.share.NimbusProvider
 import io.github.pbailly.meteo.widget.Widgets
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -257,6 +258,8 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     fun setSketchStyle(style: Int) {
         settings.saveSketchStyle(style)
         _state.update { it.copy(sketchStyle = style) }
+        // Nimbus montre le dessin dans ce style : il le redemande.
+        NimbusProvider.notifyChange(getApplication())
     }
 
     fun setSketchMotion(motion: Boolean) {

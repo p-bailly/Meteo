@@ -7,8 +7,11 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.coroutines.cancellation.CancellationException
 
-/** Une donnée chargée, avec l'heure du téléchargement et un indicateur « hors ligne ». */
-data class Loaded<T>(val value: T, val fetchedAt: Long, val stale: Boolean)
+/**
+ * Une donnée chargée, avec l'heure du téléchargement et un indicateur « hors ligne ». [downloaded] : elle vient d'être
+ * téléchargée (et non relue dans le cache).
+ */
+data class Loaded<T>(val value: T, val fetchedAt: Long, val stale: Boolean, val downloaded: Boolean = false)
 
 /**
  * Accès à Open-Meteo avec un cache disque : on ne rappelle pas l'API tant que les données
@@ -73,7 +76,7 @@ class WeatherRepository(
             val value = parse(body)
             cacheDir.mkdirs()
             file.writeText(body)
-            Loaded(value, file.lastModified(), stale = false)
+            Loaded(value, file.lastModified(), stale = false, downloaded = true)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

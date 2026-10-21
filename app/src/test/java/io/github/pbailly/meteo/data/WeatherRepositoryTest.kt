@@ -21,10 +21,12 @@ class WeatherRepositoryTest {
     fun `second call within max age is served from cache`() = runBlocking {
         var calls = 0
         val repo = WeatherRepository(tmp.root) { calls++; body }
-        repo.forecast(place, force = false)
+        val first = repo.forecast(place, force = false)
         val second = repo.forecast(place, force = false)
         assertEquals(1, calls)
         assertFalse(second.stale)
+        assertTrue(first.downloaded)
+        assertFalse(second.downloaded)
     }
 
     @Test
@@ -44,6 +46,7 @@ class WeatherRepositoryTest {
         online = false
         val offline = repo.forecast(place, force = true)
         assertTrue(offline.stale)
+        assertFalse(offline.downloaded)
     }
 
     @Test

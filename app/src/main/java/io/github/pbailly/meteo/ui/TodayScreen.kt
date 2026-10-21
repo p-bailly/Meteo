@@ -246,7 +246,7 @@ private fun TodayHeader(
             val time = f.current?.time ?: LocalDateTime.now()
             MonoText(
                 listOfNotNull(
-                    place.department ?: place.country?.takeIf { it.isNotBlank() },
+                    place.departmentOrCountry,
                     Fmt.dateLine(time.toLocalDate()),
                     // En très grand texte, l'heure laisse la place au reste de la ligne.
                     Fmt.clock(time).takeIf { LocalTextSize.current < 2 },

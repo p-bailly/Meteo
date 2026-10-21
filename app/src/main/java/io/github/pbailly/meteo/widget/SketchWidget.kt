@@ -2,6 +2,7 @@ package io.github.pbailly.meteo.widget
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -20,6 +21,7 @@ import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.padding
+import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.SettingsStore
 import io.github.pbailly.meteo.data.Surroundings
 import io.github.pbailly.meteo.data.SurroundingsRepository
@@ -41,19 +43,13 @@ class SketchWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val data = WidgetData.load(context)
-        // Seulement ce que l'app a déjà gardé : un widget ne télécharge pas le relief.
-        val offline: (String) -> String = { throw IOException("hors ligne") }
-        val dir = File(context.filesDir, "terrain")
-        val terrain = data.place?.let { runCatching { TerrainRepository(dir, offline).cached(it) }.getOrNull() }
-        val around = data.place?.let { runCatching { SurroundingsRepository(dir, offline).cached(it) }.getOrNull()?.first }
-        val style = SettingsStore(context).sketchStyle()
-        provideContent { Content(data, terrain, around, style) }
+        val source = SketchSource.load(context, data.place)
+        provideContent { Content(data, source) }
     }
 
     @Composable
-    private fun Content(data: WidgetData, terrain: TerrainProfile?, around: Surroundings?, style: Int) = WidgetFrame(data, padding = 0.dp) {
-        val f = data.forecast
-        val c = f?.current
+    private fun Content(data: WidgetData, source: SketchSource) = WidgetFrame(data, padding = 0.dp) {
+        val c = data.forecast?.current
         if (c == null) {
             Box(GlanceModifier.padding(12.dp)) { WidgetMessage(data) }
             return@WidgetFrame
@@ -62,11 +58,9 @@ class SketchWidget : GlanceAppWidget() {
         val size = LocalSize.current
         // Deux pixels par dp au plus : assez fin pour le crayon, sans dépasser la mémoire permise aux widgets.
         val density = LocalContext.current.resources.displayMetrics.density.coerceAtMost(2f)
-        val image = sketchImage(
-            c.weatherCode, c.isDay, c.time, place.latitude, place.longitude, place.id.hashCode(), terrain, around,
-            sketchConditions(f, null), style, data.colors.dark,
-            (size.width.value * density).toInt(), (size.height.value * density).toInt(), density,
-        )
+        val image = widgetSketch(
+            data, source, data.colors.dark, (size.width.value * density).toInt(), (size.height.value * density).toInt(), density,
+        ) ?: return@WidgetFrame
         Box(GlanceModifier.fillMaxSize()) {
             Image(ImageProvider(image.asAndroidBitmap()), contentDescription = weatherDescription(c.weatherCode), modifier = GlanceModifier.fillMaxSize(), contentScale = ContentScale.FillBounds)
             Column(GlanceModifier.padding(12.dp)) {
@@ -75,6 +69,33 @@ class SketchWidget : GlanceAppWidget() {
             }
         }
     }
+}
+
+/** Ce que le dessin prend dans l'app, sans rien télécharger : le relief et les environs déjà gardés, le style. */
+internal class SketchSource(val terrain: TerrainProfile?, val around: Surroundings?, val style: Int) {
+    companion object {
+        suspend fun load(context: Context, place: Place?): SketchSource {
+            val offline: (String) -> String = { throw IOException("hors ligne") }
+            val dir = File(context.filesDir, "terrain")
+            val terrain = place?.let { runCatching { TerrainRepository(dir, offline).cached(it) }.getOrNull() }
+            val around = place?.let { runCatching { SurroundingsRepository(dir, offline).cached(it) }.getOrNull()?.first }
+            return SketchSource(terrain, around, SettingsStore(context).sketchStyle())
+        }
+    }
+}
+
+/**
+ * Le dessin d'Aujourd'hui au temps qu'il fait maintenant (null sans prévision), en [widthPx] × [heightPx] pixels sur
+ * fond transparent : le widget « Dessin » le pose sur son fond, Nimbus sur le sien.
+ */
+internal fun widgetSketch(data: WidgetData, source: SketchSource, dark: Boolean, widthPx: Int, heightPx: Int, density: Float): ImageBitmap? {
+    val place = data.place ?: return null
+    val f = data.forecast ?: return null
+    val c = f.current ?: return null
+    return sketchImage(
+        c.weatherCode, c.isDay, c.time, place.latitude, place.longitude, place.id.hashCode(), source.terrain, source.around,
+        sketchConditions(f, null), source.style, dark, widthPx, heightPx, density,
+    )
 }
 
 class SketchWidgetReceiver : GlanceAppWidgetReceiver() {

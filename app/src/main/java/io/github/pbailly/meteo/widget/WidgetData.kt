@@ -10,7 +10,9 @@ import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.data.PlacesStore
 import io.github.pbailly.meteo.data.SettingsStore
 import io.github.pbailly.meteo.data.WeatherRepository
+import io.github.pbailly.meteo.share.NimbusProvider
 import java.io.File
+import java.io.IOException
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -34,14 +36,18 @@ class WidgetData(
     companion object {
         /**
          * Le cache de l'app sert tant qu'il a moins de 30 minutes : les widgets ne coûtent un appel à Open-Meteo que
-         * quand l'app n'a pas été ouverte entre deux mises à jour.
+         * quand l'app n'a pas été ouverte entre deux mises à jour. [offline] : seulement le cache, sans attendre le
+         * réseau (marqué hors ligne s'il est plus vieux).
          */
-        suspend fun load(context: Context): WidgetData {
+        suspend fun load(context: Context, offline: Boolean = false): WidgetData {
             val colors = WidgetColors.of(darkTheme(context))
             val place = PlacesStore(context).lastPlace() ?: return WidgetData(null, null, 0L, false, colors)
-            val repository = WeatherRepository(File(context.cacheDir, "openmeteo"))
+            val dir = File(context.cacheDir, "openmeteo")
+            val repository = if (offline) WeatherRepository(dir) { throw IOException("hors ligne") } else WeatherRepository(dir)
             return try {
                 val loaded = repository.forecast(place, force = false)
+                // Une prévision toute neuve : Nimbus (le launcher) relit aussi la sienne.
+                if (loaded.downloaded) NimbusProvider.notifyChange(context)
                 WidgetData(place, loaded.value, loaded.fetchedAt, loaded.stale, colors)
             } catch (e: CancellationException) {
                 throw e
@@ -99,10 +105,15 @@ class WidgetColors(
     }
 }
 
-/** Mise à jour de tous les widgets : après un nouveau téléchargement dans l'app, un changement de lieu ou de thème. */
+/**
+ * Mise à jour de tous les widgets, et de Nimbus : après un nouveau téléchargement dans l'app, un changement de lieu ou
+ * de thème.
+ */
 object Widgets {
     /** Un widget qui n'arrive pas à se mettre à jour ne doit jamais fermer l'appli. */
     suspend fun updateAll(context: Context) {
+        // La page de déverrouillage de Nimbus montre la même météo : elle se relit, sans attendre les widgets.
+        NimbusProvider.notifyChange(context)
         listOf(NowWidget(), ForecastWidget(), HoursWidget(), SketchWidget()).forEach { widget ->
             try {
                 widget.updateAll(context)
