@@ -9,6 +9,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asAndroidBitmap
 import io.github.pbailly.meteo.ui.weatherDescription
 import io.github.pbailly.meteo.widget.SketchSource
@@ -58,8 +59,10 @@ class NimbusProvider : ContentProvider() {
     }
 
     /**
-     * Le dessin en PNG, fond transparent, sur papier clair (Nimbus le pose sur son propre fond). Écrit dans un fichier
-     * du cache, ouvert en lecture puis effacé : il reste lisible par le descripteur, et rien ne s'accumule.
+     * Le dessin en PNG, fond transparent, sur papier clair (Nimbus le pose sur son propre fond). Avec `text`, le texte
+     * que Nimbus posera dessus ([textZones]) : le coloriage s'arrête avant lui, le soleil et les nuages se mettent à
+     * côté. Écrit dans un fichier du cache, ouvert en lecture puis effacé : il reste lisible par le descripteur, et rien
+     * ne s'accumule.
      */
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
         checkCaller()
@@ -71,7 +74,8 @@ class NimbusProvider : ContentProvider() {
         val image = try {
             val source = runBlocking { SketchSource.load(context, data.place) }
             // Composé pour 411 dp de large, comme sur l'écran du téléphone, quelle que soit la taille demandée.
-            widgetSketch(data, source, dark = false, width, height, density = width / SKETCH_WIDTH_DP)
+            val text = textZones(uri.getQueryParameter("text")).map { Rect(it.left * width, it.top * height, it.right * width, it.bottom * height) }
+            widgetSketch(data, source, dark = false, width, height, density = width / SKETCH_WIDTH_DP, text = text)
         } catch (e: Exception) {
             // Un dessin raté ne fait pas tomber l'app : Nimbus garde simplement le précédent.
             Log.w(TAG, "Dessin impossible", e)
@@ -163,6 +167,19 @@ class NimbusProvider : ContentProvider() {
         internal fun sketchSize(width: String?, height: String?): Pair<Int, Int> =
             (width?.trim()?.toIntOrNull() ?: DEFAULT_WIDTH).coerceIn(MIN_SIDE, MAX_SIDE) to
                 (height?.trim()?.toIntOrNull() ?: DEFAULT_HEIGHT).coerceIn(MIN_SIDE, MAX_SIDE)
+
+        /** Zones de texte au plus, pour qu'une adresse folle ne coûte rien. */
+        const val MAX_ZONES = 24
+
+        /**
+         * Les zones de texte du paramètre `text` : « gauche,haut,droite,bas » en fractions de l'image (de 0 à 1),
+         * séparées par des points-virgules. Une zone illisible, vide ou hors de l'image est ignorée.
+         */
+        internal fun textZones(text: String?): List<Rect> = text.orEmpty().split(';').asSequence().mapNotNull { zone ->
+            val v = zone.split(',').map { it.trim().toFloatOrNull() ?: return@mapNotNull null }
+            if (v.size != 4 || v.any { !it.isFinite() }) return@mapNotNull null
+            Rect(v[0].coerceIn(0f, 1f), v[1].coerceIn(0f, 1f), v[2].coerceIn(0f, 1f), v[3].coerceIn(0f, 1f)).takeIf { it.width > 0f && it.height > 0f }
+        }.take(MAX_ZONES).toList()
 
         /**
          * La ligne de `now`, comme l'écrivent Aujourd'hui et le widget « Maintenant » : le ciel en toutes lettres, le

@@ -4,9 +4,13 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -16,19 +20,25 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.toSize
 import io.github.pbailly.meteo.data.Surroundings
 import io.github.pbailly.meteo.data.TerrainProfile
 import io.github.pbailly.meteo.ui.theme.LocalChartColors
 import kotlinx.coroutines.delay
 import java.time.LocalDateTime
+import kotlin.math.round
 import kotlin.random.Random
 
 /**
@@ -59,6 +69,8 @@ fun WeatherSketch(
     modifier: Modifier = Modifier,
     /** Appui long sur le dessin (la carte postale en grand). */
     onLongPress: (() -> Unit)? = null,
+    /** Le texte de l'écran posé sur le dessin : le coloriage ne le touche pas. */
+    text: SketchText? = null,
 ) {
     val dark = LocalChartColors.current.darkTheme
     val strength = sketchStrength(style)
@@ -91,20 +103,25 @@ fun WeatherSketch(
     }
     Spacer(
         modifier
+            .then(text?.frame ?: Modifier)
             // Calque à part : les nuages et les objets du premier plan effacent ce qui passe derrière eux.
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             .pointerInput(taps, onLongPress) { detectTapGestures(onLongPress = onLongPress?.let { { _ -> it() } }) { taps.intValue++ } }
             .drawWithCache {
                 // Le paysage et le ciel fixes, dessinés une fois ; à chaque image, seulement ce qui bouge par-dessus.
                 // Toujours le même trait pour la même scène : pas de scintillement.
+                val zones = text?.zones.orEmpty()
                 val still = ImageBitmap(size.width.toInt().coerceAtLeast(1), size.height.toInt().coerceAtLeast(1))
                 CanvasDrawScope().draw(this, layoutDirection, Canvas(still), size) {
-                    val pencil = Pencil(this, graphite, Random(scene.seed * 31 + code), dark, strength).also { it.write = handwriting }
+                    val pencil = Pencil(this, graphite, Random(scene.seed * 31 + code), dark, strength).also {
+                        it.write = handwriting
+                        it.text = zones
+                    }
                     drawScene(pencil, scene, isDay, moonAge, southern = latitude < 0, month = month, part = SketchPart.STILL)
                 }
                 onDrawBehind {
                     drawImage(still)
-                    val pencil = Pencil(this, graphite, Random(scene.seed * 37 + code), dark, strength)
+                    val pencil = Pencil(this, graphite, Random(scene.seed * 37 + code), dark, strength).also { it.text = zones }
                     drawScene(pencil, scene, isDay, moonAge, southern = latitude < 0, month = month, part = SketchPart.MOVING, phase = phase.floatValue)
                 }
             },
@@ -130,6 +147,8 @@ fun sketchImage(
     widthPx: Int,
     heightPx: Int,
     density: Float,
+    /** Le texte qui sera posé sur l'image, en pixels de l'image : le coloriage ne le touche pas. */
+    text: List<Rect> = emptyList(),
 ): ImageBitmap {
     val strength = sketchStrength(style)
     val snowing = SketchSky.of(code) == SketchSky.SNOW || conditions.snowOnGround
@@ -141,7 +160,10 @@ fun sketchImage(
     val image = ImageBitmap(widthPx.coerceAtLeast(1), heightPx.coerceAtLeast(1))
     val size = Size(image.width.toFloat(), image.height.toFloat())
     CanvasDrawScope().draw(Density(density), LayoutDirection.Ltr, Canvas(image), size) {
-        val pencil = Pencil(this, sketchGraphite(dark, strength), Random(scene.seed * 31 + code), dark, strength).also { it.write = handwriting }
+        val pencil = Pencil(this, sketchGraphite(dark, strength), Random(scene.seed * 31 + code), dark, strength).also {
+            it.write = handwriting
+            it.text = text
+        }
         drawScene(pencil, scene, isDay, SketchScenes.moonAge(time), southern = latitude < 0, month = month)
     }
     return image
@@ -156,4 +178,66 @@ private val handwriting: (DrawScope, String, Offset, Color, Float) -> Unit = { s
         textAlign = android.graphics.Paint.Align.CENTER
     }
     scope.drawContext.canvas.nativeCanvas.drawText(text, at.x, at.y, paint)
+}
+
+/**
+ * Le texte d'un écran posé sur le dessin, mesuré une fois placé : chaque écriture le dit ([of], et [layout] pour un
+ * texte, dont on garde alors les lettres plutôt que toute la boîte), le dessin aussi ([frame]). [zones] dit, en pixels
+ * du dessin, ce que le coloriage doit laisser blanc ; elle ne change pas quand tout défile ensemble.
+ */
+@Stable
+class SketchText {
+    private val layouts = HashMap<String, TextLayoutResult>()
+    private val nodes = HashMap<String, LayoutCoordinates>()
+    private var drawing: LayoutCoordinates? = null
+
+    /** Ce que couvre le texte, en pixels du dessin. */
+    var zones by mutableStateOf(emptyList<Rect>())
+        private set
+
+    /** À poser sur le dessin. */
+    val frame: Modifier = Modifier.onGloballyPositioned {
+        drawing = it
+        update()
+    }
+
+    /** À poser sur l'écriture [key] (un texte, une icône, une pastille). */
+    fun of(key: String): Modifier = Modifier.onGloballyPositioned {
+        nodes[key] = it
+        update()
+    }
+
+    /** À donner au `onTextLayout` du texte [key] : on ne garde que ses lettres. */
+    fun layout(key: String): (TextLayoutResult) -> Unit = { layouts[key] = it }
+
+    private fun update() {
+        val f = drawing?.takeIf { it.isAttached } ?: return
+        // Une écriture qui a disparu (le bandeau d'erreur) ne compte plus.
+        nodes.entries.removeAll { !it.value.isAttached }
+        val next = nodes.flatMap { (key, node) ->
+            val origin = f.localPositionOf(node, Offset.Zero)
+            val parts = layouts[key]?.let(::letters) ?: listOf(Rect(Offset.Zero, node.size.toSize()))
+            parts.map { r -> Rect(round(r.left + origin.x), round(r.top + origin.y), round(r.right + origin.x), round(r.bottom + origin.y)) }
+        }
+        if (next != zones) zones = next
+    }
+}
+
+/**
+ * Ce que couvrent les lettres de [layout], ligne par ligne : de la hauteur des majuscules (des accents s'il y en a) au
+ * bas des jambages (à la ligne de base s'il n'y en a pas).
+ */
+internal fun letters(layout: TextLayoutResult): List<Rect> {
+    val size = layout.layoutInput.style.fontSize
+    // Sans taille connue, celle qu'on lit dans la hauteur de la première ligne.
+    val em = if (size.isSp) with(layout.layoutInput.density) { size.toPx() } else (layout.getLineBottom(0) - layout.getLineTop(0)) / 1.25f
+    val text = layout.layoutInput.text.text
+    return (0 until layout.lineCount).mapNotNull { i ->
+        val line = text.substring(layout.getLineStart(i), layout.getLineEnd(i, visibleEnd = true))
+        if (line.isBlank()) return@mapNotNull null
+        val baseline = layout.getLineBaseline(i)
+        val high = line.any { it.isUpperCase() && it.code > 0x7F }
+        val low = line.any { it in "gjpqyçQ,;()[]{}|/@" }
+        Rect(layout.getLineLeft(i), baseline - em * if (high) 0.96f else 0.8f, layout.getLineRight(i), baseline + em * if (low) 0.25f else 0.06f)
+    }
 }

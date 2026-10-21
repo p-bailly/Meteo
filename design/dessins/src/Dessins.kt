@@ -1,6 +1,7 @@
 package io.github.pbailly.meteo.ui
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
@@ -10,6 +11,7 @@ import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import io.github.pbailly.meteo.data.Settlement
@@ -351,41 +353,80 @@ private fun font(name: String, size: Float) = Font(FontMgr.default.makeFromFile(
 /** Les symboles de la maquette (la montagne de la pastille, l'étoile), absents des polices de l'appli. */
 private fun symbols(size: Float) = Font(FontMgr.default.matchFamilyStyle("DejaVu Sans", org.jetbrains.skia.FontStyle.NORMAL), size * DENSITY)
 
+/** Une écriture du faux texte : sa ligne de base en ([x], [y]) pixels. */
+private class Label(val text: String, val x: Float, val y: Float, val font: Font, val paint: org.jetbrains.skia.Paint) {
+    /** Ce que couvrent vraiment les lettres, en pixels. */
+    val ink: Rect get() = font.measureText(text, paint).let { Rect(x + it.left, y + it.top, x + it.right, y + it.bottom) }
+}
+
 /** Faux texte de l'écran, aux places et tailles de l'appli : le lieu, la grande température, le ciel, les extrêmes. */
-private fun overlay(canvas: Canvas, item: Item, width: Float) {
-    val c = canvas.nativeCanvas
+private fun labels(item: Item, width: Float): List<Label> {
     val ink = org.jetbrains.skia.Paint().apply { color = (if (item.dark) Color(0xFFEAF2F8) else Color(0xFF0F2133)).toArgb(); isAntiAlias = true }
     val soft = org.jetbrains.skia.Paint().apply { color = (if (item.dark) Color(0xFF9FB2C4) else Color(0xFF5A6B7C)).toArgb(); isAntiAlias = true }
     val accent = org.jetbrains.skia.Paint().apply { color = Color(0xFFE8711C).toArgb(); isAntiAlias = true }
     val blue = org.jetbrains.skia.Paint().apply { color = (if (item.dark) Color(0xFF7DB4F0) else Color(0xFF1F5FA8)).toArgb(); isAntiAlias = true }
     fun dp(v: Number) = v.toFloat() * DENSITY
-    c.drawString(item.spot.label.substringBefore(" :"), dp(18), dp(30), font("archivo_semibold", 22f), ink)
-    c.drawString(item.spot.label.substringAfter(": ", "").substringBefore(",").substringBefore(" ·"), dp(18), dp(47), font("archivo_regular", 12f), soft)
-    c.drawString("Mis à jour il y a 5 min", dp(18), dp(66), font("martian_mono_condensed_regular", 10f), soft)
-    // La pastille Neige & altitude, à gauche de l'étoile des favoris (à la saison de la neige).
-    if (item.time.monthValue !in 4..9) {
-        val chip = org.jetbrains.skia.Rect.makeXYWH(width - dp(168), dp(18), dp(102), dp(30))
-        val line = org.jetbrains.skia.Paint().apply { color = soft.color; mode = org.jetbrains.skia.PaintMode.STROKE; strokeWidth = dp(1); isAntiAlias = true }
-        c.drawRRect(org.jetbrains.skia.RRect.makeLTRB(chip.left, chip.top, chip.right, chip.bottom, dp(14)), line)
-        c.drawString("▲", chip.left + dp(8), chip.top + dp(20), symbols(13f), blue)
-        c.drawString("0° 1 800 m", chip.left + dp(25), chip.top + dp(20), font("martian_mono_condensed_medium", 11f), blue)
-    }
-    c.drawString("☆", width - dp(50), dp(44), symbols(28f), soft)
+    val out = mutableListOf<Label>()
+    out += Label(item.spot.label.substringBefore(" :"), dp(18), dp(30), font("archivo_semibold", 22f), ink)
+    out += Label(item.spot.label.substringAfter(": ", "").substringBefore(",").substringBefore(" ·"), dp(18), dp(47), font("archivo_regular", 12f), soft)
+    out += Label("Mis à jour il y a 5 min", dp(18), dp(66), font("martian_mono_condensed_regular", 10f), soft)
+    out += Label("☆", width - dp(50), dp(44), symbols(28f), soft)
     val big = font("archivo_condensed_light", 112f)
     val temp = item.temperature.toString().replace("-", "−")
-    c.drawString(temp, dp(18), dp(168), big, ink)
-    val tw = big.measureTextWidth(temp)
-    c.drawString("°C", dp(18) + tw, dp(112), font("archivo_regular", 26f), ink)
-    c.drawString("ressenti ${item.temperature - 2}°", dp(22), dp(196), font("martian_mono_condensed_regular", 13f), ink)
+    out += Label(temp, dp(18), dp(168), big, ink)
+    out += Label("°C", dp(18) + big.measureTextWidth(temp), dp(112), font("archivo_regular", 26f), ink)
+    out += Label("ressenti ${item.temperature - 2}°", dp(22), dp(196), font("martian_mono_condensed_regular", 13f), ink)
     val right = width - dp(18)
     val sky = font("archivo_semibold", 17f)
     val words = describe(item.code)
-    c.drawString(words, right - sky.measureTextWidth(words), dp(168), sky, ink)
+    out += Label(words, right - sky.measureTextWidth(words), dp(168), sky, ink)
     val mono = font("martian_mono_condensed_medium", 13f)
     val lo = " / ${item.temperature - 6}°"
     val hi = "${item.temperature + 3}°"
-    c.drawString(lo, right - mono.measureTextWidth(lo), dp(188), mono, blue)
-    c.drawString(hi, right - mono.measureTextWidth(lo) - mono.measureTextWidth(hi), dp(188), mono, accent)
+    out += Label(lo, right - mono.measureTextWidth(lo), dp(188), mono, blue)
+    out += Label(hi, right - mono.measureTextWidth(lo) - mono.measureTextWidth(hi), dp(188), mono, accent)
+    return out
+}
+
+/**
+ * Un point du dessin trop près du texte (à moins de [TEXT_MARGIN_DP] dp moins un de ses lettres), ou rien : le
+ * coloriage ne doit jamais toucher l'écriture.
+ */
+private fun touching(sketch: ImageBitmap, zones: List<Rect>): Pair<Int, Int>? {
+    val pixels = sketch.toPixelMap()
+    val m = (TEXT_MARGIN_DP - 1) * DENSITY
+    for (z in zones) {
+        val r = z.inflate(m)
+        for (y in maxOf(0, r.top.toInt())..minOf(sketch.height - 1, r.bottom.toInt())) {
+            for (x in maxOf(0, r.left.toInt())..minOf(sketch.width - 1, r.right.toInt())) {
+                val dx = maxOf(z.left - x, 0f, x - z.right)
+                val dy = maxOf(z.top - y, 0f, y - z.bottom)
+                if (dx * dx + dy * dy < m * m && pixels[x, y].alpha > 0.02f) return x to y
+            }
+        }
+    }
+    return null
+}
+
+/** La pastille Neige & altitude, à gauche de l'étoile des favoris (à la saison de la neige). */
+private fun chip(item: Item, width: Float): Rect? =
+    if (item.time.monthValue in 4..9) null else Rect(width - 168 * DENSITY, 18 * DENSITY, width - 66 * DENSITY, 48 * DENSITY)
+
+/** Ce que le dessin doit laisser libre : chaque écriture, et la pastille. */
+private fun textZones(item: Item, width: Float): List<Rect> = labels(item, width).map { it.ink } + listOfNotNull(chip(item, width))
+
+private fun overlay(canvas: Canvas, item: Item, width: Float) {
+    val c = canvas.nativeCanvas
+    val labels = labels(item, width)
+    labels.forEach { c.drawString(it.text, it.x, it.y, it.font, it.paint) }
+    chip(item, width)?.let { chip ->
+        val soft = labels[1].paint
+        val blue = org.jetbrains.skia.Paint().apply { color = (if (item.dark) Color(0xFF7DB4F0) else Color(0xFF1F5FA8)).toArgb(); isAntiAlias = true }
+        val line = org.jetbrains.skia.Paint().apply { color = soft.color; mode = org.jetbrains.skia.PaintMode.STROKE; strokeWidth = DENSITY; isAntiAlias = true }
+        c.drawRRect(org.jetbrains.skia.RRect.makeLTRB(chip.left, chip.top, chip.right, chip.bottom, 14 * DENSITY), line)
+        c.drawString("▲", chip.left + 8 * DENSITY, chip.top + 20 * DENSITY, symbols(13f), blue)
+        c.drawString("0° 1 800 m", chip.left + 25 * DENSITY, chip.top + 20 * DENSITY, font("martian_mono_condensed_medium", 11f), blue)
+    }
 }
 
 private fun describe(code: Int) = when (code) {
@@ -420,9 +461,10 @@ private fun render(item: Item, out: File) {
     val graphite = sketchGraphite(item.dark, strength)
     val month = SketchScenes.seasonMonth(item.time.monthValue, item.spot.latitude)
     CanvasDrawScope().draw(Density(DENSITY), LayoutDirection.Ltr, Canvas(sketch), size) {
-        val pencil = Pencil(this, graphite, Random(scene.seed * 31 + item.code), item.dark, strength)
+        val pencil = Pencil(this, graphite, Random(scene.seed * 31 + item.code), item.dark, strength).also { it.text = textZones(item, size.width) }
         drawScene(pencil, scene, item.isDay, SketchScenes.moonAge(item.time), southern = item.spot.latitude < 0, month = month)
     }
+    touching(sketch, textZones(item, size.width))?.let { println("Touche le texte : ${out.name} (${item.caption}) en $it") }
     val page = ImageBitmap(w, h)
     val canvas = Canvas(page)
     canvas.drawRect(0f, 0f, size.width, size.height, Paint().apply { color = if (item.dark) Color(0xFF0B1826) else Color(0xFFF7FAFC) })
@@ -460,4 +502,43 @@ fun main(args: Array<String>) {
     }
     File(dir, "catalogue.tsv").writeText(index.toString())
     println("${items.size} dessins dans $dir")
+    // Pour la page de déverrouillage de Nimbus : le dessin seul, autour de son texte à elle.
+    val s = spots(profiles)
+    val nimbus = File(dir, "nimbus").apply { mkdirs() }
+    val evening = LocalDateTime.of(2026, 10, 20, 20, 35)
+    val sun = SketchConditions(sunrise = LocalDateTime.of(2026, 7, 8, 6, 0), sunset = LocalDateTime.of(2026, 7, 8, 21, 30))
+    listOf(
+        "coloriage_morteau" to Item("", "Morteau, le soir", s.getValue("morteau"), 2, evening, isDay = false, sky = 0),
+        "couchant" to Item("", "Coucher de soleil", s.getValue("haute"), 1, LocalDateTime.of(2026, 7, 8, 21, 10), isDay = true, sky = 0, conditions = sun),
+        "soleil" to Item("", "Grand soleil", s.getValue("chamonix"), 0, LocalDateTime.of(2026, 7, 8, 13, 0), isDay = true, sky = 0),
+        "pluie" to Item("", "Pluie", s.getValue("morteau"), 63, LocalDateTime.of(2026, 10, 20, 15, 0), isDay = true, sky = 0),
+    ).forEach { (name, item) -> layer(item, NIMBUS_TEXT, File(nimbus, "$name.png")) }
+}
+
+/**
+ * Le texte de la page de déverrouillage de Nimbus sur le coloriage, en fractions de l'image, tel qu'elle le
+ * mesure et l'envoie (Morteau, 11 °C, « Éclaircies ») : le haut coupé, le ciel, les extrêmes, la température, le
+ * « °C », le ressenti, le lieu.
+ */
+private val NIMBUS_TEXT = listOf(
+    Rect(0f, 0f, 1f, 0.32f), Rect(0.6833f, 0.2534f, 0.8998f, 0.3200f), Rect(0.1001f, 0.5519f, 0.3195f, 0.5998f),
+    Rect(0.2592f, 0.3647f, 0.3187f, 0.4344f), Rect(0.6957f, 0.4448f, 0.8998f, 0.5010f), Rect(0.6594f, 0.3637f, 0.8991f, 0.4199f),
+    Rect(0.0958f, 0.3398f, 0.2526f, 0.5322f), Rect(0.1001f, 0.2586f, 0.2722f, 0.3044f),
+)
+
+/** Le dessin seul, sur fond transparent comme Météo le donne à Nimbus, autour de [text] (en fractions). */
+private fun layer(item: Item, text: List<Rect>, out: File) {
+    val (_, scene) = sceneOf(item)
+    val w = (WIDTH_DP * DENSITY).toInt()
+    val h = (HEIGHT_DP * DENSITY).toInt()
+    val size = Size(w.toFloat(), h.toFloat())
+    val sketch = ImageBitmap(w, h)
+    val strength = sketchStrength(item.style)
+    val zones = text.map { Rect(it.left * w, it.top * h, it.right * w, it.bottom * h) }
+    CanvasDrawScope().draw(Density(DENSITY), LayoutDirection.Ltr, Canvas(sketch), size) {
+        val pencil = Pencil(this, sketchGraphite(false, strength), Random(scene.seed * 31 + item.code), false, strength).also { it.text = zones }
+        drawScene(pencil, scene, item.isDay, SketchScenes.moonAge(item.time), southern = item.spot.latitude < 0, month = SketchScenes.seasonMonth(item.time.monthValue, item.spot.latitude))
+    }
+    touching(sketch, zones)?.let { println("Touche le texte de Nimbus : ${out.name} en $it") }
+    out.writeBytes(Image.makeFromBitmap(sketch.asSkiaBitmap()).encodeToData(EncodedImageFormat.PNG)?.bytes ?: error("PNG"))
 }

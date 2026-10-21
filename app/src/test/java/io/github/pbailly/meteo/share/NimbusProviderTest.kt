@@ -1,5 +1,6 @@
 package io.github.pbailly.meteo.share
 
+import androidx.compose.ui.geometry.Rect
 import io.github.pbailly.meteo.data.OpenMeteoApi
 import io.github.pbailly.meteo.data.Place
 import io.github.pbailly.meteo.widget.WidgetColors
@@ -76,6 +77,15 @@ class NimbusProviderTest {
         assertEquals(64 to 2048, NimbusProvider.sketchSize("10", "5000"))
         assertEquals(64 to 64, NimbusProvider.sketchSize("-3", "0"))
         assertEquals(1027 to 717, NimbusProvider.sketchSize("large", ""))
+    }
+
+    @Test
+    fun `text zones in fractions of the sketch`() {
+        assertEquals(listOf(Rect(0.1f, 0.2f, 0.3f, 0.4f), Rect(0.5f, 0f, 1f, 0.25f)), NimbusProvider.textZones("0.1,0.2,0.3,0.4;0.5,-1,1.5,0.25"))
+        // Illisibles, vides ou à l'envers : ignorées.
+        assertEquals(listOf(Rect(0f, 0f, 0.5f, 0.5f)), NimbusProvider.textZones("a,b,c,d;0.4,0.4,0.2,0.6;0.1,0.1,0.1,0.3;0,0,0.5,0.5;1,2,3"))
+        assertEquals(emptyList<Rect>(), NimbusProvider.textZones(null))
+        assertEquals(NimbusProvider.MAX_ZONES, NimbusProvider.textZones(List(100) { "0,0,1,1" }.joinToString(";")).size)
     }
 
     @Test
