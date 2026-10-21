@@ -26,7 +26,9 @@ la carte) :
   (pleine et orange pour un favori), la température en grand avec le ressenti juste en dessous, le ciel en toutes
   lettres (sans pictogramme), les extrêmes du jour (maxi en orange, mini en bleu) ; en fond, un **dessin aux crayons de couleur** du lieu tel qu'il
   est, puis du temps qu'il fait : le ciel se place entre les écritures, le relief, le village, la rivière ou les champs
-  dans la bande libre sous le texte, sans monter derrière le ciel en toutes lettres ni les extrêmes. Rien n'est inventé :
+  dans la bande libre sous le texte, sans monter derrière le ciel en toutes lettres ni les extrêmes ; le coloriage ne
+  touche jamais le texte (chaque écriture est mesurée à l'écran, le crayon s'arrête quelques dp avant, d'une gomme
+  adoucie, et le soleil, la lune, les nuages ou le ballon se poussent à côté). Rien n'est inventé :
   sur un sommet (le Mont Blanc), la coupe regarde vers un autre sommet et le relief est en dessous ; en mer ou au milieu
   d'un lac, de l'eau, un voilier et des mouettes ; la ville est posée au niveau du lieu (le sol est aplani sous elle,
   Valence reste dans sa plaine), et le terrain est colorié sur toute la largeur. Quand OpenStreetMap ne répond pas, la
@@ -69,8 +71,13 @@ la carte) :
   couvert, les nuages à leur hauteur d'après la prévision (les nuages bas coiffent les sommets, ou font une mer de
   nuages sous le sommet ; les hauts ne sont qu'un voile ou des cirrus), brouillard (ou brouillard de vallée), bruine, pluie faible à forte (en traits,
   chassée par le vent, ou en gouttes et flaques), pluie verglaçante, averses, neige en petits ou gros flocons ou en
-  grains, orage (un ou deux éclairs, ou un cumulonimbus), grêle (les grêlons rebondissent). Et ce que l'heure y ajoute : la lumière de l'aube, de l'heure
-  dorée (le soleil bas passe derrière le relief) et du crépuscule, les fenêtres qui s'allument peu à peu au crépuscule
+  grains, orage (un ou deux éclairs, ou un cumulonimbus), grêle (les grêlons rebondissent). Le **ciel est colorié**
+  d'un bord à l'autre, autour du texte : bleu de beau temps qui pâlit vers l'horizon, gris des jours de pluie, bleu de
+  la nuit. Les couleurs sont franches et chatoient : chaque étage du relief croise deux crayons (le vert tendre sur les
+  prés, le vert sombre sur les sapins, le roux et le rouge à l'automne), les façades sont crème, ocre ou rose, le
+  soleil et la lune sont croisés de jaune. Et ce que l'heure y ajoute : la lumière de l'aube, de l'heure
+  dorée (tout le ciel en dégradé, du violet en haut au rose, à l'orange et au jaune sur l'horizon, une lueur autour du
+  soleil bas qui passe derrière le relief) et du crépuscule (du bleu de la nuit au rose et à l'orange), les fenêtres qui s'allument peu à peu au crépuscule
   et les réverbères ; la neige sur les montagnes d'après l'isotherme 0 °C de la prévision ; la canicule (soleil rouge,
   air qui tremble au-delà de 32 °C) et le grand froid (givre dans les coins sous −10 °C) ; les aurores boréales quand
   l'activité magnétique (indice Kp de la NOAA) les descend jusqu'au lieu ; les pluies d'étoiles filantes à leurs dates
@@ -227,9 +234,11 @@ appli est refusée.
 - `now` : le lieu et son département, la température et le ressenti, le ciel en toutes lettres, le maxi et le mini du
   jour, le code météo, jour ou nuit, l'heure de la prévision et si c'est le cache faute de réseau. Ce sont les données
   des widgets : le cache de moins de 30 minutes, sinon un appel à Open-Meteo, attendu 10 secondes au plus.
-- `sketch?width=…&height=…` : le dessin en PNG, fond transparent, sur papier clair, dans le style choisi dans les
-  Réglages, avec le relief et les environs déjà gardés (rien n'est téléchargé pour lui) ; de 64 à 2048 pixels de côté,
-  1027 × 717 par défaut.
+- `sketch?width=…&height=…&text=…` : le dessin en PNG, fond transparent, sur papier clair, dans le style choisi dans
+  les Réglages, avec le relief et les environs déjà gardés (rien n'est téléchargé pour lui) ; de 64 à 2048 pixels de
+  côté, 1027 × 717 par défaut. `text` dit où Nimbus posera son texte (« gauche,haut,droite,bas » en fractions de
+  l'image, séparées par des points-virgules, 24 au plus) : le coloriage s'arrête juste avant, le soleil, la lune, les
+  nuages et ce qui vole se mettent à côté.
 
 À chaque nouvelle prévision, et quand le style du dessin change, Météo prévient Nimbus, qui relit les deux. Rien
 d'autre n'est partagé : ni les favoris, ni la position du téléphone.

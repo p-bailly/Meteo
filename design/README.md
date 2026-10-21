@@ -87,7 +87,10 @@ plus lourds que ceux des autres pistes.
 relief (plaine, basse, moyenne, haute, très haute montagne, au sommet), l'eau (lac, mer, rivière, île), chaque lieu
 habité (grande ville, petite ville, village, hameau, ferme, chalet, refuge), la forêt, les saisons, les trois versions
 de chaque ciel et l'intensité de la pluie ou de la neige, les orages, les surprises, le thème sombre. Le texte de
-l'écran est simulé par-dessus pour juger de la lisibilité.
+l'écran est simulé par-dessus pour juger de la lisibilité, et le dessin le contourne comme dans l'appli ; l'outil
+signale tout dessin qui toucherait une lettre (« Touche le texte »). Il écrit aussi, dans `build/dessins/nimbus/`,
+quelques dessins seuls, autour du texte de la page de déverrouillage de Nimbus : `coloriage_morteau.png` est l'image
+des captures de cette page dans Nimbus (`app/src/test/resources/unlock/`).
 
 Les dessins viennent du code même de l'appli (`SketchScene.kt`, `SketchDraw.kt`, `SketchDecor.kt`), compilé pour
 l'ordinateur avec Compose sur Skia ; les reliefs sont les coupes réelles des tests (Chamonix, Annecy, Morteau, Valence,

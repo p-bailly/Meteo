@@ -61,7 +61,15 @@ internal fun DrawScope.skyAbove(t: SketchTerrain, w: Float, h: Float): Path {
     return polygon(listOf(Offset(w * 0.28f, h * 0.30f)) + line + listOf(Offset(w * 0.82f, h * 0.30f)))
 }
 
-/** Demi-largeur du lieu habité dessiné, en fraction de la largeur. */
+/** Tout le ciel, d'un bord à l'autre du dessin, au-dessus de la crête et de la chaîne lointaine : pour le colorier. */
+internal fun DrawScope.skyOver(t: SketchTerrain, w: Float, h: Float): Path {
+    val line = ridgeLine(t)
+    val sky = polygon(listOf(Offset(0f, 0f), Offset(0f, line.first().y)) + line + listOf(Offset(w, line.last().y), Offset(w, 0f)))
+    if (t.backdrop.isEmpty()) return sky
+    val far = listOf(Offset(0f, h * FOOT)) + t.backdrop.map { (x, lift) -> Offset(w * x, h * (FOOT - lift)) } + listOf(Offset(w, h * FOOT))
+    return sky.apply { op(this, below(far), PathOperation.Difference) }
+}
+
 /**
  * La taille du lieu habité dans sa catégorie, de 0 (le plus petit) à 1 (le plus grand), d'après le nombre d'habitants
  * (en échelle logarithmique : un village de 150 à 2 000, une petite ville de 2 000 à 50 000, une grande ville de
@@ -222,20 +230,27 @@ internal fun DrawScope.landscape(pencil: Pencil, scene: SketchScene, w: Float, h
                 val yTop = maxOf(y(top), snowY, 0f)
                 if (yTop < bottom) {
                     val spacing = when (color) {
-                        Crayon.MEADOW -> 6.5f
-                        Crayon.ROCK -> if (relief == Relief.VERY_HIGH) 4.5f else 5.5f
-                        else -> 5f
+                        Crayon.MEADOW -> 5.5f
+                        Crayon.ROCK -> if (relief == Relief.VERY_HIGH) 4.2f else 5f
+                        else -> 4.6f
                     }
-                    pencil.ink(color).hatch(land, Rect(area.left, yTop, minOf(area.right, farX), bottom), spacing = spacing)
+                    val band = Rect(area.left, yTop, minOf(area.right, farX), bottom)
+                    pencil.ink(color).hatch(land, band, spacing = spacing)
+                    // La deuxième couleur croisée par-dessus : l'étage chatoie.
+                    shadeOf(color)?.let { pencil.ink(it).hatch(land, band, spacing = spacing * 1.8f, width = 0.7f, rising = false) }
                     bottom = yTop
                 }
                 if (bottom <= maxOf(snowY, 0f)) break
             }
             // Au loin, le relief bleuit (perspective aérienne).
-            if (farX < area.right) pencil.ink(Crayon.FAR).hatch(land, Rect(farX, snowY.coerceAtLeast(0f), area.right, h), spacing = 5f)
+            if (farX < area.right) {
+                val far = Rect(farX, snowY.coerceAtLeast(0f), area.right, h)
+                pencil.ink(Crayon.FAR).hatch(land, far, spacing = 4.6f)
+                pencil.ink(Crayon.SKY).hatch(land, far, spacing = 8.5f, width = 0.6f, rising = false)
+            }
         }
         val snowBottom = if (allSnow) h else snowY.coerceAtMost(h)
-        if (snowBottom > 0f) pencil.ink(Crayon.SNOW).hatch(land, Rect(area.left, 0f, area.right, snowBottom), spacing = 6f, width = 0.7f)
+        if (snowBottom > 0f) pencil.ink(Crayon.SNOW).hatch(land, Rect(area.left, 0f, area.right, snowBottom), spacing = 5.5f, width = 0.7f)
         // Les glaciers, en toute saison : hachures croisées bleu glacier.
         val glacierY = y(t.glacierline)
         if (glacierY > 0f) pencil.ink(Crayon.SNOW).hatch(land, Rect(area.left, 0f, area.right, glacierY), spacing = 4f, width = 0.6f, rising = false)
@@ -478,7 +493,7 @@ private fun DrawScope.peakNames(pencil: Pencil, scene: SketchScene, w: Float, h:
         }
         val base = Offset(center, y)
         val box = Rect(base.x - half, base.y - size * u, base.x + half, base.y + 1f * u)
-        if (box.left < w * 0.30f || box.right > w || box.top < sh * 0.30f || abs(center - peak.x) > half * 1.6f || placed.any { it.overlaps(box) }) continue
+        if (box.left < w * 0.30f || box.right > w || box.top < sh * 0.30f || abs(center - peak.x) > half * 1.6f || placed.any { it.overlaps(box) } || pencil.nearText(box)) continue
         if (lift < 10f) pencil.line(peak + Offset(0f, -1.5f * u), Offset(peak.x + (center - peak.x) * 0.25f, peak.y - 4.5f * u), width = 0.6f, passes = 1, wobble = 0.1f)
         pencil.write(label.name, base, size)
         placed += box
@@ -826,6 +841,8 @@ private fun DrawScope.townHouse(pencil: Pencil, ground: Offset, width: Float, fl
     pencil.outline(walls, width = 1f)
     pencil.outline(roof, width = 1f)
     val tiles = if (rnd.nextFloat() < 0.75f) Crayon.ROOF else Crayon.FAR
+    // Des façades de couleur, une teinte claire par maison.
+    if (!pencil.culture.flatRoofs) facade(pencil, walls, (x / u).toInt() + floors)
     when {
         pencil.culture.flatRoofs -> pencil.ink(Crayon.WHEAT).hatch(walls, walls.getBounds(), spacing = 3.2f, width = 0.5f)
         pencil.culture.curvedRoofs -> pencil.roofInk(Crayon.FAR).hatch(roof, roof.getBounds(), spacing = 2f, width = 0.7f)
@@ -1090,7 +1107,11 @@ private fun DrawScope.house(pencil: Pencil, ground: Offset, width: Float, chimne
     pencil.erase(all)
     pencil.outline(walls, width = 1f)
     // Les murs clairs des pays chauds, l'ocre des maisons de Provence.
-    if (flat || pencil.local == LocalStyle.PROVENCE) pencil.ink(if (flat) Crayon.WHEAT else Crayon.ORANGE).hatch(walls, walls.getBounds(), spacing = 3.2f, width = 0.5f)
+    if (flat || pencil.local == LocalStyle.PROVENCE) {
+        pencil.ink(if (flat) Crayon.WHEAT else Crayon.ORANGE).hatch(walls, walls.getBounds(), spacing = 3.2f, width = 0.5f)
+    } else {
+        facade(pencil, walls, (x / u).toInt())
+    }
     stack?.let { pencil.outline(it, width = 0.9f, passes = 1) }
     pencil.outline(roof, width = 1f)
     if (!flat) pencil.roofInk(if (pencil.culture.curvedRoofs) Crayon.FAR else Crayon.ROOF).hatch(roof, roof.getBounds(), spacing = 2f, width = 0.7f)
@@ -1098,6 +1119,15 @@ private fun DrawScope.house(pencil: Pencil, ground: Offset, width: Float, chimne
     pencil.outline(window, width = 0.7f, passes = 1)
     if (lit) pencil.ink(Crayon.YELLOW).hatch(window, window.getBounds(), spacing = 0.8f, width = 0.8f)
     return if (stack != null) Offset(x + width * 0.25f, g - wall - width * 0.55f) else null
+}
+
+/** Les teintes claires des façades : crème, ocre, rose, jaune paille, terre. */
+private val FACADES = listOf(Crayon.WHEAT, Crayon.ORANGE, Crayon.PINK, Crayon.YELLOW, Crayon.EARTH)
+
+/** Une façade [walls] colorée légèrement, dans la teinte numéro [tint] (au hasard des maisons). */
+private fun DrawScope.facade(pencil: Pencil, walls: Path, tint: Int) {
+    val color = FACADES[((tint % FACADES.size) + FACADES.size) % FACADES.size]
+    pencil.ink(color).pressed(0.55f).hatch(walls, walls.getBounds(), spacing = 2.6f, width = 0.6f, rising = false)
 }
 
 /**
@@ -1194,19 +1224,26 @@ private fun DrawScope.nessie(pencil: Pencil, water: Offset) {
 internal fun DrawScope.surprises(pencil: Pencil, scene: SketchScene, w: Float, h: Float, sky: Float = h) {
     // Au bord de la mer, les objets du premier plan sont sur le rivage.
     val ground = Offset(w * layoutOf(scene).foreground, h * if (scene.terrain.sea) SEA else GROUND)
+    val u = density
+    // Ce qui passe dans le ciel se met à côté du texte de l'écran.
+    fun aside(x: Float, y: Float, rx: Float, ry: Float) = pencil.clear(Offset(w * x, sky * y), rx * u, ry * u)
     for (surprise in scene.surprises) when (surprise) {
-        Surprise.PARAGLIDER -> paraglider(pencil, Offset(w * 0.81f, sky * 0.43f))
-        Surprise.SHOOTING_STAR -> shootingStar(pencil, Offset(w * 0.75f, sky * 0.53f), Offset(w * 0.88f, sky * 0.41f))
-        Surprise.UFO -> ufo(pencil, Offset(w * 0.81f, sky * 0.46f), 24f * density, beamTo = null)
-        Surprise.ABDUCTION -> {
-            ufo(pencil, Offset(w * 0.81f, sky * 0.42f), 30f * density, beamTo = h * 0.95f)
-            sheep(pencil, Offset(w * 0.81f, sky * 0.51f))
+        Surprise.PARAGLIDER -> paraglider(pencil, aside(0.81f, 0.43f, 14f, 14f))
+        Surprise.SHOOTING_STAR -> {
+            val shift = aside(0.815f, 0.47f, 30f, 14f) - Offset(w * 0.815f, sky * 0.47f)
+            shootingStar(pencil, Offset(w * 0.75f, sky * 0.53f) + shift, Offset(w * 0.88f, sky * 0.41f) + shift)
         }
-        Surprise.SLEIGH -> sleigh(pencil, Offset(w * 0.80f, sky * 0.46f))
+        Surprise.UFO -> ufo(pencil, aside(0.81f, 0.46f, 16f, 10f), 24f * u, beamTo = null)
+        Surprise.ABDUCTION -> {
+            val shift = aside(0.81f, 0.46f, 20f, 18f) - Offset(w * 0.81f, sky * 0.46f)
+            ufo(pencil, Offset(w * 0.81f, sky * 0.42f) + shift, 30f * u, beamTo = h * 0.95f)
+            sheep(pencil, Offset(w * 0.81f, sky * 0.51f) + shift)
+        }
+        Surprise.SLEIGH -> sleigh(pencil, aside(0.80f, 0.46f, 30f, 12f))
         Surprise.FIREWORKS -> fireworks(pencil, w, sky)
-        Surprise.BATS -> listOf(0.78f to 0.43f, 0.44f to 0.48f, 0.87f to 0.50f).forEach { (x, y) -> bat(pencil, Offset(w * x, sky * y)) }
-        Surprise.HEART -> heart(pencil, Offset(w * 0.79f, sky * 0.48f), 12f * density)
-        Surprise.FISH -> fish(pencil, Offset(w * 0.80f, sky * 0.46f))
+        Surprise.BATS -> listOf(0.78f to 0.43f, 0.44f to 0.48f, 0.87f to 0.50f).forEach { (x, y) -> bat(pencil, aside(x, y, 7f, 5f)) }
+        Surprise.HEART -> heart(pencil, aside(0.79f, 0.48f, 14f, 14f), 12f * u)
+        Surprise.FISH -> fish(pencil, aside(0.80f, 0.46f, 14f, 9f))
         Surprise.NOTES -> notes(pencil, w, sky)
         Surprise.SNOWMAN -> snowman(pencil, ground)
         Surprise.UMBRELLA -> umbrella(pencil, ground)
@@ -2210,7 +2247,7 @@ internal fun DrawScope.animated(pencil: Pencil, scene: SketchScene, w: Float, h:
         Surprise.BIRDS -> flyingBirds(pencil, w, sky, phase)
         // L'avion traverse le ciel libre vers la droite, sa traînée derrière lui, une fois par cycle.
         Surprise.PLANE -> plane(pencil, Offset(w * (0.56f + 0.32f * phase), sky * (0.45f - 0.04f * phase)), trail = w * (0.06f + 0.10f * phase))
-        Surprise.BALLOON -> balloon(pencil, Offset(w * 0.43f + (w * 0.012f * sin(turn)).toFloat(), sky * 0.48f + (3f * u * sin(turn * 2)).toFloat()))
+        Surprise.BALLOON -> balloon(pencil, pencil.clear(Offset(w * 0.43f, sky * 0.48f), 9f * u + w * 0.012f, 17f * u) + Offset((w * 0.012f * sin(turn)).toFloat(), (3f * u * sin(turn * 2)).toFloat()))
         Surprise.LEAVES -> leaves(pencil, w, h, phase, lean)
         else -> Unit
     }
@@ -2219,9 +2256,11 @@ internal fun DrawScope.animated(pencil: Pencil, scene: SketchScene, w: Float, h:
 /** Les oiseaux tournent en rond dans le ciel, en battant des ailes. */
 private fun DrawScope.flyingBirds(pencil: Pencil, w: Float, h: Float, phase: Float) {
     val u = density
+    // Leur ronde se fait à côté du texte de l'écran.
+    val shift = pencil.clear(Offset(w * 0.755f, h * 0.47f), w * 0.09f, h * 0.06f) - Offset(w * 0.755f, h * 0.47f)
     listOf(Triple(0.77f, 0.45f, 5.5f), Triple(0.815f, 0.42f, 4.5f), Triple(0.845f, 0.49f, 4f), Triple(0.79f, 0.53f, 3.5f)).forEachIndexed { k, (x, y, s) ->
         val a = 2 * PI * (phase * 2 + k * 0.08)
-        val c = Offset(w * (x - 0.05f) + (w * 0.05f * cos(a)).toFloat(), h * y + (h * 0.025f * sin(a)).toFloat())
+        val c = shift + Offset(w * (x - 0.05f) + (w * 0.05f * cos(a)).toFloat(), h * y + (h * 0.025f * sin(a)).toFloat())
         val flap = sin(2 * PI * (phase * 30 + k * 0.25)).toFloat()
         bird(pencil, c, s * u, flap)
     }

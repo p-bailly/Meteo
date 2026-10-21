@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
@@ -307,11 +308,13 @@ fun MonoText(
     bold: Boolean = false,
     maxLines: Int = 1,
     align: TextAlign = TextAlign.Start,
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
 ) {
     Text(
         text,
         modifier = modifier,
         color = color,
+        onTextLayout = onTextLayout,
         fontFamily = AppMono,
         fontSize = size,
         fontWeight = if (bold) FontWeight.Medium else FontWeight.Normal,

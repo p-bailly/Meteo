@@ -57,6 +57,22 @@ internal fun DrawScope.drawScene(
         drawScene(pencil, scene, isDay, moonAge, southern, month, SketchPart.MOVING, phase)
         return
     }
+    layer(pencil, scene, isDay, moonAge, southern, month, part, phase)
+    // Rien ne touche le texte de l'écran.
+    pencil.clearText()
+}
+
+/** Une couche de la scène : le fixe ([SketchPart.STILL]) ou ce qui bouge ([SketchPart.MOVING]). */
+private fun DrawScope.layer(
+    pencil: Pencil,
+    scene: SketchScene,
+    isDay: Boolean,
+    moonAge: Double,
+    southern: Boolean,
+    month: Int,
+    part: SketchPart,
+    phase: Float,
+) {
     val still = part == SketchPart.STILL
     val moving = part == SketchPart.MOVING
     val w = size.width
@@ -65,8 +81,22 @@ internal fun DrawScope.drawScene(
     val sh = skyHeight()
     val u = density
     val v = scene.skyVariant
+    // Le dessin occupe l'espace libre : entre la grande température (à gauche) et le ciel en toutes lettres (à
+    // droite), sous la ligne du lieu et au-dessus du ressenti. Le soleil (ou la lune) à sa vraie place quand on la
+    // connaît : à gauche, au milieu ou à droite selon la direction où l'on regarde, plus haut ou plus bas selon
+    // l'heure ; à l'heure dorée, il est bas et passe derrière le relief. Jamais sur le texte : poussé à côté.
+    val low = scene.light == Light.SUNRISE || scene.light == Light.SUNSET
+    val body = if (isDay) scene.sun else scene.moon
+    val wanted = when {
+        body != null && low && isDay -> Offset(w * body.x, h * 0.64f)
+        body != null -> Offset(w * body.x, sh * (0.62f - 0.22f * ((body.elevation - 6) / 40).toFloat().coerceIn(0f, 1f)))
+        scene.light == Light.SUNRISE -> Offset(w * 0.47f, h * 0.64f)
+        scene.light == Light.SUNSET -> Offset(w * 0.56f, h * 0.64f)
+        else -> Offset(w * 0.57f, sh * 0.47f)
+    }
+    val celestial = pencil.clear(wanted, 24f * u, 24f * u)
     if (still) {
-        skyLight(pencil, scene, w, h)
+        skyColor(pencil, scene, w, h, isDay, celestial)
         landscape(pencil, scene, w, h, month, isDay)
         if (scene.conditions.haze) haze(pencil, w, h)
         if (Surprise.FROST in scene.surprises) frost(pencil, w, h)
@@ -78,19 +108,6 @@ internal fun DrawScope.drawScene(
         if (Surprise.METEORS in scene.surprises) meteors(pencil, w, sh, phase)
         if (Surprise.HEAT in scene.surprises) shimmer(pencil, w, h, phase)
         animated(pencil, scene, w, h, sh, phase)
-    }
-    // Le dessin occupe l'espace libre : entre la grande température (à gauche) et le ciel en toutes lettres (à
-    // droite), sous la ligne du lieu et au-dessus du ressenti. Le soleil (ou la lune) à sa vraie place quand on la
-    // connaît : à gauche, au milieu ou à droite selon la direction où l'on regarde, plus haut ou plus bas selon
-    // l'heure ; à l'heure dorée, il est bas et passe derrière le relief.
-    val low = scene.light == Light.SUNRISE || scene.light == Light.SUNSET
-    val body = if (isDay) scene.sun else scene.moon
-    val celestial = when {
-        body != null && low && isDay -> Offset(w * body.x, h * 0.64f)
-        body != null -> Offset(w * body.x, sh * (0.62f - 0.22f * ((body.elevation - 6) / 40).toFloat().coerceIn(0f, 1f)))
-        scene.light == Light.SUNRISE -> Offset(w * 0.47f, h * 0.64f)
-        scene.light == Light.SUNSET -> Offset(w * 0.56f, h * 0.64f)
-        else -> Offset(w * 0.57f, sh * 0.47f)
     }
     // La lune couchée ne se dessine pas.
     val moonUp = scene.moon?.let { it.elevation > -1 } ?: true
@@ -112,14 +129,17 @@ internal fun DrawScope.drawScene(
         if (!still) return
         if (isDay) sunAt(at, radius, rays) else if (moonUp) moon(pencil, at, radius, moonAge, southern)
     }
-    // Les nuages de beau temps se placent par rapport au soleil.
-    val cx = celestial.x / w
     // Les nuages à leur hauteur : plus bas quand ce sont des nuages bas (ils accrochent les sommets). Ils glissent
     // doucement d'un côté à l'autre, d'autant plus qu'il y a du vent.
     val drop = scene.cloudDrop * h
-    val drift = (sin(2 * PI * phase).toFloat()) * (0.010f + 0.015f * kotlin.math.abs(scene.lean))
-    fun cloudAt(x: Float, y: Float, width: Float, shade: Float) {
-        if (moving) cloud(pencil, Offset(w * (x + drift), sh * y + drop), width * u, shade)
+    val sway = 0.010f + 0.015f * abs(scene.lean)
+    val drift = (sin(2 * PI * phase).toFloat()) * sway
+    // Un nuage ne passe jamais sur le texte, même au bout de son balancement ; celui des éclaircies suit le soleil
+    // quand il a dû se pousser ([follow]).
+    val moved = celestial - wanted
+    fun cloudAt(x: Float, y: Float, width: Float, shade: Float, follow: Boolean = false) {
+        val at = Offset(w * x, sh * y + drop) + if (follow) moved else Offset.Zero
+        if (moving) cloud(pencil, pencil.clear(at, width * u * 0.56f + w * sway, width * u * 0.34f) + Offset(w * drift, 0f), width * u, shade)
     }
     // Au sommet, les nuages bas sont en dessous : une mer de nuages.
     val belowSummit = scene.terrain.relief == Relief.SUMMIT && scene.lowClouds && (scene.clouds?.mid ?: 1f) < 0.3f &&
@@ -150,21 +170,25 @@ internal fun DrawScope.drawScene(
         } else if (still) {
             night(pencil, celestial, w, sh, moonAge, southern, v, twilight = scene.light == Light.DAWN || scene.light == Light.DUSK, moonUp = moonUp)
         }
-        SketchSky.PARTLY -> when (v) {
-            0 -> {
-                light(celestial + Offset(-12f * u, -6f * u), 14f * u)
-                cloudAt((cx + 0.04f).coerceIn(0.44f, 0.74f), 0.55f, 68f, shade = 0.5f)
-            }
-            // Le nuage passe devant, à gauche.
-            1 -> {
-                light(celestial + Offset(14f * u, -5f * u), 14f * u)
-                cloudAt((cx - 0.05f).coerceIn(0.44f, 0.74f), 0.56f, 60f, shade = 0.45f)
-            }
-            // Deux petits cumulus de beau temps, le soleil entre eux.
-            else -> {
-                light(celestial + Offset(0f, -3f * u), 13f * u)
-                cloudAt((cx - 0.12f).coerceAtLeast(0.43f), 0.55f, 44f, shade = 0.35f)
-                cloudAt((cx + 0.13f).coerceAtMost(0.76f), 0.53f, 52f, shade = 0.45f)
+        SketchSky.PARTLY -> {
+            // Les nuages de beau temps se placent par rapport au soleil voulu, et le suivent s'il a dû se pousser.
+            val wx = wanted.x / w
+            when (v) {
+                0 -> {
+                    light(celestial + Offset(-12f * u, -6f * u), 14f * u)
+                    cloudAt((wx + 0.04f).coerceIn(0.44f, 0.74f), 0.55f, 68f, shade = 0.5f, follow = true)
+                }
+                // Le nuage passe devant, à gauche.
+                1 -> {
+                    light(celestial + Offset(14f * u, -5f * u), 14f * u)
+                    cloudAt((wx - 0.05f).coerceIn(0.44f, 0.74f), 0.56f, 60f, shade = 0.45f, follow = true)
+                }
+                // Deux petits cumulus de beau temps, le soleil entre eux.
+                else -> {
+                    light(celestial + Offset(0f, -3f * u), 13f * u)
+                    cloudAt((wx - 0.12f).coerceAtLeast(0.43f), 0.55f, 44f, shade = 0.35f, follow = true)
+                    cloudAt((wx + 0.13f).coerceAtMost(0.76f), 0.53f, 52f, shade = 0.45f, follow = true)
+                }
             }
         }
         // Un voile de nuages hauts : le soleil pâle au travers, une couche fine tout en haut.
@@ -236,8 +260,9 @@ private fun DrawScope.precipitation(
     // Nuages bas : nuages, pluie et éclairs descendent ensemble (pas pour l'averse et son arc-en-ciel).
     val drop = if (Surprise.RAINBOW in scene.surprises) 0f else scene.cloudDrop * h
     val moving = !still
+    val sway = 0.010f + 0.015f * abs(scene.lean)
     fun cloudAt(x: Float, y: Float, width: Float, shade: Float) {
-        if (moving) cloud(pencil, Offset(w * (x + drift), sh * y + drop), width * u, shade)
+        if (moving) cloud(pencil, pencil.clear(Offset(w * x, sh * y + drop), width * u * 0.56f + w * sway, width * u * 0.34f) + Offset(w * drift, 0f), width * u, shade)
     }
     var from = 0.42f
     var to = 0.66f
@@ -259,7 +284,8 @@ private fun DrawScope.precipitation(
         wx.showers && !storm -> {
             // Averse : un gros nuage, et le soleil (ou la lune) qui perce à côté.
             if (v != 2 && still) {
-                if (isDay) sun(pencil, Offset(w * 0.70f, sh * 0.45f + drop), 11f * u, Rays.SHORT) else moon(pencil, Offset(w * 0.71f, sh * 0.45f + drop), 11f * u, moonAge, southern)
+                val at = pencil.clear(Offset(w * 0.70f, sh * 0.45f + drop), 20f * u, 20f * u)
+                if (isDay) sun(pencil, at, 11f * u, Rays.SHORT) else moon(pencil, at + Offset(w * 0.01f, 0f), 11f * u, moonAge, southern)
             }
             cloudAt(0.53f, 0.47f, 80f, shade = dense)
             from = 0.44f
@@ -296,39 +322,75 @@ private fun DrawScope.precipitation(
 }
 
 /**
- * La couleur du ciel au-dessus du relief : l'or et le rose de l'heure dorée, le violet de l'aube et du crépuscule, le
- * jaune du sable du Sahara. Hachures en bandes, plus chaudes vers l'horizon.
+ * La couleur du ciel, d'un bord à l'autre au-dessus du relief et tout autour du texte de l'écran, comme un ciel
+ * colorié : le bleu du beau temps (soutenu en haut, de plus en plus pâle vers l'horizon), le gris des jours de pluie,
+ * le bleu de la nuit ; à l'heure dorée, du violet au rose, à l'orange et au jaune vers l'horizon, et une lueur autour
+ * du soleil ; à l'aube et au crépuscule, du bleu de la nuit au rose et à l'orange ; le jaune du sable du Sahara. Chaque
+ * couleur est appuyée plus fort au milieu de sa bande et se perd dans les voisines, en hachures croisées : les couleurs
+ * se mélangent, sans limite tirée à la règle.
  */
-private fun DrawScope.skyLight(pencil: Pencil, scene: SketchScene, w: Float, h: Float) {
-    val wet = scene.sky == SketchSky.RAIN || scene.sky == SketchSky.SNOW || scene.sky == SketchSky.STORM || scene.sky == SketchSky.FOG
-    val bands = when {
-        scene.conditions.dust -> listOf(Crayon.WHEAT to 0.38f, Crayon.EARTH to 0.62f)
-        wet -> emptyList()
-        scene.light == Light.SUNRISE || scene.light == Light.SUNSET -> listOf(Crayon.YELLOW to 0.46f, Crayon.ORANGE to 0.57f, Crayon.PINK to 0.68f)
-        scene.light == Light.DAWN || scene.light == Light.DUSK -> listOf(Crayon.VIOLET to 0.48f, Crayon.PINK to 0.62f)
-        else -> emptyList()
+private fun DrawScope.skyColor(pencil: Pencil, scene: SketchScene, w: Float, h: Float, isDay: Boolean, sun: Offset) {
+    val wet = scene.sky == SketchSky.RAIN || scene.sky == SketchSky.SNOW || scene.sky == SketchSky.STORM
+    val golden = isDay && (scene.light == Light.SUNRISE || scene.light == Light.SUNSET) && !wet && scene.sky != SketchSky.CLOUDY
+    val twilight = !isDay && (scene.light == Light.DAWN || scene.light == Light.DUSK) && !wet
+    // Chaque couleur : du haut au bas de sa bande (en fraction de la hauteur), son appui le plus fort, l'écart de ses
+    // hachures en dp.
+    class Tint(val color: Color, val from: Float, val to: Float, val pressure: Float, val spacing: Float)
+    val tints = when {
+        scene.sky == SketchSky.FOG -> emptyList()
+        scene.conditions.dust -> listOf(Tint(Crayon.WHEAT, 0.24f, 0.80f, 0.8f, 5.5f), Tint(Crayon.EARTH, 0.55f, 1f, 0.6f, 7f))
+        golden -> listOf(
+            Tint(Crayon.VIOLET, 0.20f, 0.50f, 0.55f, 6.5f),
+            Tint(Crayon.PINK, 0.36f, 0.66f, 0.75f, 5.5f),
+            Tint(Crayon.ORANGE, 0.50f, 0.82f, 0.85f, 5f),
+            Tint(Crayon.YELLOW, 0.66f, 1f, 0.95f, 4.5f),
+        )
+        twilight -> listOf(
+            Tint(Crayon.NIGHT, 0.20f, 0.56f, 0.7f, 6f),
+            Tint(Crayon.VIOLET, 0.38f, 0.72f, 0.7f, 5.5f),
+            Tint(Crayon.PINK, 0.56f, 0.88f, 0.75f, 5.5f),
+            Tint(Crayon.ORANGE, 0.74f, 1f, 0.7f, 5.5f),
+        )
+        wet || scene.sky == SketchSky.CLOUDY -> listOf(Tint(if (isDay) Crayon.CLOUD else Crayon.NIGHT, 0.20f, 0.95f, 0.45f, 7f))
+        isDay -> listOf(Tint(Crayon.SKY, 0.20f, 0.86f, 0.55f, 6f))
+        else -> listOf(Tint(Crayon.NIGHT, 0.20f, 1f, 0.6f, 6f))
     }
-    if (bands.isEmpty()) return
-    // Une lueur aux bords irréguliers, comme un coloriage : plus large en bas, contre le relief.
+    if (tints.isEmpty()) return
     val u = density
     val rnd = Random(scene.seed)
-    val top = bands.first().second
-    val steps = 14
-    val upper = (0..steps).map { i -> Offset(w * (0.36f + 0.40f * i / steps), h * top + (rnd.nextFloat() - 0.3f) * 9f * u + (sin(i * 0.8) * 4 * u).toFloat()) }
-    // À droite, la lueur s'arrête au-dessus du ciel en toutes lettres et des extrêmes.
-    val textTop = skyHeight() * 0.68f
-    val right = (1..6).map { i ->
-        val y = h * (top + (FOOT - top) * i / 6)
-        Offset(w * (if (y < textTop) 0.80f else 0.60f) + (rnd.nextFloat() - 0.5f) * 10f * u, y)
+    // Le ciel colorié : un haut et des côtés aux bords irréguliers, le relief en dessous.
+    val top = h * tints.minOf { it.from } + 6f * u
+    val steps = 18
+    val upper = (0..steps).map { i ->
+        Offset(w * (0.012f + 0.976f * i / steps), top + (rnd.nextFloat() - 0.5f) * 10f * u + (sin(i * 0.9) * 4f * u).toFloat())
     }
-    val left = (6 downTo 1).map { i -> Offset(w * 0.31f + (rnd.nextFloat() - 0.5f) * 10f * u, h * (top + (FOOT - top) * i / 6)) }
-    val glow = Path().apply {
-        op(polygon(upper + right + left), skyAbove(scene.terrain, w, h), PathOperation.Intersect)
+    val sides = (1..8).map { top + it * (h - top) / 8 }
+    val area = polygon(
+        upper +
+            sides.map { y -> Offset(w * 0.988f + (rnd.nextFloat() - 0.5f) * 7f * u, y) } +
+            sides.reversed().map { y -> Offset(w * 0.012f + (rnd.nextFloat() - 0.5f) * 7f * u, y) },
+    )
+    val sky = Path().apply { op(area, skyOver(scene.terrain, w, h), PathOperation.Intersect) }
+    fun smooth(t: Float) = t.coerceIn(0f, 1f).let { it * it * (3 - 2 * it) }
+    // Une seule couleur pâlit vers l'horizon ; dans un dégradé, chacune monte et se perd dans les voisines.
+    val alone = tints.size == 1
+    tints.forEachIndexed { k, tint ->
+        val y0 = h * tint.from
+        val y1 = h * tint.to
+        val pressure = { y: Float ->
+            val t = (y - y0) / (y1 - y0)
+            val edge = smooth(t / 0.3f) * (if (alone) 1f else smooth((1 - t) / 0.3f))
+            val fade = if (alone) 1f - 0.85f * smooth((t - 0.25f) / 0.75f) else 1f
+            tint.pressure * edge * fade
+        }
+        pencil.ink(tint.color).wash(sky, Rect(0f, y0, w, minOf(y1, h)), spacing = tint.spacing, rising = k % 2 == 0, pressure = pressure)
     }
-    bands.forEachIndexed { k, (color, from) ->
-        val bottom = bands.getOrNull(k + 1)?.second ?: FOOT
-        // Les bandes se chevauchent un peu : pas de limite tirée à la règle.
-        pencil.ink(color).hatch(glow, Rect(0f, h * from - 4f * u, w, h * bottom + 4f * u), spacing = 6f, width = 0.6f)
+    // À l'heure dorée, la lueur du soleil bas sur l'horizon, qui se perd autour de lui.
+    if (golden) {
+        for ((radius, pressure) in listOf(0.20f to 0.35f, 0.14f to 0.5f, 0.08f to 0.7f)) {
+            val glow = Path().apply { op(sky, Path().apply { addOval(Rect(sun, w * radius)) }, PathOperation.Intersect) }
+            pencil.ink(Crayon.YELLOW).pressed(pressure).hatch(glow, Rect(sun, w * radius), spacing = 5f, width = 0.7f, rising = false)
+        }
     }
 }
 
@@ -365,32 +427,58 @@ internal fun sketchStrength(style: Int) = when (style) {
 internal fun sketchGraphite(dark: Boolean, strength: Float = 1f) =
     if (dark) Color(0xFFE6ECF4).copy(alpha = (0.22f * strength).coerceAtMost(0.5f)) else Color(0xFF2E3644).copy(alpha = (0.26f * strength).coerceAtMost(0.55f))
 
-/** Les crayons de couleur de la boîte (adoucis au trait par [Pencil.ink]). */
+/** Les crayons de couleur de la boîte, francs et lumineux (adoucis au trait par [Pencil.ink]). */
 internal object Crayon {
-    val FOREST = Color(0xFF3E8A4C)
-    val MEADOW = Color(0xFF79B04F)
-    val ROCK = Color(0xFF8C7866)
-    val SNOW = Color(0xFF7DA6D6)
-    val FAR = Color(0xFF7F95B8)
-    val WATER = Color(0xFF2F7DCC)
-    val SUN = Color(0xFFF09A1E)
-    val MOON = Color(0xFFD8B23C)
-    val CLOUD = Color(0xFF6C82A3)
-    val RAIN = Color(0xFF2E74CF)
-    val BOLT = Color(0xFFF2B705)
-    val ROOF = Color(0xFFC4532F)
-    val DOME = Color(0xFF2F7D6E)
-    val WOOD = Color(0xFF9A6A3C)
-    val WHEAT = Color(0xFFD9A632)
-    val EARTH = Color(0xFF9C7452)
-    val AUTUMN = Color(0xFFE2862C)
-    val RED = Color(0xFFD9443A)
-    val ORANGE = Color(0xFFEE7F2D)
-    val PINK = Color(0xFFE47FA6)
-    val YELLOW = Color(0xFFF0BE1E)
-    val BLUE = Color(0xFF4F8FDB)
-    val GREEN = Color(0xFF45A257)
-    val VIOLET = Color(0xFF8D6CC9)
+    val FOREST = Color(0xFF2E9150)
+    val MEADOW = Color(0xFF6DBA3A)
+    val ROCK = Color(0xFF9A7A5E)
+    val SNOW = Color(0xFF6AA6EC)
+    val FAR = Color(0xFF7690D6)
+    val WATER = Color(0xFF1D7FE3)
+    val SUN = Color(0xFFFFA514)
+    val MOON = Color(0xFFEBB728)
+    val CLOUD = Color(0xFF6A86BC)
+    val RAIN = Color(0xFF2273E0)
+    val BOLT = Color(0xFFFFBF00)
+    val ROOF = Color(0xFFE04A26)
+    val DOME = Color(0xFF1F8F7C)
+    val WOOD = Color(0xFFA66A32)
+    val WHEAT = Color(0xFFEDB421)
+    val EARTH = Color(0xFFA8744A)
+    val AUTUMN = Color(0xFFF2861A)
+    val RED = Color(0xFFE8392E)
+    val ORANGE = Color(0xFFFF7A1F)
+    val PINK = Color(0xFFF2689F)
+    val YELLOW = Color(0xFFFFC81A)
+    val BLUE = Color(0xFF3D8BEA)
+    val GREEN = Color(0xFF3FAE55)
+    val VIOLET = Color(0xFF8E5FDC)
+
+    /** Le bleu du ciel de beau temps, et celui de la nuit. */
+    val SKY = Color(0xFF4FA8F2)
+    val NIGHT = Color(0xFF4253B8)
+
+    /** Les reflets et les ombres des étages du relief, croisés par-dessus : vert tendre, vert sombre des sapins. */
+    val LIME = Color(0xFFB4D82C)
+    val PINE = Color(0xFF16704A)
+}
+
+/**
+ * La deuxième couleur d'un étage du relief, en hachures croisées par-dessus la première : la lumière sur les prés,
+ * l'ombre des sapins, le rouge des feuilles d'automne, le mauve des rochers à l'ombre. Les couleurs se mélangent et
+ * chatoient, comme un vrai coloriage repassé.
+ */
+internal fun shadeOf(color: Color): Color? = when (color) {
+    Crayon.MEADOW -> Crayon.LIME
+    Crayon.FOREST -> Crayon.PINE
+    Crayon.GREEN -> Crayon.LIME
+    Crayon.AUTUMN -> Crayon.RED
+    Crayon.WOOD -> Crayon.EARTH
+    Crayon.ROCK -> Crayon.FAR
+    Crayon.WHEAT -> Crayon.ORANGE
+    Crayon.FAR -> Crayon.SKY
+    Crayon.SNOW -> Crayon.SKY
+    else -> null
 }
 
 /** Trait de crayon : chaque ligne repassée deux fois, avec un léger tremblé. */
@@ -405,6 +493,12 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
 
     /** La manière de bâtir de la région : clocher comtois, temple du Jura suisse, campanile de Provence. */
     var local = LocalStyle.NONE
+
+    /**
+     * Le texte de l'écran posé sur le dessin (en pixels du dessin) : le coloriage s'arrête à [TEXT_MARGIN_DP] de lui, et
+     * le soleil, les nuages et ce qui vole se placent à côté ([clear]).
+     */
+    var text: List<Rect> = emptyList()
 
     /**
      * L'écriture à la main (noms des sommets), fournie par l'appli : du texte centré sur [at] (sa ligne de base), de
@@ -423,7 +517,7 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
      */
     fun ink(crayon: Color): Pencil = Pencil(
         scope,
-        if (dark) lerp(crayon, Color.White, 0.12f).copy(alpha = (0.6f * strength).coerceAtMost(0.92f)) else crayon.copy(alpha = (0.5f * strength).coerceAtMost(0.9f)),
+        if (dark) lerp(crayon, Color.White, 0.14f).copy(alpha = (0.7f * strength).coerceAtMost(0.95f)) else crayon.copy(alpha = (0.64f * strength).coerceAtMost(0.94f)),
         rnd,
         dark,
         strength,
@@ -432,6 +526,7 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
         it.write = write
         it.culture = culture
         it.local = local
+        it.text = text
     }
 
     /** Le crayon d'un toit : sa couleur, ou la neige. */
@@ -458,7 +553,8 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
 
     /** Segment découpé en petits morceaux légèrement décalés : il ne paraît pas tiré à la règle. */
     fun line(a: Offset, b: Offset, width: Float = 1.1f, passes: Int = 2, wobble: Float = 0.6f) {
-        val n = 6
+        // Un morceau tous les 5 dp environ : un trait court reste droit.
+        val n = ((b - a).getDistance() / (5f * d)).toInt().coerceIn(1, 6)
         val points = (0..n).map { k ->
             val t = k / n.toFloat()
             Offset(a.x + (b.x - a.x) * t + if (k in 1 until n) jitter(wobble) else 0f, a.y + (b.y - a.y) * t + if (k in 1 until n) jitter(wobble) else 0f)
@@ -489,15 +585,42 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
     fun hatch(shape: Path, area: Rect, spacing: Float, width: Float = 0.8f, rising: Boolean = true) {
         if (area.width <= 0f || area.height <= 0f) return
         scope.clipPath(shape) {
-            var x = area.left - area.height
+            // Les hachures suivent une même grille sur tout le dessin : deux zones voisines se raccordent sans cassure.
+            val step = spacing * d
+            val anchor = if (rising) area.bottom else -area.top
+            var x = kotlin.math.floor((area.left - area.height + anchor) / step) * step - anchor
             while (x < area.right) {
                 if (rising) {
                     line(Offset(x, area.bottom), Offset(x + area.height, area.top), width, passes = 1, wobble = 0.4f)
                 } else {
                     line(Offset(x, area.top), Offset(x + area.height, area.bottom), width, passes = 1, wobble = 0.4f)
                 }
-                x += spacing * d
+                x += step
             }
+        }
+    }
+
+    /** Le même crayon, appuyé à [pressure] (de 0, il ne marque plus, à 1). */
+    fun pressed(pressure: Float): Pencil = Pencil(scope, color.copy(alpha = color.alpha * pressure.coerceIn(0f, 1f)), rnd, dark, strength).also {
+        it.snowyRoofs = snowyRoofs
+        it.write = write
+        it.culture = culture
+        it.local = local
+        it.text = text
+    }
+
+    /**
+     * Hachures dans [shape] appuyées plus ou moins fort selon la hauteur ([pressure] pour un y en pixels, de 0 à 1) :
+     * un dégradé au crayon, par bandes de quelques dp sur les mêmes traits.
+     */
+    fun wash(shape: Path, area: Rect, spacing: Float, width: Float = 0.7f, rising: Boolean = true, pressure: (Float) -> Float) {
+        val step = 5f * d
+        var y = area.top
+        while (y < area.bottom) {
+            val bottom = minOf(y + step, area.bottom)
+            val p = pressure((y + bottom) / 2)
+            if (p > 0.03f) pressed(p).hatch(shape, Rect(area.left, y, area.right, bottom), spacing, width, rising)
+            y = bottom
         }
     }
 
@@ -506,16 +629,64 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
 
     /** Gomme passée légèrement : ce qui est derrière pâlit (le brouillard), d'autant plus que [amount] approche de 1. */
     fun fade(shape: Path, amount: Float) = scope.drawPath(shape, Color.Black.copy(alpha = amount), blendMode = BlendMode.DstOut)
+
+    /** Le tour du texte de l'écran, à [margin] dp de lui, aux coins arrondis. */
+    fun aroundText(margin: Float = TEXT_MARGIN_DP): Path = Path().apply {
+        val m = margin * d
+        text.forEach { addRoundRect(RoundRect(it.inflate(m), m, m)) }
+    }
+
+    /** Le rectangle [box] passe trop près du texte de l'écran. */
+    fun nearText(box: Rect, margin: Float = TEXT_MARGIN_DP): Boolean = text.any { it.inflate(margin * d).overlaps(box) }
+
+    /**
+     * Où poser une chose de [rx] × [ry] pixels (demi-largeur et demi-hauteur) voulue en [at] sans toucher le texte de
+     * l'écran : là même si c'est libre, sinon la place libre la plus proche (de côté d'abord, puis en biais, puis plus
+     * bas ou plus haut), sans sortir de [within].
+     */
+    fun clear(at: Offset, rx: Float, ry: Float, within: Rect = Rect(0f, 0f, scope.size.width, scope.size.height)): Offset {
+        if (text.isEmpty()) return at
+        fun free(c: Offset) = Rect(c.x - rx, c.y - ry, c.x + rx, c.y + ry).let { box ->
+            !nearText(box) && box.left >= within.left && box.right <= within.right && box.top >= within.top && box.bottom <= within.bottom
+        }
+        if (free(at)) return at
+        val step = 3f * d
+        for (k in 1..70) {
+            val r = k * step
+            val tries = listOf(Offset(r, 0f), Offset(-r, 0f), Offset(r, r * 0.4f), Offset(-r, r * 0.4f), Offset(0f, r * 0.5f), Offset(r, -r * 0.4f), Offset(-r, -r * 0.4f), Offset(0f, -r * 0.5f))
+            tries.map { at + it }.firstOrNull(::free)?.let { return it }
+        }
+        return at
+    }
+
+    /**
+     * La gomme autour du texte de l'écran : rien du dessin ne le touche. Son bord est adouci, comme un coloriage qui
+     * s'arrête juste avant les lettres.
+     */
+    fun clearText() {
+        if (text.isEmpty()) return
+        fade(aroundText(TEXT_MARGIN_DP + 6f), 0.3f)
+        fade(aroundText(TEXT_MARGIN_DP + 3f), 0.5f)
+        erase(aroundText())
+    }
 }
+
+/** Ce que le coloriage laisse de papier blanc autour du texte de l'écran, en dp. */
+internal const val TEXT_MARGIN_DP = 5f
 
 /** Les rayons du soleil : aucun (dans la brume), droits, courts, ondulés, ou longs et courts en alternance. */
 internal enum class Rays { NONE, STRAIGHT, SHORT, WAVY, LONG }
 
 internal fun DrawScope.sun(pencil: Pencil, center: Offset, radius: Float, rays: Rays = Rays.STRAIGHT, color: Color = Crayon.SUN) {
     val gold = pencil.ink(color)
+    // Les rayons, un sur deux d'un jaune plus clair.
+    val light = pencil.ink(if (color == Crayon.YELLOW) Crayon.SUN else Crayon.YELLOW)
     val disc = Path().apply { addOval(Rect(center, radius)) }
-    gold.outline(disc, width = 1.4f)
-    gold.hatch(disc, Rect(center, radius), spacing = if (rays != Rays.NONE) 3.5f else 5f, width = 0.7f)
+    // Le soleil sur le papier blanc, pas sur le bleu du ciel ; son cœur croisé de jaune.
+    pencil.erase(Path().apply { addOval(Rect(center, radius + 1.5f * density)) })
+    gold.outline(disc, width = 1.5f)
+    gold.hatch(disc, Rect(center, radius), spacing = if (rays != Rays.NONE) 3.2f else 4.5f, width = 0.8f)
+    light.hatch(disc, Rect(center, radius), spacing = 4f, width = 0.7f, rising = false)
     val u = density
     fun at(a: Double, r: Float) = Offset(center.x + (r * cos(a)).toFloat(), center.y + (r * sin(a)).toFloat())
     when (rays) {
@@ -523,7 +694,7 @@ internal fun DrawScope.sun(pencil: Pencil, center: Offset, radius: Float, rays: 
         Rays.STRAIGHT, Rays.SHORT -> for (k in 0 until 12) {
             val a = (k * 30.0 + 8) * PI / 180
             val long = if (rays == Rays.SHORT) 9f else if (k % 2 == 0) 17f else 11f
-            gold.line(at(a, radius + 6f * u), at(a, radius + long * u))
+            (if (k % 2 == 0) gold else light).line(at(a, radius + 6f * u), at(a, radius + long * u), width = 1.3f)
         }
         Rays.WAVY -> for (k in 0 until 10) {
             val a = (k * 36.0 + 12) * PI / 180
@@ -532,12 +703,12 @@ internal fun DrawScope.sun(pencil: Pencil, center: Offset, radius: Float, rays: 
                 val wiggle = sin(i * 1.6) * 0.09
                 at(a + wiggle, r)
             }
-            gold.stroke(points, width = 1.1f)
+            (if (k % 2 == 0) gold else light).stroke(points, width = 1.2f)
         }
         Rays.LONG -> for (k in 0 until 16) {
             val a = (k * 22.5 + 5) * PI / 180
             val long = if (k % 2 == 0) 24f else 10f
-            gold.line(at(a, radius + 5f * u), at(a, radius + long * u), width = if (k % 2 == 0) 1.2f else 0.9f)
+            (if (k % 2 == 0) gold else light).line(at(a, radius + 5f * u), at(a, radius + long * u), width = if (k % 2 == 0) 1.3f else 1f)
         }
     }
 }
@@ -550,10 +721,13 @@ private fun DrawScope.moon(pencil: Pencil, center: Offset, radius: Float, age: D
     val lit = SketchScenes.moonIllumination(age).toFloat()
     if (lit < 0.03f) return
     val gold = pencil.ink(Crayon.MOON)
+    val pale = pencil.ink(Crayon.YELLOW)
     val disc = Path().apply { addOval(Rect(center, radius)) }
     if (lit > 0.97f) {
+        pencil.erase(disc)
         gold.outline(disc, width = 1.3f)
         gold.hatch(disc, Rect(center, radius), spacing = 5f, width = 0.6f)
+        pale.hatch(disc, Rect(center, radius), spacing = 5.5f, width = 0.6f, rising = false)
         listOf(Triple(-0.3f, -0.25f, 0.22f), Triple(0.28f, 0.1f, 0.16f), Triple(-0.05f, 0.42f, 0.12f)).forEach { (x, y, r) ->
             val mare = Path().apply { addOval(Rect(center + Offset(radius * x, radius * y), radius * r)) }
             pencil.hatch(mare, Rect(center, radius), spacing = 1.8f, width = 0.6f)
@@ -565,8 +739,10 @@ private fun DrawScope.moon(pencil: Pencil, center: Offset, radius: Float, age: D
     val shift = 2 * radius * lit * if (litOnRight) -1 else 1
     val shadow = Path().apply { addOval(Rect(center + Offset(shift, -radius * 0.25f * (1 - lit)), radius)) }
     val shape = Path().apply { op(disc, shadow, PathOperation.Difference) }
+    pencil.erase(shape)
     gold.outline(shape, width = 1.3f)
     gold.hatch(shape, Rect(center, radius), spacing = 3f)
+    pale.hatch(shape, Rect(center, radius), spacing = 4.5f, width = 0.6f, rising = false)
 }
 
 /** Petite étoile en croix. */
@@ -660,6 +836,9 @@ private fun DrawScope.cloud(pencil: Pencil, center: Offset, width: Float, shade:
     // Ombre du dessous du nuage, plus haute et plus serrée quand il est sombre.
     val top = bounds.bottom - bounds.height * (0.35f + 0.25f * shade.coerceAtMost(1.6f))
     pencil.ink(Crayon.CLOUD).hatch(shape, Rect(bounds.left, top, bounds.right, bounds.bottom), spacing = (6.5f - 2f * shade).coerceAtLeast(3f))
+    // Tout en bas, il chatoie : un peu de mauve sous un nuage clair, du bleu sombre sous un nuage de pluie.
+    val under = Rect(bounds.left, bounds.bottom - bounds.height * 0.3f, bounds.right, bounds.bottom)
+    pencil.ink(if (shade < 0.75f) Crayon.VIOLET else Crayon.NIGHT).pressed(0.6f).hatch(shape, under, spacing = 5f, width = 0.6f, rising = false)
 }
 
 /** Couche de nuages d'un bord à l'autre du ciel (ciel couvert) : une longue bande à petites bosses, grisée. */

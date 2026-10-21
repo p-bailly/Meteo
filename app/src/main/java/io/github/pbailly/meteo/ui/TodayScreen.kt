@@ -116,10 +116,12 @@ fun TodayScreen(
                         // Le haut de l'écran, avec en fond un dessin au crayon du temps qu'il fait (sous la barre d'état,
                         // pour que ses repères tombent au même endroit du texte sur tous les téléphones).
                         Box {
+                            // Le texte posé sur le dessin : le coloriage s'arrête juste avant lui.
+                            val text = remember { SketchText() }
                             f.current?.let {
                                 var postcard by remember { mutableStateOf(false) }
                                 val conditions = sketchConditions(f, state.airQuality.data, state.kp)
-                                val sketch = @Composable { modifier: Modifier, onLongPress: (() -> Unit)? ->
+                                val sketch = @Composable { modifier: Modifier, onLongPress: (() -> Unit)?, over: SketchText? ->
                                     WeatherSketch(
                                         it.weatherCode, it.isDay, it.time, place.latitude, place.longitude, place.id.hashCode(),
                                         state.terrain.data, state.surroundings.data, conditions,
@@ -127,20 +129,21 @@ fun TodayScreen(
                                         motion = state.sketchMotion,
                                         modifier = modifier,
                                         onLongPress = onLongPress,
+                                        text = over,
                                     )
                                 }
-                                sketch(Modifier.matchParentSize().statusBarsPadding()) { postcard = true }
+                                sketch(Modifier.matchParentSize().statusBarsPadding(), { postcard = true }, text)
                                 // Appui long : le dessin en carte postale, en grand.
                                 if (postcard) {
-                                    SketchPostcard(place.name, it.time, it.temperature, it.weatherCode, onDismiss = { postcard = false }) { m -> sketch(m, null) }
+                                    SketchPostcard(place.name, it.time, it.temperature, it.weatherCode, onDismiss = { postcard = false }) { m -> sketch(m, null, null) }
                                 }
                             }
                             Column {
                                 // Neige & altitude (à la saison de la neige) : une pastille dans l'en-tête, pour laisser la
                                 // place au dessin.
-                                TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces)
-                                StatusLine(statusText(remote))
-                                NowBlock(f)
+                                TodayHeader(f, place, state.isFavorite, onToggleFavorite, onOpenPlaces, text)
+                                StatusLine(statusText(remote), text.of("status"))
+                                NowBlock(f, text)
                                 // Sous le texte, le bas du dessin : le village, la rivière, les champs, bien visibles.
                                 Spacer(Modifier.height(SKETCH_GROUND))
                             }
@@ -207,6 +210,7 @@ private fun TodayHeader(
     favorite: Boolean,
     onToggleFavorite: () -> Unit,
     onOpenPlaces: () -> Unit,
+    text: SketchText,
 ) {
     val colors = MaterialTheme.colorScheme
     val elevation = place.elevation ?: f.elevation
@@ -219,7 +223,7 @@ private fun TodayHeader(
     ) {
         Column(Modifier.weight(1f).clickable(onClick = onOpenPlaces)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Place, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp))
+                Icon(Icons.Outlined.Place, contentDescription = null, tint = colors.primary, modifier = Modifier.size(22.dp).then(text.of("pin")))
                 Spacer(Modifier.width(6.dp))
                 // Le nom en entier : il rapetisse pour tenir sur la ligne (jusqu'à 16 sp), puis passe sur deux lignes.
                 BasicText(
@@ -227,7 +231,8 @@ private fun TodayHeader(
                     style = LocalTextStyle.current.copy(color = colors.onSurface, fontWeight = FontWeight.SemiBold, lineHeight = 1.15.em),
                     maxLines = 2,
                     autoSize = TextAutoSize.StepBased(minFontSize = 16.sp, maxFontSize = 28.sp, stepSize = 1.sp),
-                    modifier = Modifier.weight(1f, fill = false),
+                    onTextLayout = text.layout("place"),
+                    modifier = Modifier.weight(1f, fill = false).then(text.of("place")),
                 )
                 if (!elevation.isNaN()) {
                     Spacer(Modifier.width(8.dp))
@@ -237,6 +242,7 @@ private fun TodayHeader(
                         size = 11.sp,
                         bold = true,
                         modifier = Modifier
+                            .then(text.of("altitude"))
                             .clip(RoundedCornerShape(5.dp))
                             .background(colors.primaryContainer)
                             .padding(horizontal = 6.dp, vertical = 2.dp),
@@ -251,16 +257,17 @@ private fun TodayHeader(
                     // En très grand texte, l'heure laisse la place au reste de la ligne.
                     Fmt.clock(time).takeIf { LocalTextSize.current < 2 },
                 ).joinToString(" · "),
-                modifier = Modifier.padding(start = 2.dp, top = 4.dp),
+                modifier = Modifier.padding(start = 2.dp, top = 4.dp).then(text.of("line")),
+                onTextLayout = text.layout("line"),
             )
         }
-        FavoriteStar(favorite, onToggleFavorite)
+        FavoriteStar(favorite, onToggleFavorite, text.of("star"))
     }
 }
 
 /** « 14 °C » en grand, le ciel à droite, le ressenti et les extrêmes du jour. */
 @Composable
-private fun NowBlock(f: Forecast) {
+private fun NowBlock(f: Forecast, text: SketchText) {
     val c = f.current ?: return
     val today = f.daily.date.indexOf(c.time.toLocalDate()).coerceAtLeast(0)
     val accent = LocalChartColors.current.accent
@@ -274,20 +281,48 @@ private fun NowBlock(f: Forecast) {
                     fontWeight = FontWeight.Light,
                     fontSize = 112.sp,
                     lineHeight = 112.sp,
+                    onTextLayout = text.layout("temperature"),
+                    modifier = text.of("temperature"),
                 )
-                Text("°C", fontFamily = AppSans, fontWeight = FontWeight.Light, fontSize = 26.sp, modifier = Modifier.padding(top = 16.dp))
+                Text(
+                    "°C",
+                    fontFamily = AppSans,
+                    fontWeight = FontWeight.Light,
+                    fontSize = 26.sp,
+                    onTextLayout = text.layout("unit"),
+                    modifier = Modifier.padding(top = 16.dp).then(text.of("unit")),
+                )
             }
-            MonoText("ressenti ${Fmt.temp(c.apparentTemperature)}", size = 13.sp, modifier = Modifier.padding(start = 4.dp))
+            MonoText(
+                "ressenti ${Fmt.temp(c.apparentTemperature)}",
+                size = 13.sp,
+                modifier = Modifier.padding(start = 4.dp).then(text.of("feels")),
+                onTextLayout = text.layout("feels"),
+            )
         }
         Spacer(Modifier.weight(1f))
         // Pas de pictogramme : le dessin du fond montre déjà le temps qu'il fait, et prend sa place.
         Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(top = 70.dp)) {
-            Text(weatherDescription(c.weatherCode), fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1)
+            Text(
+                weatherDescription(c.weatherCode),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 17.sp,
+                maxLines = 1,
+                onTextLayout = text.layout("sky"),
+                modifier = text.of("sky"),
+            )
             val high = f.daily.temperatureMax.getOrElse(today) { Double.NaN }
             val low = f.daily.temperatureMin.getOrElse(today) { Double.NaN }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                MonoText(Fmt.temp(high), color = accent, bold = true, size = 13.sp)
-                MonoText(" / " + Fmt.temp(low), color = MaterialTheme.colorScheme.primary, bold = true, size = 13.sp)
+                MonoText(Fmt.temp(high), color = accent, bold = true, size = 13.sp, modifier = text.of("high"), onTextLayout = text.layout("high"))
+                MonoText(
+                    " / " + Fmt.temp(low),
+                    color = MaterialTheme.colorScheme.primary,
+                    bold = true,
+                    size = 13.sp,
+                    modifier = text.of("low"),
+                    onTextLayout = text.layout("low"),
+                )
             }
         }
     }
@@ -322,7 +357,7 @@ fun snowSeason(f: Forecast): Boolean {
 
 /** Étoile des favoris, aux branches arrondies : pleine et orange pour un favori, au trait sinon. */
 @Composable
-private fun FavoriteStar(favorite: Boolean, onClick: () -> Unit) {
+private fun FavoriteStar(favorite: Boolean, onClick: () -> Unit, starModifier: Modifier = Modifier) {
     val accent = LocalChartColors.current.accent
     val outline = MaterialTheme.colorScheme.onSurfaceVariant
     Box(
@@ -332,7 +367,7 @@ private fun FavoriteStar(favorite: Boolean, onClick: () -> Unit) {
             .clickable(onClickLabel = if (favorite) "Retirer des favoris" else "Ajouter aux favoris", onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.size(30.dp)) {
+        Canvas(Modifier.size(30.dp).then(starModifier)) {
             val outer = size.minDimension / 2
             val inner = outer * 0.47f
             val star = Path()
