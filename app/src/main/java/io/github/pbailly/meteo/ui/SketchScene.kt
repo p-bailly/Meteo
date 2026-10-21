@@ -187,7 +187,10 @@ internal enum class Landmark(
     LA_LONDE(43.1386, 6.2342, 4.0, Silhouette.NONE, Surroundings(Settlement.TOWN, forest = true, coast = true, vineyard = true, harbour = true, population = 10_500)),
     ;
 
-    /** Les environs d'OpenStreetMap [around], complétés de ce que l'on sait du lieu (la taille de la ville, sûre). */
+    /**
+     * Les environs d'OpenStreetMap [around], complétés de ce que l'on sait du lieu (la taille de la ville, et s'il y a
+     * un lac : sûrs ; le Rhône à Valence n'en est pas un).
+     */
     fun completed(around: Surroundings?): Surroundings? {
         val k = known ?: return around
         val a = around ?: return k
@@ -196,7 +199,7 @@ internal enum class Landmark(
             population = k.population ?: a.population,
             forest = a.forest || k.forest,
             river = a.river || k.river,
-            lake = a.lake || k.lake,
+            lake = k.lake,
             coast = a.coast || k.coast,
             vineyard = a.vineyard || k.vineyard,
             castle = a.castle || k.castle,
@@ -455,6 +458,16 @@ internal class SketchTerrain(
         return copy(ridge = points.map { (x, y) -> x to level + (y - level) * weight(x) })
     }
 
+    /** Plus d'eau de [x0] à [x1] (sous la ville) : un lac qui y passe est raccourci, ou disparaît s'il ne reste qu'une flaque. */
+    fun dried(x0: Float, x1: Float): SketchTerrain {
+        if (water.none { it.start < x1 && it.endInclusive > x0 }) return this
+        val left = water.flatMap { run ->
+            listOf(run.start..minOf(run.endInclusive, x0), maxOf(run.start, x1)..run.endInclusive)
+                .filter { it.endInclusive - it.start >= 0.03f }
+        }
+        return copy(water = left)
+    }
+
     fun copy(
         ridge: List<Pair<Float, Float>> = this.ridge,
         water: List<ClosedFloatingPointRange<Float>> = this.water,
@@ -672,6 +685,9 @@ internal object SketchTerrains {
     private fun SketchTerrain.with(around: Surroundings?): SketchTerrain {
         if (around == null) return this
         var t = copy(sea = sea || around.coast, river = around.river && !sea && !around.coast && !onWater, island = around.island)
+        // Le fleuve que le modèle de terrain rend tout plat (le Rhône contre Valence) n'est pas un lac : sans lac à 2 km,
+        // l'eau plate collée au lieu est la rivière, déjà dessinée au pied du relief.
+        if (t.river && !around.lake) t = t.copy(water = t.water.filter { it.start - placeX > 0.05f || placeX - it.endInclusive > 0.05f })
         if (around.lake && t.water.isEmpty() && !t.sea) t = t.withLake()
         if (t.island) t = t.copy(ridge = t.ridge.map { (x, y) -> x to y * islandTaper(x) - 0.012f * (1 - islandTaper(x)) })
         return t
@@ -720,7 +736,9 @@ internal object SketchTerrains {
 
     /**
      * Lacs et mer : le modèle de terrain les rend parfaitement plats (le lac d'Annecy à 446 m, la mer à 0 m). Une suite
-     * d'au moins trois points à la même altitude sur au moins 800 m, pas très au-dessus du lieu, est de l'eau.
+     * d'au moins trois points à la même altitude sur au moins 800 m, pas très au-dessus du lieu, est de l'eau. Ses rives
+     * sont plus hautes des deux côtés (ou au bord de la coupe) : la plaine qui monte doucement, arrondie au mètre près
+     * (152, 152, 152 m à l'est de Valence), n'est pas un lac.
      */
     fun waterRuns(e: DoubleArray, ground: Double, kmPerSample: Double): List<Pair<Int, Int>> {
         val runs = ArrayList<Pair<Int, Int>>()
@@ -728,7 +746,8 @@ internal object SketchTerrains {
         for (k in 1..e.size) {
             if (k < e.size && abs(e[k] - e[start]) < 0.01) continue
             val end = k - 1
-            if (end - start + 1 >= 3 && (end - start) * kmPerSample >= 0.8 && e[start] - ground < 150) runs += start to end
+            val banks = (start == 0 || e[start - 1] > e[start]) && (end == e.size - 1 || e[end + 1] > e[end])
+            if (end - start + 1 >= 3 && (end - start) * kmPerSample >= 0.8 && e[start] - ground < 150 && banks) runs += start to end
             start = k
         }
         return runs
@@ -1172,6 +1191,9 @@ internal object SketchScenes {
         val built = decor.any { it in BUILT } && relief != Relief.SUMMIT
         val ground = layout.settlement?.takeIf { built }?.let { x ->
             terrain.flattened(x - layout.half - 0.015f, x + layout.half + 0.015f, terrain.heightAt(terrain.placeX).coerceAtLeast(0f))
+                // La ville n'avait de place que sur l'eau : l'eau passe de l'autre côté de la ville (Valence, le Rhône,
+                // puis Crussol), pas entre le lieu et sa ville.
+                .let { if (layout.wet) it.dried(minOf(terrain.placeX, x - layout.half) - 0.03f, x + layout.half + 0.03f) else it }
         } ?: terrain
         return SketchScene(
             sky, ground, decor, surprises, seed, skyVariant, weather, conditions, light, monument, layout, population,

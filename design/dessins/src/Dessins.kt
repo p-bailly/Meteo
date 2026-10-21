@@ -86,6 +86,24 @@ private fun summit(top: Double): TerrainProfile {
     return TerrainProfile(e, 25.0, p, emptyList(), emptyList())
 }
 
+/**
+ * Valence, la coupe vers l'ouest (comme dans l'appli quand le relief de l'Ardèche l'emporte) : la plaine derrière, le
+ * Rhône rendu tout plat par le modèle de terrain contre la ville, la montagne de Crussol, puis le plateau.
+ */
+private fun valenceWest(): TerrainProfile {
+    val e = DoubleArray(100) { k ->
+        when {
+            k < 18 -> 180.0 - k * 3
+            k == 18 -> 126.0
+            k <= 32 -> 106.0
+            k <= 46 -> 106.0 + (k - 32) * 21.0
+            k <= 52 -> 400.0 - (k - 46) * 12.0
+            else -> 330.0 + (k - 52) * 4.5
+        }
+    }
+    return TerrainProfile(e, 22.0, 18, emptyList(), emptyList(), bearing = 285.0)
+}
+
 private fun spots(p: Map<String, TerrainProfile>): Map<String, Spot> {
     fun at(s: Settlement, forest: Boolean = false, river: Boolean = false, lake: Boolean = false, coast: Boolean = false, island: Boolean = false, ski: Boolean = false, people: Long? = null) =
         Surroundings(s, forest, river, lake, coast, island, ski, people)
@@ -103,6 +121,8 @@ private fun spots(p: Map<String, TerrainProfile>): Map<String, Spot> {
         Spot("beauce", "Beauce : plaine, ferme isolée", p["paris"], 48.3, at(Settlement.NONE)),
         Spot("bourg", "Plaine : village, rivière, bois", p["paris"], 47.0, at(Settlement.VILLAGE, forest = true, river = true)),
         Spot("valence", "Valence : plaine du Rhône, le Vercors au loin", p["valence"], 44.93, at(Settlement.CITY, river = true, people = 64_000)),
+        Spot("valence-ville", "Valence : Saint-Apollinaire, Crussol en face", p["valence"], 44.93, Landmark.VALENCE.completed(at(Settlement.CITY, river = true).copy(castle = true)), Landmark.VALENCE),
+        Spot("valence-ouest", "Valence : la coupe vers Crussol, le Rhône contre la ville", valenceWest(), 44.93, Landmark.VALENCE.completed(at(Settlement.CITY, river = true).copy(castle = true, lake = true)), Landmark.VALENCE),
         Spot("morvan", "Basse montagne : petite ville et forêt", low, 47.1, at(Settlement.TOWN, forest = true)),
         Spot("morvan-hameau", "Basse montagne : hameau", low, 47.1, at(Settlement.HAMLET)),
         Spot("nice", "Nice : basse montagne, grande ville, la mer", p["nice"], 43.70, at(Settlement.CITY, coast = true, people = 340_000)),
@@ -287,6 +307,9 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
     add(section, "Marseille : Notre-Dame de la Garde", "marseille", 0, summer, sky = 1, temperature = 29)
     add(section, "Strasbourg : la cathédrale", "strasbourg", 3, autumn, sky = 0)
     add(section, "Genève : le jet d'eau", "geneve", 1, summer, sky = 0, temperature = 25)
+    add(section, "Valence : Saint-Apollinaire, Crussol en face", "valence-ville", 1, autumn, sky = 0)
+    add(section, "Valence la nuit", "valence-ville", 1, nightTime, sky = 0, temperature = 9)
+    add(section, "Valence : la coupe vers Crussol, la nuit", "valence-ouest", 1, nightTime, sky = 0, temperature = 9)
     add(section, "Paris la nuit", "paris", 0, nightTime, sky = 1)
     add(section, "New York : l'Empire State Building", "newyork", 1, summer, sky = 0, temperature = 29)
     add(section, "New York la nuit", "newyork", 0, nightTime, sky = 0, temperature = 18)
