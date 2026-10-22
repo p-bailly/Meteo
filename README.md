@@ -90,7 +90,8 @@ la carte) :
   Building ; et la **silhouette d'une quarantaine de villes**, à la place de l'église d'une petite ville ou d'un
   village : les cathédrales (Reims, Amiens, Chartres, Rouen, Bourges, Clermont, Cologne…), les beffrois du Nord et de
   Belgique (Lille, Arras, Douai, Calais, Dunkerque, Bruges ; Albi en brique), Saint-Sernin de Toulouse, les remparts de
-  Carcassonne, d'Avignon et de Saint-Malo, le Mont-Saint-Michel, Big Ben, la tour de Pise, Saint-Pierre de Rome, la
+  Carcassonne, d'Avignon et de Saint-Malo, le Mont-Saint-Michel, Big Ben, la tour de Pise (blanche, bien penchée devant
+  le Duomo, sur le pré de la place des Miracles, même avant la réponse d'OpenStreetMap), Saint-Pierre de Rome, la
   Sagrada Família, l'Atomium, les tours de télévision de Berlin et de Toronto. Parfois une
   petite surprise selon le temps ou certains jours de fête — et toucher le dessin en montre une autre version ; un
   **appui long** l'ouvre en grand, en carte postale (« Bons baisers de… », la date, un timbre). La pluie et la neige

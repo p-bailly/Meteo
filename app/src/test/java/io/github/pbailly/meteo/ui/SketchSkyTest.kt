@@ -197,6 +197,9 @@ class SketchNamesTest {
         assertEquals(Landmark.EIFFEL_TOWER, Landmark.near(48.86, 2.35))
         assertNull(Landmark.near(46.5, 3.0))
         assertEquals(Silhouette.BELFRY, Landmark.ARRAS.look)
+        // Pise (le centre donné par le géocodeur) : la tour, et une ville même sans OpenStreetMap.
+        assertEquals(Landmark.PISA, Landmark.near(43.7085, 10.4036))
+        assertEquals(Settlement.CITY, Landmark.PISA.completed(null)?.settlement)
         // Le monument remplace l'église du village (pas la tour Eiffel, qui reste à la grande ville).
         val time = LocalDateTime.of(2026, 7, 10, 14, 0)
         val village = Surroundings(Settlement.HAMLET, population = 30)

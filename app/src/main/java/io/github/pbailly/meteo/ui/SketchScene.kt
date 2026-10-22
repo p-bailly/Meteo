@@ -161,7 +161,6 @@ internal enum class Landmark(
     // Ailleurs en Europe et dans le monde.
     BRUSSELS(50.8467, 4.3525, 12.0, Silhouette.ATOMIUM),
     LONDON(51.5007, -0.1246, 15.0, Silhouette.CLOCK_TOWER),
-    PISA(43.7230, 10.3966, 6.0, Silhouette.LEANING_TOWER),
     ROME(41.9022, 12.4539, 15.0, Silhouette.DOME),
     FLORENCE(43.7731, 11.2560, 7.0, Silhouette.DOME),
     BARCELONA(41.4036, 2.1744, 12.0, Silhouette.SPIRES),
@@ -185,6 +184,8 @@ internal enum class Landmark(
     ASNANS(46.9480, 5.3720, 2.5, Silhouette.NONE, Surroundings(Settlement.VILLAGE, population = 560)),
     LA_BREVINE(46.9806, 6.6064, 2.5, Silhouette.NONE, Surroundings(Settlement.VILLAGE, forest = true, lake = true, population = 640)),
     LA_LONDE(43.1386, 6.2342, 4.0, Silhouette.NONE, Surroundings(Settlement.TOWN, forest = true, coast = true, vineyard = true, harbour = true, population = 10_500)),
+    /** Pise : la tour penchée et le Duomo sur leur pré, toujours, même avant la réponse d'OpenStreetMap. */
+    PISA(43.7230, 10.3966, 4.5, Silhouette.LEANING_TOWER, Surroundings(Settlement.CITY, river = true, railway = true, population = 90_000)),
     ;
 
     /**

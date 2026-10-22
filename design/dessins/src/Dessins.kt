@@ -118,6 +118,8 @@ private fun spots(p: Map<String, TerrainProfile>): Map<String, Spot> {
         Spot("marseille", "Marseille : la Bonne Mère et la mer", p["nice"], 43.30, at(Settlement.CITY, coast = true), Landmark.BONNE_MERE),
         Spot("strasbourg", "Strasbourg : la cathédrale", p["paris"], 48.58, at(Settlement.CITY, river = true), Landmark.STRASBOURG_CATHEDRAL),
         Spot("geneve", "Genève : le jet d'eau sur le lac", p["annecy"], 46.20, at(Settlement.CITY), Landmark.JET_D_EAU),
+        Spot("pise", "Pise : plaine, ville, l'Arno", p["paris"], 43.72, Landmark.PISA.completed(at(Settlement.CITY, river = true, people = 90_000)), Landmark.PISA),
+        Spot("pise-hl", "Pise, sans OpenStreetMap", p["paris"], 43.72, Landmark.PISA.completed(null), Landmark.PISA),
         Spot("station", "Station de ski : petite ville, télésiège", p["chamonix"], 45.92, at(Settlement.TOWN, forest = true, ski = true)),
         Spot("alpage", "Alpage : chalet isolé", p["annecy"], 45.85, at(Settlement.NONE)),
         Spot("beauce", "Beauce : plaine, ferme isolée", p["paris"], 48.3, at(Settlement.NONE)),
@@ -312,6 +314,8 @@ private fun catalog(s: Map<String, Spot>): List<Item> {
     add(section, "Valence : Saint-Apollinaire, Crussol en face", "valence-ville", 1, autumn, sky = 0)
     add(section, "Valence la nuit", "valence-ville", 1, nightTime, sky = 0, temperature = 9)
     add(section, "Valence : la coupe vers Crussol, la nuit", "valence-ouest", 1, nightTime, sky = 0, temperature = 9)
+    add(section, "Pise : la tour penchée", "pise", 0, summer, sky = 0, temperature = 28)
+    add(section, "Pise, sans OpenStreetMap", "pise-hl", 1, autumn, sky = 0)
     add(section, "Paris la nuit", "paris", 0, nightTime, sky = 1)
     add(section, "New York : l'Empire State Building", "newyork", 1, summer, sky = 0, temperature = 29)
     add(section, "New York la nuit", "newyork", 0, nightTime, sky = 0, temperature = 18)

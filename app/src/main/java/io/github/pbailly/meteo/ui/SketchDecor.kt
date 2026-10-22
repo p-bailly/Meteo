@@ -2588,24 +2588,74 @@ private fun DrawScope.clockTower(pencil: Pencil, ground: Offset, lit: Float) {
     }
 }
 
-/** La tour de Pise, qui penche, ses étages d'arcades ; le dôme de la cathédrale derrière. */
+/**
+ * Pise, la place des Miracles : le Duomo roman à gauche (sa façade à loggias, la nef rayée de marbre gris, la coupole
+ * ovale), et devant lui la tour de marbre blanc, haute, qui penche nettement vers la droite : la base à arcades
+ * aveugles, six étages de galeries, le clocher en haut. Le pré vert au pied.
+ */
 private fun DrawScope.leaningTower(pencil: Pencil, ground: Offset) {
     val u = density
-    domed(pencil, ground + Offset(-24f * u, 0f))
-    val x = ground.x + 6f * u
+    val x = ground.x
     val g = ground.y
-    rotate(degrees = 5f, pivot = Offset(x, g)) {
-        val body = rect(x - 6f * u, g - 44f * u, x + 6f * u, g)
-        val top = rect(x - 4.5f * u, g - 50f * u, x + 4.5f * u, g - 44f * u)
-        build(pencil, listOf(body, top), Crayon.WHEAT, spacing = 2.6f)
-        for (k in 1..6) pencil.line(Offset(x - 6f * u, g - k * 7f * u), Offset(x + 6f * u, g - k * 7f * u), width = 0.5f, passes = 1)
-        for (k in 0..6) {
-            var dx = -4.5f
-            while (dx <= 4.5f) {
-                pencil.line(Offset(x + dx * u, g - k * 7f * u - 1f * u), Offset(x + dx * u, g - k * 7f * u - 5f * u), width = 0.4f, passes = 1, wobble = 0.1f)
-                dx += 3f
+    // Le pré de la place des Miracles.
+    pencil.ink(Crayon.MEADOW).hatch(rect(x - 52f * u, g - 2f * u, x + 20f * u, g + 2f * u), Rect(x - 52f * u, g - 2f * u, x + 20f * u, g + 2f * u), spacing = 1.6f, width = 0.6f)
+    // Le Duomo : la façade, la nef, le transept et sa coupole ovale.
+    val d = x - 18f * u
+    val front = polygon(listOf(Offset(d - 30f * u, g), Offset(d - 30f * u, g - 20f * u), Offset(d - 26f * u, g - 20f * u), Offset(d - 26f * u, g - 25f * u), Offset(d - 22f * u, g - 28f * u), Offset(d - 18f * u, g - 25f * u), Offset(d - 18f * u, g - 20f * u), Offset(d - 16f * u, g - 20f * u), Offset(d - 16f * u, g)))
+    val nave = rect(d - 16f * u, g - 17f * u, d + 10f * u, g)
+    val transept = rect(d - 5f * u, g - 20f * u, d + 3f * u, g)
+    val drum = rect(d - 4.5f * u, g - 24f * u, d + 2.5f * u, g - 20f * u)
+    val dome = Path().apply { addArc(Rect(d - 5f * u, g - 31f * u, d + 3f * u, g - 17f * u), 180f, 180f); close() }
+    build(pencil, listOf(nave, transept, front, drum), Crayon.WHEAT, spacing = 3.4f)
+    val roof = polygon(listOf(Offset(d - 16f * u, g - 17f * u), Offset(d - 15f * u, g - 21f * u), Offset(d - 5f * u, g - 21f * u), Offset(d - 5f * u, g - 17f * u)))
+    listOf(roof, dome).forEach {
+        pencil.erase(it)
+        pencil.outline(it, width = 0.9f, passes = 1)
+        pencil.roofInk(Crayon.FAR).hatch(it, it.getBounds(), spacing = 1.6f, width = 0.5f)
+    }
+    pencil.line(Offset(d - 1f * u, g - 31f * u), Offset(d - 1f * u, g - 34f * u), width = 0.6f, passes = 1)
+    // Les bandes de marbre gris de la nef, les loggias de la façade, les trois portails.
+    val grey = pencil.ink(Crayon.FAR)
+    listOf(4f, 8f, 12f).forEach { dy -> grey.line(Offset(d - 16f * u, g - dy * u), Offset(d + 10f * u, g - dy * u), width = 0.5f, passes = 1) }
+    listOf(20f, 23f).forEach { dy ->
+        var dx = if (dy < 22f) -29f else -25f
+        while (dx <= (if (dy < 22f) -17f else -19f)) {
+            pencil.line(Offset(d + dx * u, g - dy * u), Offset(d + dx * u, g - (dy - 2.5f) * u), width = 0.4f, passes = 1)
+            dx += 2f
+        }
+    }
+    listOf(-27f, -23f, -19f).forEach { dx -> pencil.stroke(listOf(Offset(d + dx * u, g), Offset(d + dx * u, g - 5f * u), Offset(d + (dx + 0.8f) * u, g - 6f * u), Offset(d + (dx + 1.6f) * u, g - 5f * u), Offset(d + (dx + 1.6f) * u, g)), width = 0.5f, passes = 1) }
+    // La tour, devant, qui penche.
+    val t = x + 6f * u
+    rotate(degrees = 7f, pivot = Offset(t, g)) {
+        val shaft = rect(t - 7.5f * u, g - 56f * u, t + 7.5f * u, g)
+        val belfry = rect(t - 5.5f * u, g - 65f * u, t + 5.5f * u, g - 56f * u)
+        pencil.erase(Path().apply { addPath(shaft); addPath(belfry) })
+        // Le marbre blanc, à peine crème ; l'ombre du cylindre sur le côté droit.
+        pencil.ink(Crayon.WHEAT).hatch(shaft, shaft.getBounds(), spacing = 5f, width = 0.4f)
+        val shade = rect(t + 4f * u, g - 56f * u, t + 7.5f * u, g)
+        pencil.ink(Crayon.FAR).hatch(shade, shade.getBounds(), spacing = 1.8f, width = 0.5f)
+        val shadeTop = rect(t + 3f * u, g - 65f * u, t + 5.5f * u, g - 56f * u)
+        pencil.ink(Crayon.FAR).hatch(shadeTop, shadeTop.getBounds(), spacing = 1.8f, width = 0.5f)
+        pencil.outline(shaft, width = 1.1f)
+        pencil.outline(belfry, width = 1f)
+        // Les corniches qui débordent entre les étages.
+        val floors = listOf(0f, 13f, 20.2f, 27.4f, 34.6f, 41.8f, 49f, 56f)
+        floors.drop(1).forEach { h -> pencil.line(Offset(t - 8.5f * u, g - h * u), Offset(t + 8.5f * u, g - h * u), width = 0.8f, passes = 1) }
+        // La base à grandes arcades aveugles, puis les galeries : des colonnettes et leurs petits arcs.
+        fun arcades(bottom: Float, top: Float, columns: List<Float>) {
+            columns.zipWithNext().forEach { (a, b) ->
+                val m = (a + b) / 2
+                val r = (b - a) / 2
+                pencil.stroke(listOf(Offset(t + a * u, g - bottom * u), Offset(t + a * u, g - (top - r) * u), Offset(t + (m - r * 0.7f) * u, g - (top - r * 0.3f) * u), Offset(t + m * u, g - top * u), Offset(t + (m + r * 0.7f) * u, g - (top - r * 0.3f) * u), Offset(t + b * u, g - (top - r) * u), Offset(t + b * u, g - bottom * u)), width = 0.6f, passes = 1)
             }
         }
+        arcades(1f, 11f, listOf(-6.5f, -2.2f, 2.2f, 6.5f))
+        floors.subList(1, floors.size - 1).zip(floors.subList(2, floors.size)).forEach { (bottom, top) ->
+            arcades(bottom + 0.8f, top - 0.8f, listOf(-6.5f, -3.25f, 0f, 3.25f, 6.5f))
+        }
+        arcades(57f, 63.5f, listOf(-4.5f, -1.5f, 1.5f, 4.5f))
+        pencil.line(Offset(t - 6.2f * u, g - 65f * u), Offset(t + 6.2f * u, g - 65f * u), width = 0.9f, passes = 1)
     }
 }
 
