@@ -61,7 +61,7 @@ class NimbusProvider : ContentProvider() {
     /**
      * Le dessin en PNG, fond transparent, sur papier clair (Nimbus le pose sur son propre fond). Avec `text`, le texte
      * que Nimbus posera dessus ([textZones]) : le coloriage s'arrête avant lui, le soleil et les nuages se mettent à
-     * côté. Écrit dans un fichier du cache, ouvert en lecture puis effacé : il reste lisible par le descripteur, et rien
+     * côté ; avec `blank=0`, le ciel passe sous les lettres, sans papier blanc autour, et seuls les objets s'écartent. Écrit dans un fichier du cache, ouvert en lecture puis effacé : il reste lisible par le descripteur, et rien
      * ne s'accumule.
      */
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
@@ -75,7 +75,8 @@ class NimbusProvider : ContentProvider() {
             val source = runBlocking { SketchSource.load(context, data.place) }
             // Composé pour 411 dp de large, comme sur l'écran du téléphone, quelle que soit la taille demandée.
             val text = textZones(uri.getQueryParameter("text")).map { Rect(it.left * width, it.top * height, it.right * width, it.bottom * height) }
-            widgetSketch(data, source, dark = false, width, height, density = width / SKETCH_WIDTH_DP, text = text)
+            val blank = uri.getQueryParameter("blank") != "0"
+            widgetSketch(data, source, dark = false, width, height, density = width / SKETCH_WIDTH_DP, text = text, blank = blank)
         } catch (e: Exception) {
             // Un dessin raté ne fait pas tomber l'app : Nimbus garde simplement le précédent.
             Log.w(TAG, "Dessin impossible", e)

@@ -234,11 +234,13 @@ appli est refusée.
 - `now` : le lieu et son département, la température et le ressenti, le ciel en toutes lettres, le maxi et le mini du
   jour, le code météo, jour ou nuit, l'heure de la prévision et si c'est le cache faute de réseau. Ce sont les données
   des widgets : le cache de moins de 30 minutes, sinon un appel à Open-Meteo, attendu 10 secondes au plus.
-- `sketch?width=…&height=…&text=…` : le dessin en PNG, fond transparent, sur papier clair, dans le style choisi dans
+- `sketch?width=…&height=…&text=…&blank=0` : le dessin en PNG, fond transparent, sur papier clair, dans le style choisi dans
   les Réglages, avec le relief et les environs déjà gardés (rien n'est téléchargé pour lui) ; de 64 à 2048 pixels de
   côté, 1027 × 717 par défaut. `text` dit où Nimbus posera son texte (« gauche,haut,droite,bas » en fractions de
   l'image, séparées par des points-virgules, 24 au plus) : le coloriage s'arrête juste avant, le soleil, la lune, les
-  nuages et ce qui vole se mettent à côté.
+  nuages et ce qui vole se mettent à côté. Avec `blank=0` (ce que demande Nimbus), pas de papier blanc autour du
+  texte : le ciel passe sous les lettres, et seuls le soleil (rayons compris), la lune, les nuages et ce qui vole
+  s'écartent.
 
 À chaque nouvelle prévision, et quand le style du dessin change, Météo prévient Nimbus, qui relit les deux. Rien
 d'autre n'est partagé : ni les favoris, ni la position du téléphone.

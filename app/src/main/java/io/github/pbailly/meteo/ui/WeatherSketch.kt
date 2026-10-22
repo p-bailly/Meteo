@@ -149,6 +149,8 @@ fun sketchImage(
     density: Float,
     /** Le texte qui sera posé sur l'image, en pixels de l'image : le coloriage ne le touche pas. */
     text: List<Rect> = emptyList(),
+    /** Du papier blanc autour du [text] ; sans lui, le ciel passe dessous et seuls les objets s'écartent. */
+    blank: Boolean = true,
 ): ImageBitmap {
     val strength = sketchStrength(style)
     val snowing = SketchSky.of(code) == SketchSky.SNOW || conditions.snowOnGround
@@ -163,6 +165,7 @@ fun sketchImage(
         val pencil = Pencil(this, sketchGraphite(dark, strength), Random(scene.seed * 31 + code), dark, strength).also {
             it.write = handwriting
             it.text = text
+            it.blank = blank
         }
         drawScene(pencil, scene, isDay, SketchScenes.moonAge(time), southern = latitude < 0, month = month)
     }
