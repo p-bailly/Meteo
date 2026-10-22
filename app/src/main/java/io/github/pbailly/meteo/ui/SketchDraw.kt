@@ -94,7 +94,9 @@ private fun DrawScope.layer(
         scene.light == Light.SUNSET -> Offset(w * 0.56f, h * 0.64f)
         else -> Offset(w * 0.57f, sh * 0.47f)
     }
-    val celestial = pencil.clear(wanted, 24f * u, 24f * u)
+    // Sans papier blanc autour du texte, rien ne gomme les rayons : ils s'écartent avec le soleil.
+    val reach = if (pencil.blank) 24f else 36f
+    val celestial = pencil.clear(wanted, reach * u, reach * u)
     if (still) {
         skyColor(pencil, scene, w, h, isDay, celestial)
         landscape(pencil, scene, w, h, month, isDay)
@@ -501,6 +503,12 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
     var text: List<Rect> = emptyList()
 
     /**
+     * Du papier blanc autour du [text] ([clearText]) ; sans lui (Nimbus), le ciel passe sous les lettres, et seuls le
+     * soleil, les nuages et ce qui vole s'écartent, rayons compris.
+     */
+    var blank = true
+
+    /**
      * L'écriture à la main (noms des sommets), fournie par l'appli : du texte centré sur [at] (sa ligne de base), de
      * [size] dp ; sans elle, rien n'est écrit.
      */
@@ -527,6 +535,7 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
         it.culture = culture
         it.local = local
         it.text = text
+        it.blank = blank
     }
 
     /** Le crayon d'un toit : sa couleur, ou la neige. */
@@ -607,6 +616,7 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
         it.culture = culture
         it.local = local
         it.text = text
+        it.blank = blank
     }
 
     /**
@@ -664,7 +674,7 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
      * s'arrête juste avant les lettres.
      */
     fun clearText() {
-        if (text.isEmpty()) return
+        if (text.isEmpty() || !blank) return
         fade(aroundText(TEXT_MARGIN_DP + 6f), 0.3f)
         fade(aroundText(TEXT_MARGIN_DP + 3f), 0.5f)
         erase(aroundText())

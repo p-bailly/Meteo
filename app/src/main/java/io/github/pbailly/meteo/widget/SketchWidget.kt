@@ -104,13 +104,15 @@ internal fun widgetSketch(
     density: Float,
     /** Le texte qui sera posé sur le dessin, en pixels : le coloriage ne le touche pas. */
     text: List<Rect> = emptyList(),
+    /** Du papier blanc autour du [text] ; sans lui, le ciel passe dessous et seuls les objets s'écartent. */
+    blank: Boolean = true,
 ): ImageBitmap? {
     val place = data.place ?: return null
     val f = data.forecast ?: return null
     val c = f.current ?: return null
     return sketchImage(
         c.weatherCode, c.isDay, c.time, place.latitude, place.longitude, place.id.hashCode(), source.terrain, source.around,
-        sketchConditions(f, null), source.style, dark, widthPx, heightPx, density, text,
+        sketchConditions(f, null), source.style, dark, widthPx, heightPx, density, text, blank,
     )
 }
 
