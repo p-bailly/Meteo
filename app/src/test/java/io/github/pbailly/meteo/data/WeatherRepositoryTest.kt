@@ -67,4 +67,37 @@ class WeatherRepositoryTest {
             WeatherRepository(tmp.root) { throw IOException("offline") }.forecast(place, force = false)
         }
     }
+
+    @Test
+    fun `an old forecast is shown while the new one loads, a fresh one is not`() = runBlocking {
+        val repo = WeatherRepository(tmp.root) { body }
+        assertEquals(null, repo.lastForecast(place))
+        repo.forecast(place, force = false)
+        // Fraîche : forecast() la rend sans réseau, inutile de la montrer en attendant.
+        assertEquals(null, repo.lastForecast(place))
+        val file = java.io.File(tmp.root, "forecast_${place.id}.json")
+        file.setLastModified(System.currentTimeMillis() - 2 * 60 * 60 * 1000L)
+        assertTrue(repo.lastForecast(place)!!.stale)
+        file.setLastModified(System.currentTimeMillis() - 2 * 24 * 60 * 60 * 1000L)
+        assertEquals(null, repo.lastForecast(place))
+    }
+
+    @Test
+    fun `an overloaded server is asked again`() {
+        var calls = 0
+        val body = retryOnNetworkError {
+            calls++
+            if (calls < 3) throw ServerBusyException(503)
+            "ok"
+        }
+        assertEquals("ok", body)
+        assertEquals(3, calls)
+    }
+
+    @Test
+    fun `other server errors are not asked again`() {
+        var calls = 0
+        runCatching { retryOnNetworkError { calls++; throw HttpStatusException(404) } }
+        assertEquals(1, calls)
+    }
 }

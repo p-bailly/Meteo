@@ -353,6 +353,15 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         forecastJob?.cancel()
         _state.update { it.copy(forecast = it.forecast.copy(loading = true, error = null)) }
         forecastJob = viewModelScope.launch {
+            // Open-Meteo met parfois longtemps à répondre : la dernière prévision gardée s'affiche en attendant.
+            if (_state.value.forecast.data == null) {
+                runLoading { repository.lastForecast(place) }.getOrNull()?.let { last ->
+                    _state.update {
+                        if (it.place?.id != place.id || it.forecast.data != null) it
+                        else it.copy(forecast = it.forecast.copy(data = last.value, fetchedAt = last.fetchedAt, stale = true))
+                    }
+                }
+            }
             val result = runLoading { repository.forecast(place, force) }
             _state.update { state ->
                 if (state.place?.id != place.id) return@update state
@@ -461,6 +470,14 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         multiModelJob?.cancel()
         _state.update { it.copy(multiModel = it.multiModel.copy(loading = true, error = null)) }
         multiModelJob = viewModelScope.launch {
+            if (_state.value.multiModel.data == null) {
+                runLoading { repository.lastMultiModel(place) }.getOrNull()?.let { last ->
+                    _state.update {
+                        if (it.place?.id != place.id || it.multiModel.data != null) it
+                        else it.copy(multiModel = it.multiModel.copy(data = last.value, fetchedAt = last.fetchedAt, stale = true))
+                    }
+                }
+            }
             val result = runLoading { repository.multiModel(place, force) }
             _state.update { state ->
                 if (state.place?.id != place.id) return@update state
