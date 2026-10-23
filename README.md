@@ -177,11 +177,20 @@ Comment la prévision est résumée :
 
 Comment l'indice de confiance est calculé :
 
-- **Indice de confiance** (1 à 5) : dispersion des 51 scénarios de la prévision d'ensemble du centre européen
-  (ECMWF ENS, via Open-Meteo, rechargée toutes les 3 heures) ; à défaut, des 8 modèles. Pour chaque jour, moitié
-  température (écart-type des maxima : sûr sous 0,5 °C, incertain à 4 °C), moitié pluie (scénarios d'accord pour
-  « sec » ou « au moins 1 mm », et sur les cumuls s'il pleut) ; 5/5 au-dessus de 80 %, 4/5 de 65 %, 3/5 de 50 %,
-  2/5 de 35 %. La confiance baisse donc naturellement avec l'échéance, quand les scénarios s'écartent.
+- **Indice de confiance** (1 à 5) : la part des scénarios qui donnent le temps le plus probable, comme la
+  « predictability » de Meteoblue. Les scénarios viennent de **cinq prévisions d'ensemble** (via Open-Meteo, rechargées
+  toutes les 3 heures) : européennes ECMWF IFS et AIFS (51 scénarios chacune, 15 jours), américaine NOAA GEFS (31,
+  10 jours), allemande DWD ICON (40, 7 jours et demi), canadienne GEM (21, 16 jours), soit environ 194 scénarios ;
+  chaque centre pèse autant quel que soit son nombre de scénarios. Un seul ensemble s'accorde plus souvent qu'il ne le
+  devrait (ses scénarios partagent les défauts de leur modèle) : l'ancien indice, sur le seul ECMWF, donnait 5/5 à
+  J+6 des journées où les autres centres n'étaient pas d'accord. Un scénario « donne le même temps » que le scénario
+  médian quand il s'accorde sur tout à la fois : le maximum de température à 2 °C près, sec ou pluie (au moins 1 mm)
+  et s'il pleut le cumul du simple au double, la nébulosité de la journée (8 h–20 h) à 30 % près, le vent le plus
+  fort à 10 km/h près (30 % au-delà de 33 km/h). 5/5 au-dessus de 80 % des scénarios, 4/5 de 60 %, 3/5 de 40 %, 2/5
+  de 20 %, comme les classes de Meteoblue (« 80–100 % : prévision fiable, très peu de chances qu'elle change »). Par
+  heure (ou bloc de 3 heures), la même chose sur ces heures-là, pluie à partir de 0,1 mm par heure. À défaut
+  d'ensembles chargés, les 8 modèles. La confiance baisse donc avec l'échéance, plus vite par temps changeant
+  (dépression, orages) que sous un anticyclone.
 
 Comment l'altitude est calculée :
 

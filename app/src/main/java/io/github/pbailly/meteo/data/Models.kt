@@ -137,12 +137,17 @@ class MultiModelForecast(
 )
 
 /**
- * Prévision d'ensemble du centre européen (ECMWF IFS ENS) : 51 scénarios du même modèle, aux conditions de départ
- * légèrement différentes. Leur dispersion mesure l'incertitude de la prévision.
+ * Prévisions d'ensemble de cinq centres (ECMWF IFS et AIFS, NOAA GEFS, DWD ICON, Canada GEM) : environ 194 scénarios,
+ * chacun du même modèle aux conditions de départ légèrement différentes. Leur dispersion mesure l'incertitude.
  */
 class EnsembleForecast(
     val time: List<LocalDateTime>,
     /** Une série horaire par scénario. */
     val temperature: List<DoubleArray>,
     val precipitation: List<DoubleArray>,
+    /** Modèle de chaque scénario (« ecmwf_ifs025_ensemble »…) : chaque modèle pèse autant dans l'indice de confiance. */
+    val model: List<String> = List(temperature.size) { "" },
+    /** Nébulosité (%) et vent à 10 m (km/h) de chaque scénario ; vides quand l'ensemble ne les donne pas. */
+    val cloudCover: List<DoubleArray> = emptyList(),
+    val windSpeed: List<DoubleArray> = emptyList(),
 )

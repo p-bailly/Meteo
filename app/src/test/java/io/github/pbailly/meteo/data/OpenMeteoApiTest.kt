@@ -96,15 +96,23 @@ class OpenMeteoApiTest {
     }
 
     @Test
-    fun `ensemble members are read as separate series`() {
+    fun `ensemble members are read as separate series of each model`() {
         val body = """{"hourly":{"time":["2026-10-20T00:00","2026-10-20T01:00"],
-            "temperature_2m":[10.0,11.0],"temperature_2m_member01":[9.5,10.5],"temperature_2m_member02":[10.5,11.5],
-            "precipitation":[0.0,0.2],"precipitation_member01":[0.0,0.0],"precipitation_member02":[0.4,0.6]}}"""
+            "temperature_2m_ecmwf_ifs025_ensemble":[10.0,11.0],"temperature_2m_member01_ecmwf_ifs025_ensemble":[9.5,10.5],
+            "precipitation_ecmwf_ifs025_ensemble":[0.0,0.2],"precipitation_member01_ecmwf_ifs025_ensemble":[0.0,0.0],
+            "cloud_cover_ecmwf_ifs025_ensemble":[80,90],"cloud_cover_member01_ecmwf_ifs025_ensemble":[70,60],
+            "temperature_2m_member02_ncep_gefs025":[10.5,11.5],"precipitation_member02_ncep_gefs025":[0.4,0.6],
+            "wind_speed_10m_member02_ncep_gefs025":[12.0,14.0]}}"""
         val ensemble = OpenMeteoApi.parseEnsemble(body)
         assertEquals(3, ensemble.temperature.size)
         assertEquals(3, ensemble.precipitation.size)
+        assertEquals(listOf("ecmwf_ifs025_ensemble", "ecmwf_ifs025_ensemble", "ncep_gefs025"), ensemble.model)
         assertEquals(11.5, ensemble.temperature[2][1], 0.0)
-        assertTrue(OpenMeteoApi.ensembleUrl(Place("Annecy", 45.9, 6.13)).contains("models=ecmwf_ifs025"))
+        assertEquals(60.0, ensemble.cloudCover[1][1], 0.0)
+        assertTrue(ensemble.cloudCover[2][0].isNaN())
+        assertEquals(14.0, ensemble.windSpeed[2][1], 0.0)
+        val url = OpenMeteoApi.ensembleUrl(Place("Annecy", 45.9, 6.13))
+        assertTrue(url.contains("models=ecmwf_ifs025%2Cecmwf_aifs025%2Cncep_gefs025%2Cicon_seamless%2Cgem_global"))
     }
 
     @Test

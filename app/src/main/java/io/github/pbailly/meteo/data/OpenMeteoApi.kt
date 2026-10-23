@@ -275,36 +275,56 @@ object OpenMeteoApi {
     }
 
     /**
-     * Avec plusieurs modèles, Open-Meteo suffixe chaque variable par l'identifiant du modèle :
-     * `temperature_2m_icon_seamless`, `temperature_2m_gfs_seamless`, etc.
+     * Les cinq prévisions d'ensemble mondiales qui vont au moins à 7 jours : ECMWF IFS et AIFS (51 scénarios chacune,
+     * 15 jours), NOAA GEFS (31, 10 jours), DWD ICON (40, 7 jours et demi), Canada GEM (21, 16 jours).
      */
-    /** Ensemble ECMWF (51 scénarios), température et pluie horaires sur 15 jours. */
+    private val ENSEMBLE_MODELS = listOf("ecmwf_ifs025", "ecmwf_aifs025", "ncep_gefs025", "icon_seamless", "gem_global")
+
+    /** Prévisions d'ensemble : température, pluie, nébulosité et vent horaires sur 15 jours. */
     fun ensembleUrl(place: Place): String = buildUrl(
         ENSEMBLE_URL,
         "latitude" to coord(place.latitude),
         "longitude" to coord(place.longitude),
-        "hourly" to "temperature_2m,precipitation",
-        "models" to "ecmwf_ifs025",
+        "hourly" to "temperature_2m,precipitation,cloud_cover,wind_speed_10m",
+        "models" to ENSEMBLE_MODELS.joinToString(","),
         "forecast_days" to "15",
         "timezone" to "auto",
     )
 
-    /** Les scénarios : « temperature_2m » (le contrôle) puis « temperature_2m_member01 », « …02 »… */
+    /** « temperature_2m_member01_ncep_gefs025 » : variable, numéro du scénario (aucun pour le contrôle), modèle. */
+    private val ENSEMBLE_KEY = Regex("(temperature_2m|precipitation|cloud_cover|wind_speed_10m)(?:_member(\\d+))?(?:_(.+))?")
+
+    /** Les scénarios de chaque modèle : « temperature_2m_<modèle> » (le contrôle), « temperature_2m_member01_<modèle> »… */
     fun parseEnsemble(body: String): EnsembleForecast {
         val root = parseRoot(body)
         val h = root.obj("hourly")
         val times = h.strings("time").map { LocalDateTime.parse(it) }
         val n = times.size
-        fun members(variable: String) = h.keys
-            .filter { it == variable || it.startsWith("${variable}_member") }
-            .sorted()
-            .map { h.doubles(it, n) }
-        val temperature = members("temperature_2m")
-        val precipitation = members("precipitation")
-        if (temperature.isEmpty() || temperature.size != precipitation.size) throw OpenMeteoException("Réponse incomplète : scénarios manquants")
-        return EnsembleForecast(times, temperature, precipitation)
+        // Modèle, puis numéro du scénario → variable → série.
+        val scenarios = sortedMapOf<String, MutableMap<String, DoubleArray>>()
+        for (key in h.keys) {
+            val match = ENSEMBLE_KEY.matchEntire(key) ?: continue
+            val (variable, member, model) = match.destructured
+            val id = model + "#" + (member.toIntOrNull() ?: 0).toString().padStart(3, '0')
+            scenarios.getOrPut(id) { mutableMapOf() }[variable] = h.doubles(key, n)
+        }
+        val complete = scenarios.filter { "temperature_2m" in it.value && "precipitation" in it.value }
+        if (complete.isEmpty()) throw OpenMeteoException("Réponse incomplète : scénarios manquants")
+        fun series(variable: String) = complete.values.map { it[variable] ?: DoubleArray(n) { Double.NaN } }
+        return EnsembleForecast(
+            time = times,
+            temperature = series("temperature_2m"),
+            precipitation = series("precipitation"),
+            model = complete.keys.map { it.substringBefore('#') },
+            cloudCover = series("cloud_cover"),
+            windSpeed = series("wind_speed_10m"),
+        )
     }
 
+    /**
+     * Avec plusieurs modèles, Open-Meteo suffixe chaque variable par l'identifiant du modèle :
+     * `temperature_2m_icon_seamless`, `temperature_2m_gfs_seamless`, etc.
+     */
     fun parseMultiModel(body: String, models: List<WeatherModel>): MultiModelForecast {
         val root = parseRoot(body)
         val h = root.obj("hourly")

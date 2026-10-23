@@ -75,7 +75,7 @@ private class HourLine(
     val windGusts: Double,
     val precipitation: Double,
     val probability: Double,
-    /** Indice de confiance de 1 à 5 (le plus bas des heures regroupées). */
+    /** Indice de confiance de 1 à 5 (des heures regroupées). */
     val confidence: Int?,
 )
 
@@ -195,7 +195,7 @@ private fun DayPage(
         }
         item(key = "note") {
             MonoText(
-                "pluie : cumul et probabilité · vent : moyen-rafales · confiance : accord des 51 scénarios de l'ensemble européen",
+                "pluie : cumul et probabilité · vent : moyen-rafales · confiance : part des scénarios de 5 ensembles qui donnent ce temps",
                 size = 10.sp,
                 maxLines = 3,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
@@ -354,7 +354,7 @@ private fun hourLines(forecast: Forecast, ensemble: EnsembleForecast?, multiMode
             windGusts = block.maxOf { h.windGusts[it].takeIf { v -> !v.isNaN() } ?: 0.0 },
             precipitation = if (rain.isEmpty()) Double.NaN else rain.sum(),
             probability = block.map { h.precipitationProbability[it] }.filter { !it.isNaN() }.maxOrNull() ?: Double.NaN,
-            confidence = block.mapNotNull { Predictability.hourly(ensemble, multiModel, h.time[it]) }.minOrNull(),
+            confidence = Predictability.hours(ensemble, multiModel, block.map { h.time[it] }),
         )
     }
 }
