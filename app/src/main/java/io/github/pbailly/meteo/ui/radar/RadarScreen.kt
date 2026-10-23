@@ -93,6 +93,7 @@ import io.github.pbailly.meteo.data.maps.ObservationSource
 import io.github.pbailly.meteo.data.maps.StationReading
 import io.github.pbailly.meteo.data.maps.TileLayer
 import io.github.pbailly.meteo.data.maps.WindyWebcams
+import io.github.pbailly.meteo.data.radar.FrameStep
 import io.github.pbailly.meteo.data.radar.RainClass
 import io.github.pbailly.meteo.ui.DetailHeader
 import io.github.pbailly.meteo.ui.Fmt
@@ -163,6 +164,11 @@ fun RadarRoute(
             layers.show(layer)
         },
         onSelect = { if (layerState.layer == MapLayer.RAIN) viewModel.select(it) else layers.select(it) },
+        onStep = {
+            // Le radar enregistre le pas, que les autres couches relisent.
+            viewModel.setStep(it)
+            layers.setStep()
+        },
         onTogglePlay = { if (layerState.layer == MapLayer.RAIN) viewModel.togglePlay() else layers.togglePlay() },
         onSaveKey = {
             viewModel.saveKey(it)
@@ -186,6 +192,7 @@ fun RadarScreen(
     onRefresh: () -> Unit,
     onLayer: (MapLayer) -> Unit,
     onSelect: (Int) -> Unit,
+    onStep: (Int) -> Unit,
     onTogglePlay: () -> Unit,
     onSaveKey: (String) -> Unit,
     onSaveWindyKey: (String) -> Unit,
@@ -286,6 +293,8 @@ fun RadarScreen(
                 // Toujours affichée, même sur les images prévues : la frise et la carte ne bougent pas.
                 note = state.forecastNote,
                 label = { clock.format(it.atZone(ZoneId.systemDefault())) },
+                step = state.stepMinutes,
+                onStep = onStep,
                 onSelect = onSelect,
                 onTogglePlay = onTogglePlay,
             )
@@ -298,6 +307,8 @@ fun RadarScreen(
                 header = null,
                 note = null,
                 label = { clock.format(it.atZone(ZoneId.systemDefault())) },
+                step = state.stepMinutes,
+                onStep = onStep,
                 onSelect = onSelect,
                 onTogglePlay = onTogglePlay,
             )
@@ -488,6 +499,8 @@ private fun Timeline(
     header: String?,
     note: String?,
     label: (Instant) -> String,
+    step: Int,
+    onStep: (Int) -> Unit,
     onSelect: (Int) -> Unit,
     onTogglePlay: () -> Unit,
 ) {
@@ -501,16 +514,17 @@ private fun Timeline(
     val colors = MaterialTheme.colorScheme
     Column(Modifier.fillMaxWidth().background(colors.surfaceContainerLowest).navigationBarsPadding()) {
         HorizontalDivider(color = colors.outlineVariant)
-        if (header != null) {
+        Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                header,
+                header.orEmpty(),
                 color = colors.onSurfaceVariant,
                 fontFamily = AppMono,
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp),
+                modifier = Modifier.weight(1f).padding(start = 16.dp, end = 8.dp),
             )
+            StepMenu(step, onStep, Modifier.padding(end = 8.dp))
         }
         if (note != null) {
             Text(
@@ -586,6 +600,36 @@ private fun Timeline(
                     contentDescription = if (playing) "Pause" else "Lecture",
                     tint = Color.White,
                     modifier = Modifier.size(26.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Pas de la frise, au-dessus des boutons : une image toutes les 5, 10 ou 15 minutes. */
+@Composable
+private fun StepMenu(step: Int, onStep: (Int) -> Unit, modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    Box(modifier) {
+        Text(
+            "toutes les $step min ▾",
+            color = MaterialTheme.colorScheme.primary,
+            fontFamily = AppMono,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { open = true }
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            FrameStep.CHOICES.forEach { minutes ->
+                DropdownMenuItem(
+                    text = { Text("Une image toutes les $minutes min", fontWeight = if (minutes == step) FontWeight.SemiBold else null) },
+                    onClick = {
+                        open = false
+                        onStep(minutes)
+                    },
                 )
             }
         }

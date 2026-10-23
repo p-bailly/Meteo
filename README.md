@@ -122,7 +122,10 @@ la carte) :
   Valence) avec la température à chaque altitude, l'iso 0, la limite pluie-neige, les
   sommets nommés, la neige attendue à 2 000 et 3 000 m et les pentes enneigées, puis le ressenti et le vent à
   2 000 m ; ensuite l'iso 0 et la limite pluie-neige jour par jour, avec la neige à 2 000 m.
-- **Cartes** : le radar et les autres cartes, avec frise des heures et animation ; le menu posé en haut à droite de la carte choisit la
+- **Cartes** : le radar et les autres cartes, avec frise des heures et animation ; au-dessus de la frise, « toutes les
+  5 min ▾ » choisit le pas de la frise et de l'animation (une image toutes les 5, 10 ou 15 minutes, comptées depuis
+  « maintenant », gardé pour les prochaines fois ; une série déjà plus espacée, comme le satellite ou la prévision
+  Météo-France, reste telle quelle) ; le menu posé en haut à droite de la carte choisit la
   couche, le bouton « Webcams » de l'en-tête affiche les webcams ; le lieu est un point noir cerclé de blanc :
   - **Pluie** : radar Météo-France et sa prévision (voir ci-dessous pour la clé) ;
   - **Température** à 2 m maintenant : modèle ICON-EU du DWD (sans clé, fichier GRIB2 d'environ 1 Mo du serveur de
@@ -282,6 +285,16 @@ Le radar vient de l'API publique « DonneesPubliquesRadar » de Météo-France :
     et le prolonge sur 1 heure. Il faut deux images à 5–30 min d'écart ; les averses qui naissent ou se
     dissipent ne sont pas prévues.
 - Fond de carte : [OpenFreeMap](https://openfreemap.org) (données OpenStreetMap), gratuit et sans clé.
+
+## Quand Open-Meteo est lent
+
+Le serveur gratuit d'Open-Meteo est parfois surchargé (en octobre 2026, plusieurs jours de suite) : il écarte des
+requêtes aux heures de pointe, surtout à chaque heure pile, ou met jusqu'à 20 s à répondre. L'app :
+
+- affiche tout de suite la **dernière prévision gardée** du lieu (de moins d'un jour), le temps que la nouvelle arrive ;
+- abandonne une connexion qui ne s'établit pas en 8 s, et réessaie (trois essais en tout) ;
+- redemande 2 puis 4 s plus tard quand le serveur répond « surchargé » (erreurs 502, 503, 504) ;
+- sans réseau, ou si rien n'a marché, garde la prévision enregistrée, même ancienne.
 
 ## Coût
 
