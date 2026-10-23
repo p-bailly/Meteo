@@ -63,7 +63,7 @@ data class MeteoUiState(
     val favorites: List<Place> = emptyList(),
     val forecast: Remote<Forecast> = Remote(),
     val multiModel: Remote<MultiModelForecast> = Remote(),
-    /** Ensemble ECMWF (51 scénarios), pour l'indice de confiance. */
+    /** Prévisions d'ensemble de cinq centres (environ 194 scénarios), pour l'indice de confiance. */
     val ensemble: Remote<EnsembleForecast> = Remote(),
     val search: SearchState = SearchState(),
     val locating: Boolean = false,

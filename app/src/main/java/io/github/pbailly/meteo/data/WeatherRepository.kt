@@ -34,7 +34,7 @@ class WeatherRepository(
     }
 
     suspend fun ensemble(place: Place, force: Boolean): Loaded<EnsembleForecast> =
-        cached("ensemble_${place.id}", OpenMeteoApi.ensembleUrl(place), ENSEMBLE_MAX_AGE_MS, force) {
+        cached("ensembles_${place.id}", OpenMeteoApi.ensembleUrl(place), ENSEMBLE_MAX_AGE_MS, force) {
             OpenMeteoApi.parseEnsemble(it)
         }
 
