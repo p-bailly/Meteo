@@ -38,6 +38,23 @@ class WeatherRepository(
             OpenMeteoApi.parseEnsemble(it)
         }
 
+    /**
+     * La dernière prévision gardée du lieu quand elle n'est plus fraîche (moins d'un jour) : elle s'affiche tout de
+     * suite, le temps que la nouvelle arrive. Null si elle est fraîche ([forecast] la rend alors sans attendre).
+     */
+    suspend fun lastForecast(place: Place): Loaded<Forecast>? =
+        last("forecast_${place.id}", FORECAST_MAX_AGE_MS) { OpenMeteoApi.parseForecast(it) }
+
+    suspend fun lastMultiModel(place: Place): Loaded<MultiModelForecast>? =
+        last("multimodel_${place.id}", MULTI_MODEL_MAX_AGE_MS) { OpenMeteoApi.parseMultiModel(it, WeatherModel.entries) }
+
+    private suspend fun <T> last(key: String, maxAgeMs: Long, parse: (String) -> T): Loaded<T>? = withContext(Dispatchers.IO) {
+        val file = File(cacheDir, "$key.json")
+        val age = System.currentTimeMillis() - file.lastModified()
+        if (!file.exists() || age < maxAgeMs || age > LAST_MAX_AGE_MS) return@withContext null
+        runCatching { parse(file.readText()) }.getOrNull()?.let { Loaded(it, file.lastModified(), stale = true) }
+    }
+
     /** Prévision courte de tous les lieux de la liste, en un seul appel ; dans l'ordre de [places]. */
     suspend fun summaries(places: List<Place>, force: Boolean): Loaded<List<Forecast>> {
         val key = "summary_" + Integer.toHexString(places.joinToString("|") { it.id }.hashCode())
@@ -90,6 +107,8 @@ class WeatherRepository(
         const val MULTI_MODEL_MAX_AGE_MS = 60 * 60 * 1000L
         /** L'ensemble est recalculé toutes les 6 heures (et pèse plus lourd dans le quota d'Open-Meteo). */
         const val ENSEMBLE_MAX_AGE_MS = 3 * 60 * 60 * 1000L
+        /** Au-delà d'un jour, une prévision gardée ne s'affiche plus en attendant la nouvelle. */
+        const val LAST_MAX_AGE_MS = 24 * 60 * 60 * 1000L
     }
 }
 
@@ -104,13 +123,15 @@ fun slowHttpGet(url: String): String = httpGetOnce(url, readTimeoutMs = 30_000)
 private fun httpGetOnce(url: String, readTimeoutMs: Int = 20_000): String {
     val connection = URL(url).openConnection() as HttpURLConnection
     try {
-        connection.connectTimeout = 15_000
+        // Un serveur surchargé ne répond parfois même pas à la connexion : mieux vaut réessayer tôt qu'attendre.
+        connection.connectTimeout = 8_000
         connection.readTimeout = readTimeoutMs
         connection.setRequestProperty("Accept", "application/json")
         connection.setRequestProperty("User-Agent", "Meteo-perso/1.0 (Android; github.com/p-bailly/Meteo)")
         val code = connection.responseCode
         val stream = if (code in 200..299) connection.inputStream else connection.errorStream
         val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        if (code in 502..504) throw ServerBusyException(code)
         if (code !in 200..299) {
             // Open-Meteo renvoie {"error":true,"reason":"..."} : on laisse le parseur en tirer le message.
             if (body.contains("\"reason\"")) return body

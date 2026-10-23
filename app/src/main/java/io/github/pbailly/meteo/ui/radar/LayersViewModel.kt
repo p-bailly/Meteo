@@ -40,6 +40,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import io.github.pbailly.meteo.data.HttpStatusException
+import io.github.pbailly.meteo.data.radar.FrameStep
 import io.github.pbailly.meteo.data.networkMessage
 import java.io.IOException
 import java.time.Duration
@@ -109,6 +110,8 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
     private var loadJob: Job? = null
     private var showJob: Job? = null
     private var playJob: Job? = null
+    /** Toutes les heures disponibles de la couche ; la frise n'en montre qu'au pas choisi. */
+    private var allTimes: List<Instant> = emptyList()
 
     fun setCenter(latitude: Double, longitude: Double) {
         if (center != latitude to longitude) webcamsFetchedAt = null
@@ -127,6 +130,7 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
         stopPlaying()
         loadJob?.cancel()
         showJob?.cancel()
+        allTimes = emptyList()
         _state.update {
             it.copy(layer = layer, times = emptyList(), selected = 0, overlay = MapOverlay.None, error = null, openWebcam = null, stations = emptyList(), openStation = null)
         }
@@ -370,7 +374,22 @@ class LayersViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(openWebcam = null, webcamImage = null) }
     }
 
-    private fun publishTimes(times: List<Instant>, selectLatest: Boolean) {
+    /** Pas de la frise (5, 10 ou 15 min), choisi sur l'écran des cartes : la frise garde l'heure affichée. */
+    fun setStep() {
+        val s = _state.value
+        val shown = s.times.getOrNull(s.selected) ?: return
+        val times = stepped(allTimes)
+        val selected = times.indices.minByOrNull { kotlin.math.abs(Duration.between(times[it], shown).seconds) } ?: 0
+        _state.update { it.copy(times = times, selected = selected) }
+        showSelected()
+    }
+
+    private fun stepped(times: List<Instant>): List<Instant> =
+        FrameStep.keep(times, radarPrefs.getInt(FRAME_STEP_KEY, FrameStep.DEFAULT)).map { times[it] }
+
+    private fun publishTimes(all: List<Instant>, selectLatest: Boolean) {
+        allTimes = all
+        val times = stepped(all)
         val now = Instant.now()
         val selected = when {
             times.isEmpty() -> 0

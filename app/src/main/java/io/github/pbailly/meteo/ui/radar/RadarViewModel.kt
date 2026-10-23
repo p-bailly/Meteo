@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.util.LruCache
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.pbailly.meteo.data.radar.FrameStep
 import io.github.pbailly.meteo.data.radar.GeoBounds
 import io.github.pbailly.meteo.data.radar.MeteoFrancePiaf
 import io.github.pbailly.meteo.data.radar.MeteoFranceRadar
@@ -31,6 +32,9 @@ import java.time.Instant
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 
+/** Pas de la frise, dans les préférences « radar » : le même pour toutes les couches de la carte. */
+internal const val FRAME_STEP_KEY = "pas_frise_minutes"
+
 /** Une case de la frise : une observation radar, ou une prévision [leadMinutes] après la dernière observation. */
 data class RadarSlot(val time: Instant, val leadMinutes: Int? = null) {
     val isForecast: Boolean get() = leadMinutes != null
@@ -47,6 +51,8 @@ data class RadarUiState(
     val error: String? = null,
     /** Pourquoi la prévision n'est pas (encore) disponible, le cas échéant. */
     val forecastNote: String? = null,
+    /** Pas de la frise : une image toutes les 5, 10 ou 15 minutes. */
+    val stepMinutes: Int = FrameStep.DEFAULT,
 ) {
     val hasKey: Boolean get() = !apiKey.isNullOrBlank()
 }
@@ -72,7 +78,9 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
     private var piafCheckedAt: Instant? = null
     private var piafNote: String? = null
 
-    private val _state = MutableStateFlow(RadarUiState(apiKey = prefs.getString(KEY_API, null)))
+    private val _state = MutableStateFlow(
+        RadarUiState(apiKey = prefs.getString(KEY_API, null), stepMinutes = prefs.getInt(KEY_STEP, FrameStep.DEFAULT)),
+    )
     val state: StateFlow<RadarUiState> = _state.asStateFlow()
 
     private var observations: List<RadarFrame> = emptyList()
@@ -134,6 +142,13 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { it.copy(loading = false, error = e.userMessage()) }
             }
         }
+    }
+
+    /** Pas de la frise (5, 10 ou 15 min), gardé pour les prochaines fois ; la frise garde l'heure affichée. */
+    fun setStep(minutes: Int) {
+        prefs.edit().putInt(KEY_STEP, minutes).apply()
+        _state.update { it.copy(stepMinutes = minutes) }
+        publishSlots(selectLatest = false)
     }
 
     fun select(index: Int) {
@@ -234,12 +249,18 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
             is ForecastSource.Extrapolated -> LEADS.map { RadarSlot(f.base.time.plusSeconds(it * 60L), it) }
             null -> emptyList()
         }
-        val slots = observations.map { RadarSlot(it.time) } + forecastSlots
-        val latestObservation = observations.lastIndex.coerceAtLeast(0)
+        val all = observations.map { RadarSlot(it.time) } + forecastSlots
+        // Au pas choisi, de part et d'autre de la dernière observation (« maintenant »).
+        val slots = if (observations.isEmpty()) all else {
+            FrameStep.keep(all.map { it.time }, _state.value.stepMinutes, anchor = observations.lastIndex).map { all[it] }
+        }
+        val latestObservation = slots.indexOfLast { !it.isForecast }.coerceAtLeast(0)
         val selected = when {
             slots.isEmpty() -> 0
             selectLatest || previous == null -> latestObservation
-            else -> slots.indexOf(previous).takeIf { it >= 0 } ?: latestObservation
+            // La case affichée, ou à défaut (autre pas, image retirée) la plus proche dans le temps.
+            else -> slots.indexOf(previous).takeIf { it >= 0 }
+                ?: slots.indices.minBy { abs(Duration.between(slots[it].time, previous.time).seconds) }
         }
         _state.update { it.copy(frames = slots, selected = selected) }
         showSelected()
@@ -323,6 +344,8 @@ class RadarViewModel(app: Application) : AndroidViewModel(app) {
 
     private companion object {
         const val KEY_API = "meteofrance_api_key"
+        /** Partagé avec les autres couches de la carte (LayersViewModel). */
+        const val KEY_STEP = FRAME_STEP_KEY
 
         /** Échéances de prévision, en minutes après la dernière image. */
         val LEADS = (5..60 step 5).toList()
