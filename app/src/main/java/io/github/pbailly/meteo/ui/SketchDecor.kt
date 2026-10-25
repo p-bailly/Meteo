@@ -646,7 +646,8 @@ private fun DrawScope.vineRows(pencil: Pencil, x0: Float, x1: Float, top: Float,
             if (leaves.isEmpty()) {
                 wood.line(Offset(x, y), Offset(x, y - 2f * u), width = 0.7f, passes = 1, wobble = 0.1f)
             } else {
-                pencil.ink(leaves[((x / gap).toInt() + row) % leaves.size]).dot(Offset(x, y - 1f * u), 1.2f)
+                // x est négatif au bord gauche de la plaine : mod, pas %, pour rester dans la liste.
+                pencil.ink(leaves[((x / gap).toInt() + row).mod(leaves.size)]).dot(Offset(x, y - 1f * u), 1.2f)
             }
             x += gap
         }
