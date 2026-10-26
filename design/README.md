@@ -1,105 +1,57 @@
 # Logos et directions artistiques
 
-Cinq propositions pour remplacer l'ancienne icône (soleil derrière un nuage sur bleu `#256ABF`).
-La direction **Glacier** (variante D1 de la piste Alpin, `logos/alpin-variantes/d1-glacier.svg`) est appliquée à
-l'app : palette neige, glace, glacier, ardoise et nuit, polices Archivo et Martian Mono, pictogrammes au trait
-recolorés, barre du haut claire et bloc « Altitude ». L'icône de l'app est désormais le logo au crayon **C5 Montagne**
-(`logos/crayon/c5-montagne.svg`, voir plus bas), qui a remplacé celle de Glacier (sommet enneigé, balise rouge).
-Isobare, appliquée avant elle, et les autres directions restent des pistes.
+Direction appliquée à l'app : **Glacier** (variante D1 de la piste Alpin, `logos/alpin-variantes/d1-glacier.svg`) :
+neige, glace, glacier `#1C6497`, ardoise, nuit `#0F2133` et balise rouge `#C8202A`, polices Archivo et Martian Mono,
+pictogrammes au trait, barre du haut claire, bloc « Altitude ». Les couleurs sont dans `ui/theme/Theme.kt`.
+L'icône est le logo au crayon **C5 Montagne** (`logos/crayon/c5-montagne.svg`), qui a remplacé celle de Glacier.
 
-Les logos de `logos/` sont dessinés sur la grille de l'icône adaptative Android (108 × 108, motif
-contenu dans la zone sûre de 66). `logos/monochrome/` contient le calque monochrome utilisé par les
-icônes à thème d'Android 13+ (seul l'alpha compte).
+Les SVG de `logos/` suivent la grille de l'icône adaptative Android (108 × 108, motif dans la zone sûre de 66) ;
+`logos/monochrome/` est le calque des icônes à thème d'Android 13+ (seul l'alpha compte).
 
-| | Direction | Logo | Palette | Typographies |
-|---|---|---|---|---|
-| 01 | **Isobare** : technique, synoptique, précis | Un M tracé comme un front météo (triangles froids, demi-cercles chauds) | Marine `#0C304E`, encre `#0B1B2B`, papier `#F4F6F8`, front froid `#3FA9F5`, front chaud `#FF5A4E`, grille `#C9D3DD` | IBM Plex Sans, IBM Plex Mono |
-| 02 | **Girouette** : patrimoine, émail, clocher | Girouette pointée nord-est sur une plaque émaillée, lettres N E S O | Bleu émail `#1F4A73`, blanc émail `#F4EFE3`, laiton `#D8A846`, ardoise `#2F3A45`, brique `#B5462F`, zinc `#A7B1BA` | Barlow Condensed, Barlow |
-| 03 | **Radar** : nocturne, données, temps réel | Balayage radar et écho de pluie en pixels | Nuit `#06090D`, surface `#0E151C`, puis l'échelle du radar : `#7AE1E8` `#00C8D8` `#2D7BEA` `#BE46EB` `#DE5E47` `#E4D541` | Chivo, Chivo Mono |
-| 04 | **Accent** : joyeux, typographique, grand public | Un « é » : l'œil de la lettre est un soleil levant, l'accent une goutte | Ciel `#1E6FE8`, soleil `#FFC21A`, nuage `#FFFFFF`, corail `#FF7A59`, nuit `#13233F`, brume `#DDE9FB` | Fredoka, Nunito |
-| 05 | **Degré** : minimal, suisse, chiffres | Un M suivi du signe degré rouge | Noir `#121212`, papier `#FAFAF8`, rouge degré `#E8473F`, bleu pluie `#2A78D6`, gris `#8A8984`, filet `#E2E1DC` | Archivo (étroit pour les chiffres) |
+## Pistes non retenues (SVG conservés)
 
-## En bref
+| Piste | Idée | Risque |
+|---|---|---|
+| 01 **Isobare** (appliquée avant Glacier) | M tracé comme un front météo, marine et bleu/rouge de front | symboles compris des seuls lecteurs de cartes |
+| 02 **Girouette** | girouette sur plaque émaillée, laiton, esprit patrimoine | confondue avec une boussole en petit |
+| 03 **Radar** | balayage radar aux couleurs de `RainClass`, thème nuit | très marquée, peu adaptée au thème clair |
+| 04 **Accent** | « é » dont l'œil est un soleil et l'accent une goutte | loin de l'esprit « outil de passionné » |
+| 05 **Degré** | M suivi d'un ° rouge, sobre | ne dit pas « météo » au premier coup d'œil |
+| 06 Météogramme | courbe de température sur barres de pluie | évoque une app de bourse |
+| 07 Abri | abri à persiennes des stations météo | détails fins à 24 dp |
+| 08 Courbes | courbes de niveau d'un sommet, balise rouge | évoque la randonnée |
+| 09 Hublot | fenêtre ronde, moitié jour, moitié nuit | assez générique |
+| 10 Barbule | pointé synoptique (ciel 4/8, vent en barbules) | illisible pour le grand public |
+| 11 Pluviomètre | goutte dans un pluviomètre gradué | peu de place pour soleil et température |
 
-- **Isobare** prolonge l'identité actuelle (bandeau marine façon Meteoblue) et parle aux amateurs de
-  météogrammes et de modèles. C'est le changement le plus sûr. Les symboles de front ne sont compris
-  que par ceux qui lisent les cartes météo, mais le M reste lisible jusqu'à 24 dp.
-- **Girouette** donne une personnalité française et chaleureuse (plaques de rue émaillées, girouettes
-  de clocher). Risque : à petite taille, on peut la confondre avec une icône de boussole.
-- **Radar** fait du radar Météo-France la signature de l'app et pousse vers un thème sombre. Les
-  couleurs sont celles de la légende radar existante (`RainClass`). Très marqué, moins adapté au
-  thème clair.
-- **Accent** est la plus accessible et la plus mémorisable. Elle s'éloigne de l'esprit « outil de
-  passionné » de Meteoblue.
-- **Degré** est la plus sobre : les chiffres d'abord, un seul rouge (déjà la couleur de température
-  des graphiques). Le M° est très lisible à petite taille, mais il ne dit pas « météo » au premier coup
-  d'œil.
-
-## Nouvelles pistes (`logos/nouvelles-pistes/`)
-
-Six logos de plus, dessinés dans la palette Glacier déjà appliquée à l'app (fond `#1C6497`, glace `#9BCBE9`,
-blanc, nuit `#0F2133`, balise rouge `#C8202A`). Choisir l'un d'eux ne change donc que l'icône, pas le thème.
-Les calques monochromes restent à faire pour celui qui sera retenu.
-
-| | Piste | Logo | Points forts | Risques |
-|---|---|---|---|---|
-| 06 | **Météogramme** | Courbe de température au-dessus des barres de pluie, point rouge « maintenant » | Montre la fonction phare de l'app, esprit Meteoblue | Peut évoquer une app de bourse ou de statistiques |
-| 07 | **Abri** | L'abri à persiennes blanc des stations météo, sur ses pieds | Original, dit « station météo » à qui en a vu une | Moins parlant pour qui n'en a jamais vu ; détails fins à 24 dp |
-| 08 | **Courbes** | Courbes de niveau d'un sommet, balise rouge au point haut | Prolonge le thème montagne et altitude de Glacier | Évoque d'abord la randonnée ou la topographie |
-| 09 | **Hublot** | Une fenêtre ronde, moitié jour (soleil), moitié nuit (lune, étoiles) | Très lisible en petit, symétrique, mémorisable | Assez générique (thème clair/sombre, horloge) |
-| 10 | **Barbule** | Pointé de station synoptique : ciel à 4/8 couvert, vent en barbules et fanion | Clin d'œil pointu pour les passionnés de cartes | Illisible pour le grand public |
-| 11 | **Pluviomètre** | Une goutte tombe dans un pluviomètre gradué, niveau en rouge | Simple, concret, met la pluie au centre | Moins de place pour le soleil et la température |
+01–05 sont dans `logos/` (variantes d'Isobare dans `isobare-variantes/`) ; 06–11 dans `logos/nouvelles-pistes/`, en palette
+Glacier, sans calque monochrome (à faire pour celui qui serait retenu).
 
 ## Au crayon (`logos/crayon/`)
 
-Les pictogrammes météo classiques (soleil, nuage, pluie, lune), dessinés comme le fond d'Aujourd'hui
-(`ui/WeatherSketch.kt`) : chaque trait repassé deux fois avec un léger tremblé, ombres hachurées, crayons de couleur
-jaune et bleu sur papier crème `#F6F1E6`, graphite `#2E3644`. Les SVG sont générés par `generer.py` (tremblé tiré
-au hasard mais reproductible) : modifier le script puis le relancer.
-
-| | Logo | Remarque |
-|---|---|---|
-| C1 | **Soleil** | Le plus simple et le plus lisible en petit |
-| C2 | **Éclaircies** | Soleil derrière un nuage : l'icône météo par excellence |
-| C3 | **Pluie** | Nuage et averse, plus mélancolique |
-| C4 | **Giboulée** | Soleil, nuage et pluie : tous les temps à la fois, un peu chargé à 24 dp |
-| C5 | **Montagne** | Rappelle le dessin de fond et le thème Glacier (sommet enneigé) |
-| C6 | **Nuit** | Lune, étoiles et nuage à la craie sur fond nuit |
-| C7 | **Craie** | Éclaircies à la craie blanche sur le bleu glacier actuel : garde la couleur de l'icône |
-
-`generer.py` écrit aussi les deux calques de l'icône de l'app (`ICONE`, aujourd'hui C5) :
-`res/drawable/ic_launcher_foreground.xml` et `ic_launcher_monochrome.xml`, sur le fond papier `launcher_background`.
-
-Les hachures et le tremblé passent en vector drawable Android (ce ne sont que des chemins), mais les fichiers sont
-plus lourds que ceux des autres pistes.
+C1 soleil, C2 éclaircies, C3 pluie, C4 giboulée, **C5 montagne**, C6 nuit, C7 craie sur bleu glacier. Dessinés comme le fond
+d'Aujourd'hui (`ui/WeatherSketch.kt`) : trait repassé deux fois avec un léger tremblé, hachures, crayons jaune et bleu sur papier
+crème `#F6F1E6`, graphite `#2E3644`. `python3 generer.py` (tremblé aléatoire mais reproductible) écrit les SVG et, pour le logo
+`ICONE` (aujourd'hui C5), les calques `res/drawable/ic_launcher_foreground.xml` et `ic_launcher_monochrome.xml` : ne pas les
+modifier à la main.
 
 ## Changer de direction
 
-1. Convertir le SVG choisi en vector drawable pour `app/src/main/res/drawable/ic_launcher_foreground.xml`
-   (sans le rectangle de fond), et le calque de `monochrome/` pour `<monochrome>`.
+1. Convertir le SVG choisi en vector drawable pour `ic_launcher_foreground.xml` (sans le rectangle de fond) et son calque de
+   `monochrome/` pour `<monochrome>`.
 2. Mettre la couleur de fond dans `launcher_background` (`res/values/colors.xml`).
-3. Reporter la palette dans `ui/theme/Theme.kt` (schémas Material clair et sombre, `HeaderBlue`) et,
-   si besoin, le style des pictogrammes dans `ui/WeatherIcon.kt`.
+3. Reporter la palette dans `ui/theme/Theme.kt` (schémas Material clair et sombre, `HeaderBlue`) et, si besoin, dans `ui/WeatherIcon.kt`.
 
-## Les coloriages d'Aujourd'hui (`dessins/`)
+## Coloriages d'Aujourd'hui (`dessins/`)
 
-`dessins/coloriages.pdf` montre le dessin aux crayons du haut d'Aujourd'hui dans une centaine de combinaisons : chaque
-relief (plaine, basse, moyenne, haute, très haute montagne, au sommet), l'eau (lac, mer, rivière, île), chaque lieu
-habité (grande ville, petite ville, village, hameau, ferme, chalet, refuge), la forêt, les saisons, les trois versions
-de chaque ciel et l'intensité de la pluie ou de la neige, les orages, les surprises, le thème sombre. Le texte de
-l'écran est simulé par-dessus pour juger de la lisibilité, et le dessin le contourne comme dans l'appli ; l'outil
-signale tout dessin qui toucherait une lettre (« Touche le texte »). Il écrit aussi, dans `build/dessins/nimbus/`,
-quelques dessins seuls, autour du texte de la page de déverrouillage de Nimbus : `coloriage_morteau.png` est l'image
-des captures de cette page dans Nimbus (`app/src/test/resources/unlock/`).
-
-Les dessins viennent du code même de l'appli (`SketchScene.kt`, `SketchDraw.kt`, `SketchDecor.kt`), compilé pour
-l'ordinateur avec Compose sur Skia ; les reliefs sont les coupes réelles des tests (Chamonix, Annecy, Morteau, Valence,
-Paris, Nice, Tromsø), parfois déformées pour une haute ou une basse montagne. Pour le refaire après une modification
-(Java 21 et Python 3 avec reportlab et Pillow) :
+`dessins/coloriages.pdf` montre le dessin du haut d'Aujourd'hui dans une centaine de combinaisons (reliefs, eau, lieux habités,
+forêt, saisons, ciels et intensités, orages, surprises, thème sombre) sous un faux texte d'écran ; l'outil signale tout dessin qui
+toucherait une lettre (« Touche le texte »). Les dessins sont ceux du code de l'appli (`SketchScene.kt`, `SketchDraw.kt`,
+`SketchDecor.kt`) compilé pour ordinateur ; les reliefs sont les coupes des tests (`app/src/test/resources/terrain/profiles.json`).
+Il écrit aussi dans `build/dessins/nimbus/` des dessins autour du texte de la page de déverrouillage de Nimbus. À refaire après une
+modification (Java 21, Python 3 avec reportlab et Pillow) ; les combinaisons sont dans `dessins/src/Dessins.kt` (`catalog`) :
 
 ```
 ./gradlew -p design/dessins run
 python3 design/dessins/catalogue.py design/dessins/build/dessins design/dessins/coloriages.pdf
 ```
-
-Les combinaisons se choisissent dans `dessins/src/Dessins.kt` (fonction `catalog`).
