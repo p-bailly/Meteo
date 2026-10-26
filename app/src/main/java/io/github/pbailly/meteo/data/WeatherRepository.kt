@@ -18,9 +18,12 @@ data class Loaded<T>(val value: T, val fetchedAt: Long, val stale: Boolean, val 
  */
 class WeatherRepository(
     private val cacheDir: File,
+    /**
+     * Pour l'historique depuis 1940 (5 s de calcul chez Open-Meteo) : une seule demande, sans la doubler ; sinon
+     * [httpGet]. Avant lui : [httpGet] reste le dernier paramètre, celui qu'on passe en lambda.
+     */
+    private val slowHttpGet: (suspend (String) -> String)? = null,
     val httpGet: suspend (String) -> String = ::defaultHttpGet,
-    /** Pour l'historique depuis 1940 (5 s de calcul chez Open-Meteo) : une seule demande, sans la doubler. */
-    private val slowHttpGet: suspend (String) -> String = httpGet,
 ) {
     suspend fun forecast(place: Place, force: Boolean): Loaded<Forecast> =
         cached("forecast_${place.id}", OpenMeteoApi.forecastUrl(place), FORECAST_MAX_AGE_MS, force) {
@@ -58,7 +61,7 @@ class WeatherRepository(
             OpenMeteoApi.archiveUrl(place, OpenMeteoApi.ARCHIVE_START, LocalDate.of(today.year - 1, 12, 31)),
             HISTORY_PAST_MAX_AGE_MS,
             force = refetch,
-            get = slowHttpGet,
+            get = slowHttpGet ?: httpGet,
         ) { OpenMeteoApi.parseHistory(it) }
         var past = fetchPast(refetch = false)
         // Au bout de trois ans, le complément devient lourd lui aussi : on redemande tout, une fois.
