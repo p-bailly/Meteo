@@ -94,7 +94,8 @@ fun PlacesScreen(
     onQueryChange: (String) -> Unit,
     onLocate: () -> Unit,
     onLocationDenied: () -> Unit,
-    onOpenMap: () -> Unit,
+    /** Null : pas de carte (la webapp). */
+    onOpenMap: (() -> Unit)?,
     onOpenSettings: () -> Unit,
     onMoveFavorite: (Int, Int) -> Unit,
     onOpenCompare: () -> Unit,
@@ -211,7 +212,7 @@ fun PlacesScreen(
             state.locationError?.let {
                 Text(it, color = colors.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             }
-            OutlinedButton(
+            if (onOpenMap != null) OutlinedButton(
                 onClick = onOpenMap,
                 shape = RoundedCornerShape(14.dp),
                 border = BorderStroke(1.dp, colors.outlineVariant),
@@ -232,7 +233,7 @@ fun PlacesScreen(
         if (spots.isEmpty()) {
             item(key = "empty") {
                 Text(
-                    "Recherche un lieu ou choisis-le sur la carte, puis touche l'étoile pour l'ajouter aux favoris.",
+                    (if (onOpenMap != null) "Recherche un lieu ou choisis-le sur la carte" else "Recherche un lieu") + ", puis touche l'étoile pour l'ajouter aux favoris.",
                     color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(20.dp),
                 )

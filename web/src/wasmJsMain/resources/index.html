@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <title>Météo</title>
+    <meta name="description" content="Météo sans publicité, d'après Open-Meteo, avec le dessin du lieu aux crayons de couleur.">
+    <meta name="theme-color" content="#F7FAFC" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0B1826" media="(prefers-color-scheme: dark)">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Météo">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <style>
+        :root { color-scheme: light dark; }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #F7FAFC; }
+        @media (prefers-color-scheme: dark) { html, body { background: #0B1826; } }
+        #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font: 16px -apple-system, system-ui, sans-serif; color: #4B5F73; gap: 12px; }
+        #loading .note { font-size: 13px; max-width: 280px; text-align: center; display: none; }
+        @media (prefers-color-scheme: dark) { #loading { color: #A9BDCF; } }
+    </style>
+</head>
+<body>
+<div id="loading">
+    <div>Météo…</div>
+    <div class="note" id="unsupported">Ce navigateur est trop ancien pour la webapp : il faut iOS 18.2 (ou un navigateur récent).</div>
+</div>
+<script>
+    // Kotlin/Wasm a besoin du « ramasse-miettes » de WebAssembly (Safari 18.2, Chrome 119, Firefox 120).
+    (function () {
+        var ok = typeof WebAssembly === "object" && WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 95, 1, 120, 0]));
+        if (!ok) document.getElementById("unsupported").style.display = "block";
+    })();
+</script>
+<script type="importmap">
+    { "imports": { "@js-joda/core": "./js-joda.esm.js" } }
+</script>
+<script type="module" src="meteo.mjs"></script>
+<script>
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>

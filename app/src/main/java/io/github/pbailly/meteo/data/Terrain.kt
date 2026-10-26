@@ -304,8 +304,8 @@ object Overpass {
  */
 class TerrainRepository(
     private val cacheDir: File,
-    private val httpGet: (String) -> String,
-    private val overpassGet: (String) -> String = httpGet,
+    private val httpGet: suspend (String) -> String,
+    private val overpassGet: suspend (String) -> String = httpGet,
 ) {
     private fun file(place: Place) = File(cacheDir, "terrain4_${place.id}.json")
 
@@ -315,7 +315,7 @@ class TerrainRepository(
         if (file.exists()) runCatching { decode(file.readText()) }.getOrNull()?.takeIf { it.lengthKm >= 1.0 } else null
     }
 
-    private fun ground(place: Place): Double = place.elevation ?: try {
+    private suspend fun ground(place: Place): Double = place.elevation ?: try {
         OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(listOf(place.latitude to place.longitude)))).firstOrNull() ?: Double.NaN
     } catch (e: CancellationException) {
         throw e
@@ -369,7 +369,7 @@ class TerrainRepository(
     }
 
     /** La deuxième chaîne, vers [toLat], [toLon] : un appel de plus à l'API d'altitude ; rien si elle ne répond pas. */
-    private fun backdrop(place: Place, toLat: Double, toLon: Double): Backdrop? = try {
+    private suspend fun backdrop(place: Place, toLat: Double, toLon: Double): Backdrop? = try {
         val line = Terrain.backdropLine(place.latitude, place.longitude, toLat, toLon)
         Terrain.backdrop(line, OpenMeteoApi.parseElevation(httpGet(OpenMeteoApi.elevationUrl(line))))
     } catch (e: CancellationException) {
@@ -404,7 +404,7 @@ class TerrainRepository(
     }
 
     /** Sommets nommés autour du lieu, du premier serveur Overpass qui répond ; aucun si tous échouent. */
-    private fun peaks(place: Place): List<Peak> {
+    private suspend fun peaks(place: Place): List<Peak> {
         for (server in Overpass.SERVERS) {
             try {
                 return Overpass.parsePeaks(overpassGet(Overpass.peaksUrl(place.latitude, place.longitude, server = server)))

@@ -16,6 +16,24 @@ Application Android de météo, sans publicité, inspirée de Meteoblue. Les pr�
 L'APK est recompilé automatiquement par GitHub Actions à chaque modification du code, et publié
 seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`).
 
+## Version web, pour iPhone
+
+La même appli, dans le navigateur : **https://p-bailly.github.io/Meteo/** (Aujourd'hui avec son dessin, Prévisions,
+Courbes, Lieux et les réglages d'affichage ; pas de cartes ni de widgets).
+
+Sur iPhone (iOS 18.2 ou plus récent) :
+
+1. Ouvrir le lien dans **Safari**.
+2. Toucher **Partager** (le carré avec une flèche vers le haut), puis **Sur l'écran d'accueil**, puis **Ajouter**.
+3. L'icône Météo s'ouvre en plein écran, comme une appli. Elle marche aussi hors ligne (dernière prévision gardée) et
+   se met à jour toute seule.
+
+Les favoris et les réglages restent dans le téléphone (stockage du navigateur). Sur Android ou sur ordinateur, le même
+lien marche dans Chrome, Edge ou Firefox récents.
+
+La webapp est publiée par GitHub Actions (`.github/workflows/web.yml`) à chaque modification de la branche par défaut.
+**Une seule fois** : dans les réglages du dépôt, Settings → Pages → Build and deployment → Source : « GitHub Actions ».
+
 ## Ce que fait l'app
 
 Cinq onglets dans la barre du bas, ou en glissant d'une page à l'autre (sauf sur la carte, où le glissement déplace
@@ -311,6 +329,16 @@ Kotlin, Jetpack Compose, Gradle (wrapper inclus). Il faut un JDK 17+ et le SDK A
 ```sh
 ./gradlew testDebugUnitTest   # tests
 ./gradlew assembleRelease     # APK signé dans app/build/outputs/apk/release/
+```
+
+Webapp (`web/`) : le code de `app/` compilé en WebAssembly avec Compose Multiplatform. Les fichiers repris tels
+quels sont listés dans `web/build.gradle.kts` (`shared`) ; ce qu'ils utilisent de Java et d'Android (dates, `String.format`,
+préférences, fichiers du cache, autorisation de position) est imité pour le navigateur dans `web/src/wasmJsMain/kotlin`
+(paquets `java.*`, `android.*`, `androidx.*`), et les téléchargements passent par `fetch` (`web/…/data/HttpGet.kt`).
+Les dépôts réutilisés prennent donc une fonction de téléchargement `suspend`.
+
+```sh
+./gradlew :web:site          # la webapp dans web/build/site (à servir par un serveur web, ex. python3 -m http.server)
 ```
 
 Organisation du code (`app/src/main/java/io/github/pbailly/meteo/`) :
