@@ -40,6 +40,9 @@ https://p-bailly.github.io/Meteo/#cle=<clé Météo-France>&windy=<clé Windy>
 La webapp les enregistre dans le navigateur puis les efface de l'adresse (ce qui suit « # » n'est jamais envoyé au
 serveur). Ce lien contient les clés : à n'envoyer qu'à des proches.
 
+Sur un ordinateur, les onglets passent dans une colonne à gauche et chaque écran garde une largeur lisible (les courbes
+et la carte prennent toute la place).
+
 Les favoris, les réglages et les clés restent dans le téléphone (stockage du navigateur). Sur Android ou sur ordinateur, le même
 lien marche dans Chrome, Edge ou Firefox récents.
 
