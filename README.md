@@ -307,11 +307,16 @@ Le radar vient de l'API publique « DonneesPubliquesRadar » de Météo-France :
 ## Quand Open-Meteo est lent
 
 Le serveur gratuit d'Open-Meteo est parfois surchargé (en octobre 2026, plusieurs jours de suite) : il écarte des
-requêtes aux heures de pointe, surtout à chaque heure pile, ou met jusqu'à 20 s à répondre. L'app :
+requêtes aux heures de pointe, surtout à chaque heure pile, laisse sans réponse environ une requête sur trois (la même,
+redemandée aussitôt, passe le plus souvent), ou met jusqu'à 20 s à la calculer. L'app :
 
 - affiche tout de suite la **dernière prévision gardée** du lieu (de moins d'un jour), le temps que la nouvelle arrive ;
-- abandonne une connexion qui ne s'établit pas en 8 s, et réessaie (trois essais en tout) ;
-- redemande 2 puis 4 s plus tard quand le serveur répond « surchargé » (erreurs 502, 503, 504) ;
+- demande une **prévision légère** (une seconde de calcul) : les niveaux de pression, dix fois plus lents à calculer et
+  utiles seulement à « Neige & altitude », arrivent à part, juste après ;
+- **redemande en parallèle** une requête restée sans réponse après 3 s, puis encore après 5 s, et garde la première
+  réponse (au lieu d'attendre 20 s avant de réessayer) ;
+- redemande aussitôt une requête coupée en route, et 2 s plus tard quand le serveur répond « surchargé » (erreurs 502,
+  503, 504) ;
 - sans réseau, ou si rien n'a marché, garde la prévision enregistrée, même ancienne.
 
 ## Coût

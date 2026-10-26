@@ -13,6 +13,7 @@ plugins {
 val shared = listOf(
     "data/AirQuality.kt",
     "data/Altitude.kt",
+    "data/Hedge.kt",
     "data/Models.kt",
     "data/Moon.kt",
     "data/Nominatim.kt",

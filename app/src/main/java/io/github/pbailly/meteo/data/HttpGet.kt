@@ -1,12 +1,31 @@
 package io.github.pbailly.meteo.data
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
 
 // Téléchargements du téléphone (la webapp a les siens, par fetch : web/…/data/HttpGet.kt).
 
-/** Une requête à Open-Meteo et aux autres services, réessayée sur une erreur réseau passagère. */
-internal fun defaultHttpGet(url: String): String = retryOnNetworkError { httpGetOnce(url) }
+/**
+ * Une requête à Open-Meteo et aux autres services : redemandée en parallèle quand elle tarde, et sur une erreur réseau
+ * passagère ([hedged]).
+ */
+internal suspend fun defaultHttpGet(url: String): String = hedged { cancellableHttpGet(url) }
+
+/** [httpGetOnce], interrompue (connexion fermée) dès que la coroutine est annulée : une tentative doublée par une autre. */
+private suspend fun cancellableHttpGet(url: String): String = coroutineScope {
+    val connection = URL(url).openConnection() as HttpURLConnection
+    val closer = launch { try { awaitCancellation() } finally { connection.disconnect() } }
+    try {
+        withContext(Dispatchers.IO) { httpGetOnce(connection) }
+    } finally {
+        closer.cancel()
+    }
+}
 
 /**
  * Pour OpenStreetMap (Overpass) : une requête sur les environs d'un lieu prend souvent 15 à 25 s, au-delà des 20 s
@@ -14,8 +33,10 @@ internal fun defaultHttpGet(url: String): String = retryOnNetworkError { httpGet
  */
 fun slowHttpGet(url: String): String = httpGetOnce(url, readTimeoutMs = 30_000)
 
-private fun httpGetOnce(url: String, readTimeoutMs: Int = 20_000): String {
-    val connection = URL(url).openConnection() as HttpURLConnection
+private fun httpGetOnce(url: String, readTimeoutMs: Int = 20_000): String =
+    httpGetOnce(URL(url).openConnection() as HttpURLConnection, readTimeoutMs)
+
+private fun httpGetOnce(connection: HttpURLConnection, readTimeoutMs: Int = 20_000): String {
     try {
         // Un serveur surchargé ne répond parfois même pas à la connexion : mieux vaut réessayer tôt qu'attendre.
         connection.connectTimeout = 8_000

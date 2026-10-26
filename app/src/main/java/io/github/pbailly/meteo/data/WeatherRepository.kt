@@ -24,6 +24,12 @@ class WeatherRepository(
             OpenMeteoApi.parseForecast(it)
         }
 
+    /** Les niveaux de pression (pour « Neige & altitude »), après la prévision : leur calcul est lent chez Open-Meteo. */
+    suspend fun levels(place: Place, force: Boolean): Loaded<PressureLevels> =
+        cached("levels_${place.id}", OpenMeteoApi.levelsUrl(place), FORECAST_MAX_AGE_MS, force) {
+            OpenMeteoApi.parseLevels(it)
+        }
+
     suspend fun multiModel(place: Place, force: Boolean): Loaded<MultiModelForecast> {
         val models = WeatherModel.entries
         return cached("multimodel_${place.id}", OpenMeteoApi.multiModelUrl(place, models), MULTI_MODEL_MAX_AGE_MS, force) {

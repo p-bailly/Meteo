@@ -1,7 +1,6 @@
 package io.github.pbailly.meteo.data
 
 import kotlinx.coroutines.await
-import kotlinx.coroutines.delay
 import java.io.IOException
 import kotlin.js.Promise
 
@@ -45,24 +44,8 @@ private suspend fun httpGetOnce(url: String, timeoutMs: Int = 20_000): String {
     return body
 }
 
-/** Réessaie deux fois une requête coupée en route ou refusée par un serveur surchargé (comme Http.kt sur Android). */
-internal suspend fun defaultHttpGet(url: String): String {
-    var last: IOException? = null
-    for (k in 0 until 3) {
-        try {
-            return httpGetOnce(url)
-        } catch (e: ServerBusyException) {
-            last = e
-            if (k < 2) delay(2_000L * (k + 1))
-        } catch (e: HttpStatusException) {
-            throw e
-        } catch (e: IOException) {
-            last = e
-            if (k < 2) delay(500L * (k + 1))
-        }
-    }
-    throw last!!
-}
+/** Redemandée en parallèle quand elle tarde, et sur une erreur réseau passagère (comme sur Android : [hedged]). */
+internal suspend fun defaultHttpGet(url: String): String = hedged { httpGetOnce(url) }
 
 /** Pour OpenStreetMap (Overpass), lent : 30 s, sans nouvel essai. */
 suspend fun slowHttpGet(url: String): String = httpGetOnce(url, timeoutMs = 30_000)
