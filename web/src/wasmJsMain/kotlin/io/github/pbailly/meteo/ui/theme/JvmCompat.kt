@@ -24,3 +24,9 @@ internal fun Char.titlecase(locale: Locale): String = titlecase()
 internal val Dispatchers.IO: CoroutineDispatcher get() = Dispatchers.Default
 
 internal fun <K : Comparable<K>, V> sortedMapOf(): MutableMap<K, V> = jvmcompat.SortedMutableMap()
+
+internal typealias Charsets = jvmcompat.JCharsets
+internal fun String(bytes: ByteArray, offset: Int, length: Int, charset: jvmcompat.JCharset): String =
+    jvmcompat.decodeBytes(bytes, offset, length, charset)
+internal fun String(bytes: ByteArray, charset: jvmcompat.JCharset): String = jvmcompat.decodeBytes(bytes, 0, bytes.size, charset)
+internal fun <K, V> MutableMap<K, V>.putIfAbsent(key: K, value: V): V? = get(key) ?: run { put(key, value); null }

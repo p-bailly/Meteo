@@ -27,7 +27,7 @@ data class PiafRun(val coverageId: String, val runTime: Instant)
  */
 class MeteoFrancePiaf(
     private val dir: File,
-    private val http: (url: String, apiKey: String, accept: String) -> ByteArray = ::meteoFranceGet,
+    private val http: suspend (url: String, apiKey: String, accept: String) -> ByteArray = ::meteoFranceGet,
 ) {
     private val mutex = Mutex()
 
@@ -48,13 +48,10 @@ class MeteoFrancePiaf(
             val start = maxOf(after, run.runTime).truncatedTo(ChronoUnit.MINUTES)
             val times = validTimes(run.runTime, start)
             var lookup: MercatorLookup? = null
-            // Unité et valeurs manquantes annoncées par le service (DescribeCoverage), lues une fois par réseau.
-            val description by lazy {
-                runCatching {
-                    val url = "$WCS/DescribeCoverage?service=WCS&version=2.0.1&coverageid=" + URLEncoder.encode(run.coverageId, "UTF-8")
-                    CoverageDescription.parse(http(url, apiKey, "application/xml").decodeToString())
-                }.getOrNull()
-            }
+            // Unité et valeurs manquantes annoncées par le service (DescribeCoverage), lues une fois par réseau, à la
+            // première image à télécharger.
+            var described = false
+            var description: CoverageDescription? = null
             var failure: Exception? = null
             var failures = 0
             for (time in times) {
@@ -70,6 +67,13 @@ class MeteoFrancePiaf(
                         "&subset=" + URLEncoder.encode("lat(${area.south},${area.north})", "UTF-8") +
                         "&subset=" + URLEncoder.encode("long(${area.west},${area.east})", "UTF-8") +
                         "&format=image/tiff"
+                    if (!described) {
+                        described = true
+                        description = runCatching {
+                            val describeUrl = "$WCS/DescribeCoverage?service=WCS&version=2.0.1&coverageid=" + URLEncoder.encode(run.coverageId, "UTF-8")
+                            CoverageDescription.parse(http(describeUrl, apiKey, "application/xml").decodeToString())
+                        }.getOrNull()
+                    }
                     val grid = toGrid(GeoTiff.read(http(url, apiKey, "image/tiff")), run.coverageId, area, description)
                     val table = lookup?.takeIf { it.gridWidth == grid.width && it.gridHeight == grid.height }
                         ?: MercatorLookup.forGrid(MeteoFranceRadar.BOUNDS, MeteoFranceRadar.IMAGE_WIDTH, grid).also { lookup = it }

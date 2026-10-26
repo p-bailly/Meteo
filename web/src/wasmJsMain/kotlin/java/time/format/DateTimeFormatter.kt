@@ -13,6 +13,8 @@ class DateTimeFormatter private constructor(private val pattern: String) {
     fun format(temporal: java.time.temporal.Temporal): String = when (temporal) {
         is LocalDate -> format(temporal, null)
         is LocalDateTime -> format(temporal.toLocalDate(), temporal)
+        is java.time.ZonedDateTime -> format(temporal.toLocalDate(), temporal.toLocalDateTime())
+        is java.time.OffsetDateTime -> temporal.toLocalDateTime().let { format(it.toLocalDate(), it) }
         is java.time.Instant -> {
             val t = LocalDateTime.ofInstant(temporal, java.time.ZoneOffset.UTC)
             if (this === ISO_INSTANT) {
@@ -46,6 +48,25 @@ class DateTimeFormatter private constructor(private val pattern: String) {
             i += n
         }
         return out.toString()
+    }
+
+    /** Lecture d'une date-heure selon un motif de champs numériques collés (« yyyyMMddHHmmss »). */
+    internal fun parseLocal(text: String): LocalDateTime {
+        val values = HashMap<Char, Int>()
+        var i = 0
+        var pos = 0
+        while (i < pattern.length) {
+            val c = pattern[i]
+            var n = 1
+            while (i + n < pattern.length && pattern[i + n] == c) n++
+            if (c.isLetter()) {
+                values[c] = text.substring(pos, pos + n).toInt()
+            }
+            pos += n
+            i += n
+        }
+        val date = LocalDate.of(values['y'] ?: values['u'] ?: 1970, values['M'] ?: 1, values['d'] ?: 1)
+        return LocalDateTime.of(date.year, date.monthValue, date.dayOfMonth, values['H'] ?: 0, values['m'] ?: 0, values['s'] ?: 0)
     }
 
     private fun field(c: Char, n: Int, date: LocalDate, time: LocalDateTime?): String = when (c) {

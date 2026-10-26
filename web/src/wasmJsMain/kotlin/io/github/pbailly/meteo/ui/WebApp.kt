@@ -18,9 +18,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.pbailly.meteo.ui.maps.MapsScreen
-import io.github.pbailly.meteo.ui.maps.MapsViewModel
+import io.github.pbailly.meteo.ui.radar.LayersViewModel
+import io.github.pbailly.meteo.ui.radar.MapLayer
+import io.github.pbailly.meteo.ui.radar.RadarRoute
+import io.github.pbailly.meteo.ui.radar.RadarViewModel
 import kotlinx.coroutines.launch
+
+/** Les couches des Cartes : celles de l'appli sans la température (le serveur du DWD refuse les navigateurs). */
+private val WebLayers = MapLayer.entries - MapLayer.TEMPERATURE
 
 /** Les onglets de la webapp, ceux de l'appli. */
 private val WebTabs = listOf(Tab.TODAY, Tab.FORECAST, Tab.METEOGRAM, Tab.RADAR, Tab.PLACES)
@@ -31,7 +36,7 @@ private val WebTabs = listOf(Tab.TODAY, Tab.FORECAST, Tab.METEOGRAM, Tab.RADAR, 
  * réglages s'ouvrent par-dessus.
  */
 @Composable
-fun WebApp(viewModel: MeteoViewModel, maps: MapsViewModel) {
+fun WebApp(viewModel: MeteoViewModel, radar: RadarViewModel, layers: LayersViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val pager = rememberPagerState(initialPage = 0) { WebTabs.size }
     val scope = rememberCoroutineScope()
@@ -131,7 +136,15 @@ fun WebApp(viewModel: MeteoViewModel, maps: MapsViewModel) {
                             onMultiModelNeeded = viewModel::ensureMultiModel,
                             onRetryMultiModel = viewModel::retryMultiModel,
                         )
-                        Tab.RADAR -> MapsScreen(place, maps)
+                        Tab.RADAR -> RadarRoute(
+                            place,
+                            onBack = { goTo(Tab.TODAY) },
+                            showBack = false,
+                            viewModel = radar,
+                            layers = layers,
+                            layerChoices = WebLayers,
+                            controlsOverMap = false,
+                        )
                         else -> placesScreen()
                     }
                 }

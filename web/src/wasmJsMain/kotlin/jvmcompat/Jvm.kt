@@ -37,7 +37,33 @@ object JMath {
 }
 
 
+/** Les jeux de caractères de la JVM (seul le nom compte : US-ASCII, ISO-8859-1 et UTF-8 se lisent de même ici). */
+class JCharset(val name: String)
+
+object JCharsets {
+    val US_ASCII = JCharset("US-ASCII")
+    val ISO_8859_1 = JCharset("ISO-8859-1")
+    val UTF_8 = JCharset("UTF-8")
+}
+
+/** String(octets, début, longueur, jeu) de la JVM. */
+fun decodeBytes(bytes: ByteArray, offset: Int, length: Int, charset: JCharset): String =
+    if (charset.name == "UTF-8") bytes.decodeToString(offset, offset + length)
+    else CharArray(length) { (bytes[offset + it].toInt() and 0xFF).toChar() }.concatToString()
+
 object JSystem {
+    fun arraycopy(src: Any, srcPos: Int, dest: Any, destPos: Int, length: Int) {
+        when (src) {
+            is ByteArray -> src.copyInto(dest as ByteArray, destPos, srcPos, srcPos + length)
+            is IntArray -> src.copyInto(dest as IntArray, destPos, srcPos, srcPos + length)
+            is FloatArray -> src.copyInto(dest as FloatArray, destPos, srcPos, srcPos + length)
+            is DoubleArray -> src.copyInto(dest as DoubleArray, destPos, srcPos, srcPos + length)
+            is ShortArray -> src.copyInto(dest as ShortArray, destPos, srcPos, srcPos + length)
+            is CharArray -> src.copyInto(dest as CharArray, destPos, srcPos, srcPos + length)
+            else -> error("arraycopy : tableau non pris en charge")
+        }
+    }
+
     @OptIn(kotlin.time.ExperimentalTime::class)
     fun currentTimeMillis(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 }

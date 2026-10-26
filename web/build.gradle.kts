@@ -12,6 +12,7 @@ plugins {
 /** Fichiers de l'appli Android compilés aussi pour le web (chemins sous app/src/main/java/io/github/pbailly/meteo). */
 val shared = listOf(
     "data/AirQuality.kt",
+    "data/Bzip2.kt",
     "data/Altitude.kt",
     "data/Hedge.kt",
     "data/Models.kt",
@@ -28,8 +29,18 @@ val shared = listOf(
     "data/Terrain.kt",
     "data/TerrainProfile.kt",
     "data/WeatherRepository.kt",
-    "data/maps/RainViewer.kt",
+    "data/maps/Grib2.kt",
+    "data/maps/MapLayers.kt",
+    "data/maps/Observations.kt",
     "data/maps/WmsLayers.kt",
+    "data/radar/FrameStep.kt",
+    "data/radar/GeoTiff.kt",
+    "data/radar/MeteoFrancePiaf.kt",
+    "data/radar/MeteoFranceRadar.kt",
+    "data/radar/Nowcast.kt",
+    "data/radar/OdimDecoder.kt",
+    "data/radar/PolarStereographic.kt",
+    "data/radar/RadarImage.kt",
     "ui/AltitudeScreen.kt",
     "ui/ChartKit.kt",
     "ui/CompareScreen.kt",
@@ -50,6 +61,9 @@ val shared = listOf(
     "ui/TodayScreen.kt",
     "ui/WeatherIcon.kt",
     "ui/WeatherSketch.kt",
+    "ui/radar/LayersViewModel.kt",
+    "ui/radar/RadarScreen.kt",
+    "ui/radar/RadarViewModel.kt",
     "ui/theme/Scales.kt",
     "ui/theme/Theme.kt",
 )
@@ -90,6 +104,8 @@ kotlin {
                 implementation(libs.jb.lifecycle.runtime.compose)
                 // La carte des Cartes (map.mjs), servie avec la page.
                 implementation(npm("maplibre-gl", libs.versions.maplibreGlJs.get()))
+                // Lecture du radar Météo-France (HDF5) : la bibliothèque HDF5 compilée en WebAssembly (hdf.mjs).
+                implementation(npm("h5wasm", libs.versions.h5wasm.get()))
             }
         }
     }
@@ -110,6 +126,12 @@ val site by tasks.registering(Sync::class) {
     from(npm.map { it.dir("maplibre-gl/dist") }) {
         include("maplibre-gl.mjs", "maplibre-gl-worker.mjs", "maplibre-gl.css")
         into("maplibre")
+    }
+    from(npm.map { it.dir("h5wasm") }) {
+        include("dist/esm/*.js", "LICENSE.txt")
+        eachFile { path = "h5wasm/" + name }
+        includeEmptyDirs = false
+        into("h5wasm")
     }
     from(copyFonts) { into("fonts") }
     // Chaque construction change la version du service worker : les téléphones téléchargent la nouvelle.

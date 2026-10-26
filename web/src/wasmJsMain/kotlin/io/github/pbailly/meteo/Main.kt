@@ -8,7 +8,9 @@ import androidx.compose.ui.window.ComposeViewport
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.pbailly.meteo.ui.MeteoViewModel
 import io.github.pbailly.meteo.ui.WebApp
-import io.github.pbailly.meteo.ui.maps.MapsViewModel
+import io.github.pbailly.meteo.ui.radar.LayersViewModel
+import io.github.pbailly.meteo.ui.radar.RadarViewModel
+import java.io.WebFiles
 import io.github.pbailly.meteo.ui.theme.MeteoTheme
 import io.github.pbailly.meteo.ui.theme.WebFonts
 import kotlinx.browser.document
@@ -29,13 +31,38 @@ private suspend fun fetchBytes(url: String): ByteArray {
     return ByteArray(array.length) { array[it] }
 }
 
+private fun locationHash(): String = js("window.location.hash")
+private fun clearHash(): Unit = js("{ history.replaceState(null, '', window.location.pathname + window.location.search); }")
+
+/**
+ * Les clés passées dans le lien (« …/Meteo/#cle=<clé Météo-France>&windy=<clé Windy> ») : enregistrées dans le
+ * navigateur comme si on les avait saisies, puis retirées de l'adresse. Ce qui suit « # » n'est jamais envoyé au
+ * serveur.
+ */
+private fun saveKeysFromLink() {
+    val params = locationHash().removePrefix("#").split('&').mapNotNull { part ->
+        val k = part.substringBefore('=', "")
+        val v = part.substringAfter('=', "")
+        if (k.isEmpty() || v.isEmpty()) null else k to decodeComponent(v).trim()
+    }.toMap()
+    if (params.isEmpty()) return
+    params["cle"]?.let { WebApplication.getSharedPreferences("radar", 0).edit().putString("meteofrance_api_key", it).apply() }
+    params["windy"]?.let { WebApplication.getSharedPreferences("settings", 0).edit().putString("windy_api_key", it).apply() }
+    if ("cle" in params || "windy" in params) clearHash()
+}
+
+private fun decodeComponent(text: String): String = js("decodeURIComponent(text)")
+
 /** Les polices d'abord (tout le texte en dépend), puis l'appli dans toute la page. */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
     MainScope().launch {
         WebFonts.load(::fetchBytes)
+        WebFiles.load()
+        saveKeysFromLink()
         val viewModel = MeteoViewModel(WebApplication)
-        val maps = MapsViewModel()
+        val radar = RadarViewModel(WebApplication)
+        val layers = LayersViewModel(WebApplication)
         document.getElementById("loading")?.remove()
         ComposeViewport(document.body!!) {
             val state by viewModel.state.collectAsStateWithLifecycle()
@@ -45,7 +72,7 @@ fun main() {
                 else -> isSystemInDarkTheme()
             }
             MeteoTheme(darkTheme = dark, textSize = state.textSize) {
-                WebApp(viewModel, maps)
+                WebApp(viewModel, radar, layers)
             }
         }
     }

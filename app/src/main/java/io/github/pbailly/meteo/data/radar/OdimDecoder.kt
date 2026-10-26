@@ -1,7 +1,5 @@
 package io.github.pbailly.meteo.data.radar
 
-import io.jhdf.HdfFile
-import io.jhdf.api.Node
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -24,6 +22,17 @@ class RadarGrid(
  * Lecture des fichiers ODIM_H5 de la lame d'eau radar Météo-France (`T_IPRN20_*.h5`, maille 500 m) :
  * cumul de précipitations sur 5 minutes, en centièmes de mm, sur une grille stéréographique polaire.
  */
+/**
+ * Un fichier ODIM_H5 ouvert : sur le téléphone par jhdf ([openOdim] dans OdimHdf.kt), dans la webapp par h5wasm.
+ */
+interface OdimFile : AutoCloseable {
+    /** Attribut [name] du groupe [group] (« /where ») : un nombre, un texte, ou null s'il manque. */
+    fun attribute(group: String, name: String): Any?
+
+    /** Valeurs brutes du jeu de données [path], ligne par ligne (tableau d'entiers ou de caractères 16 bits). */
+    fun data(path: String): Any
+}
+
 object OdimDecoder {
     private val DATE_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
 
@@ -31,15 +40,17 @@ object OdimDecoder {
      * @param factor regroupe les cases par blocs de factor × factor en gardant le maximum,
      *   pour alléger la mémoire (2 → maille de 1 km) sans perdre les averses localisées.
      */
-    fun decode(bytes: ByteArray, factor: Int = 1): RadarGrid = HdfFile.fromBytes(bytes).use { hdf ->
-        val where = hdf.getByPath("/where")
+    fun decode(bytes: ByteArray, factor: Int = 1): RadarGrid = openOdim(bytes).use { decode(it, factor) }
+
+    fun decode(hdf: OdimFile, factor: Int = 1): RadarGrid {
+        val where = Group(hdf, "/where")
         val width = where.number("xsize").toInt()
         val height = where.number("ysize").toInt()
         val xScale = where.number("xscale")
         val yScale = where.number("yscale")
         val projection = PolarStereographic.fromProjDef(where.string("projdef"))
 
-        val what = hdf.getByPath("/dataset1/data1/what")
+        val what = Group(hdf, "/dataset1/data1/what")
         val quantity = what.stringOrNull("quantity")
         require(quantity == null || quantity == "ACRR") { "Produit radar inattendu : $quantity" }
         val gain = what.numberOrNull("gain") ?: 0.01
@@ -47,7 +58,7 @@ object OdimDecoder {
         val noData = what.numberOrNull("nodata")?.toInt() ?: 65535
         val undetect = what.numberOrNull("undetect")?.toInt() ?: 65534
 
-        val raw = hdf.getDatasetByPath("/dataset1/data1/data").dataFlat
+        val raw = hdf.data("/dataset1/data1/data")
         val outW = width / factor
         val outH = height / factor
         val mmPerHour = FloatArray(outW * outH) { Float.NaN }
@@ -80,12 +91,12 @@ object OdimDecoder {
             out[1] = (yTop - y) / cellY - 0.5
         }
 
-        val dataset = hdf.getByPath("/dataset1/what")
+        val dataset = Group(hdf, "/dataset1/what")
         val time = runCatching {
             LocalDateTime.parse(dataset.string("enddate") + dataset.string("endtime"), DATE_TIME).toInstant(ZoneOffset.UTC)
         }.getOrNull()
 
-        RadarGrid(outW, outH, mmPerHour, time, gridProjection)
+        return RadarGrid(outW, outH, mmPerHour, time, gridProjection)
     }
 
     private fun valueAt(raw: Any, i: Int): Int = when (raw) {
@@ -93,28 +104,22 @@ object OdimDecoder {
         is ShortArray -> raw[i].toInt() and 0xFFFF
         is LongArray -> raw[i].toInt()
         is ByteArray -> raw[i].toInt() and 0xFF
+        is CharArray -> raw[i].code
         else -> error("Type de données radar inattendu : ${raw.javaClass.simpleName}")
     }
 
-    private fun Node.attribute(name: String): Any? = getAttribute(name)?.data?.let { data ->
-        when (data) {
-            is Array<*> -> data.firstOrNull()
-            is DoubleArray -> data.firstOrNull()
-            is LongArray -> data.firstOrNull()
-            is IntArray -> data.firstOrNull()
-            else -> data
-        }
-    }
+    /** Un groupe du fichier, dont on lit les attributs. */
+    private class Group(val file: OdimFile, val path: String)
 
-    private fun Node.numberOrNull(name: String): Double? = when (val v = attribute(name)) {
+    private fun Group.numberOrNull(name: String): Double? = when (val v = file.attribute(path, name)) {
         is Number -> v.toDouble()
         is String -> v.trim().toDoubleOrNull()
         else -> null
     }
 
-    private fun Node.number(name: String): Double = numberOrNull(name) ?: error("Attribut radar manquant : $name")
+    private fun Group.number(name: String): Double = numberOrNull(name) ?: error("Attribut radar manquant : $name")
 
-    private fun Node.stringOrNull(name: String): String? = attribute(name)?.toString()?.trim()?.trimEnd('\u0000')
+    private fun Group.stringOrNull(name: String): String? = file.attribute(path, name)?.toString()?.trim()?.trimEnd('\u0000')
 
-    private fun Node.string(name: String): String = stringOrNull(name) ?: error("Attribut radar manquant : $name")
+    private fun Group.string(name: String): String = stringOrNull(name) ?: error("Attribut radar manquant : $name")
 }
