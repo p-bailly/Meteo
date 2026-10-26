@@ -28,6 +28,8 @@ val shared = listOf(
     "data/Terrain.kt",
     "data/TerrainProfile.kt",
     "data/WeatherRepository.kt",
+    "data/maps/RainViewer.kt",
+    "data/maps/WmsLayers.kt",
     "ui/AltitudeScreen.kt",
     "ui/ChartKit.kt",
     "ui/CompareScreen.kt",
@@ -86,6 +88,8 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.core)
                 implementation(libs.jb.lifecycle.viewmodel.compose)
                 implementation(libs.jb.lifecycle.runtime.compose)
+                // La carte des Cartes (map.mjs), servie avec la page.
+                implementation(npm("maplibre-gl", libs.versions.maplibreGlJs.get()))
             }
         }
     }
@@ -103,6 +107,10 @@ val site by tasks.registering(Sync::class) {
     from(layout.buildDirectory.dir("compileSync/wasmJs/main/productionExecutable/optimized")) { include("*.mjs", "*.wasm") }
     from(npm.map { it.dir("skiko-js-wasm-runtime") }) { include("skiko.mjs", "skiko.wasm") }
     from(npm.map { it.file("@js-joda/core/dist/js-joda.esm.js") })
+    from(npm.map { it.dir("maplibre-gl/dist") }) {
+        include("maplibre-gl.mjs", "maplibre-gl-worker.mjs", "maplibre-gl.css")
+        into("maplibre")
+    }
     from(copyFonts) { into("fonts") }
     // Chaque construction change la version du service worker : les téléphones téléchargent la nouvelle.
     val version = System.getenv("GITHUB_SHA")?.take(12) ?: System.currentTimeMillis().toString()

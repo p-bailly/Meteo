@@ -219,6 +219,11 @@ class Instant private constructor(private val millis: Long) : Comparable<Instant
     fun toEpochMilli(): Long = millis
     fun atZone(zone: ZoneId): ZonedDateTime = ZonedDateTime(LocalDateTime.ofInstant(this, zone))
     fun plusSeconds(seconds: Long): Instant = Instant(millis + seconds * 1000)
+    fun plusMillis(ms: Long): Instant = Instant(millis + ms)
+    fun plus(d: Duration): Instant = Instant(millis + d.toMillis())
+    fun minus(d: Duration): Instant = Instant(millis - d.toMillis())
+    fun minusSeconds(seconds: Long): Instant = Instant(millis - seconds * 1000)
+    override fun toString(): String = java.time.format.DateTimeFormatter.ISO_INSTANT.format(this)
     fun isBefore(other: Instant): Boolean = millis < other.millis
     fun isAfter(other: Instant): Boolean = millis > other.millis
     override fun compareTo(other: Instant): Int = millis.compareTo(other.millis)
@@ -229,6 +234,31 @@ class Instant private constructor(private val millis: Long) : Comparable<Instant
         fun now(): Instant = Instant(nowMillis())
         fun ofEpochMilli(millis: Long): Instant = Instant(millis)
         fun ofEpochSecond(seconds: Long): Instant = Instant(seconds * 1000)
+
+        /** « 2026-10-26T04:50:00Z », avec ou sans fraction de seconde, ou avec un décalage (« +02:00 »). */
+        fun parse(text: CharSequence): Instant {
+            val s = text.toString()
+            val t = s.indexOf('T')
+            if (t < 0) throw DateTimeException("Instant illisible : $s")
+            var rest = s.substring(t + 1)
+            var offset = 0
+            when {
+                rest.endsWith("Z") || rest.endsWith("z") -> rest = rest.dropLast(1)
+                else -> {
+                    val k = maxOf(rest.lastIndexOf('+'), rest.lastIndexOf('-'))
+                    if (k <= 0) throw DateTimeException("Instant sans fuseau : $s")
+                    val sign = if (rest[k] == '-') -1 else 1
+                    val parts = rest.substring(k + 1).split(':')
+                    offset = sign * (parts[0].toInt() * 3600 + (parts.getOrNull(1)?.toInt() ?: 0) * 60)
+                    rest = rest.substring(0, k)
+                }
+            }
+            val clock = rest.split(':')
+            val secParts = (clock.getOrNull(2) ?: "0").split('.')
+            val millis = secParts.getOrNull(1)?.padEnd(3, '0')?.take(3)?.toInt() ?: 0
+            val local = LocalDateTime.of(LocalDate.parse(s.substring(0, t)), clock[0].toInt(), clock[1].toInt(), secParts[0].toInt())
+            return Instant((local.localSeconds() - offset) * 1000 + millis)
+        }
     }
 }
 
@@ -272,6 +302,9 @@ class Duration private constructor(val seconds: Long) : Comparable<Duration> {
     fun toHours(): Long = seconds / 3600
     fun toMillis(): Long = seconds * 1000
     val isNegative: Boolean get() = seconds < 0
+    val isZero: Boolean get() = seconds == 0L
+    override fun equals(other: Any?): Boolean = other is Duration && other.seconds == seconds
+    override fun hashCode(): Int = seconds.hashCode()
     override fun compareTo(other: Duration): Int = seconds.compareTo(other.seconds)
 
     companion object {
@@ -279,6 +312,16 @@ class Duration private constructor(val seconds: Long) : Comparable<Duration> {
         fun ofMinutes(minutes: Long): Duration = Duration(minutes * 60)
         fun ofHours(hours: Long): Duration = Duration(hours * 3600)
         fun ofSeconds(seconds: Long): Duration = Duration(seconds)
+        fun ofDays(days: Long): Duration = Duration(days * 86_400)
+
+        /** ISO 8601 : « PT10M », « PT1H30M », « P1D », « PT15S ». */
+        fun parse(text: CharSequence): Duration {
+            val s = text.toString().uppercase()
+            val m = Regex("^P(?:(\\d+)D)?(?:T(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)(?:\\.\\d+)?S)?)?$").matchEntire(s)
+                ?: throw DateTimeException("Durée illisible : $s")
+            fun g(i: Int) = m.groupValues[i].toLongOrNull() ?: 0L
+            return Duration(g(1) * 86_400 + g(2) * 3600 + g(3) * 60 + g(4))
+        }
     }
 }
 

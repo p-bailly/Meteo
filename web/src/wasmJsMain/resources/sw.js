@@ -7,6 +7,7 @@ const FILES = [
   "./", "index.html", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png",
   "meteo.mjs", "meteo.import-object.mjs", "meteo.js-builtins.mjs", "meteo.wasm",
   "skiko.mjs", "skiko.wasm", "js-joda.esm.js",
+  "map.mjs", "maplibre/maplibre-gl.mjs", "maplibre/maplibre-gl-worker.mjs", "maplibre/maplibre-gl.css",
   "fonts/archivo_condensed_light.ttf", "fonts/archivo_condensed_regular.ttf", "fonts/archivo_condensed_semibold.ttf",
   "fonts/archivo_medium.ttf", "fonts/archivo_regular.ttf", "fonts/archivo_semibold.ttf",
   "fonts/martian_mono_condensed_medium.ttf", "fonts/martian_mono_condensed_regular.ttf",
