@@ -27,8 +27,8 @@ import kotlinx.coroutines.launch
 /**
  * Navigation : cinq onglets (Aujourd'hui, Prévisions, Courbes, Cartes, Lieux), dans la barre du bas ou en
  * glissant d'une page à l'autre (sauf sur la carte, où le glissement déplace la carte). Le détail d'un jour, la page
- * « Neige & altitude », la comparaison des lieux, le choix d'un lieu sur la carte et les réglages s'ouvrent
- * par-dessus, avec un bouton retour ; le retour arrière ramène ensuite à l'onglet Aujourd'hui.
+ * « Neige & altitude », les données historiques, la comparaison des lieux, le choix d'un lieu sur la carte et les
+ * réglages s'ouvrent par-dessus, avec un bouton retour ; le retour arrière ramène ensuite à l'onglet Aujourd'hui.
  */
 @Composable
 fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
@@ -37,6 +37,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
     val scope = rememberCoroutineScope()
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showAltitude by rememberSaveable { mutableStateOf(false) }
+    var showHistory by rememberSaveable { mutableStateOf(false) }
     var showCompare by rememberSaveable { mutableStateOf(false) }
     var showMapPick by rememberSaveable { mutableStateOf(false) }
     var openDay by rememberSaveable { mutableIntStateOf(-1) }
@@ -48,6 +49,7 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
     fun goTo(tab: Tab) {
         showSettings = false
         showAltitude = false
+        showHistory = false
         showCompare = false
         showMapPick = false
         openDay = -1
@@ -131,6 +133,13 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
                 forecast != null && openDay >= 0 ->
                     DayDetailScreen(forecast, state.multiModel.data, state.ensemble.data, place, initialDay = openDay, onBack = { openDay = -1 })
                 showAltitude -> AltitudeScreen(state = state, place = place, onRefresh = viewModel::refresh, onBack = { showAltitude = false })
+                showHistory -> HistoryScreen(
+                    state = state,
+                    place = place,
+                    onHistoryNeeded = { viewModel.ensureHistory(always = true) },
+                    onRetry = viewModel::retryHistory,
+                    onBack = { showHistory = false },
+                )
                 else -> HorizontalPager(
                     state = pager,
                     // Sur la carte, le glissement sert à la déplacer : on change d'onglet par la barre du bas. Seulement une
@@ -155,6 +164,8 @@ fun MeteoApp(viewModel: MeteoViewModel = viewModel()) {
                             onOpenDay = { openDay = it },
                             onRefresh = viewModel::refresh,
                             onMultiModelNeeded = viewModel::ensureMultiModel,
+                            onHistoryNeeded = { viewModel.ensureHistory() },
+                            onOpenHistory = { showHistory = true },
                         )
                         Tab.METEOGRAM -> MeteogramsScreen(
                             state = state,

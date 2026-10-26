@@ -140,6 +140,18 @@ la carte) :
   neige attendue s'il en tombe. Toucher un jour ouvre son **détail heure par heure**, présenté de la même façon :
   l'heure, le ciel, la température et le ressenti, puis l'un sous l'autre la pluie et sa probabilité, le vent moyen et
   les rafales, l'indice de confiance.
+  En haut à droite, la **normale du jour** (1991–2020), l'écart du maxi prévu aujourd'hui et les **records du jour**
+  (le plus chaud et le plus froid, avec leur année) ; sur chaque jour, la normale marquée de deux petits traits sur la
+  barre mini-maxi et l'écart du maxi à la normale sous le maxi. Toucher la carte ouvre les **Données historiques** :
+  le jour face à sa normale et à ses records (le plus chaud, le plus froid, le plus arrosé), les **records du lieu**
+  (plus chaud, plus froid, pluie et neige en un jour, rafale, plus longue suite de jours secs) depuis 1940, du mois ou
+  de l'année, les 14 jours à venir face à la normale, le même jour année après année, il y a un an, les 30 derniers
+  jours (température, pluie, soleil face à la normale) et l'année en cours (pluie, jours de gel, jours à 30 °C). Les
+  données viennent de la réanalyse ERA5 d'Open-Meteo (maille de 9 à 25 km : les extrêmes y sont un peu adoucis par
+  rapport aux relevés d'une station). La première demande d'un lieu (plus de 30 000 jours) compte pour 2 000 à 4 500
+  des 10 000 appels gratuits par jour d'Open-Meteo : elle part seule pour les **favoris** ; pour un autre lieu, la carte
+  dit « normales, records » et l'historique se charge en l'ouvrant. Les années finies sont ensuite gardées sur le
+  téléphone, et seuls les jours qui manquent sont redemandés, toutes les 6 heures.
 - **Courbes** (météogrammes) :
   - **7 jours**, heure par heure : température et ressenti, pluie et sa probabilité, nuages, vent moyen et rafales,
     pression ; sur la courbe du vent moyen, une flèche toutes les 6 heures montre où va le vent ; trait orange :

@@ -3,6 +3,7 @@ package io.github.pbailly.meteo.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.LocalDate
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -17,6 +18,11 @@ data class Loaded<T>(val value: T, val fetchedAt: Long, val stale: Boolean, val 
  */
 class WeatherRepository(
     private val cacheDir: File,
+    /**
+     * Pour l'historique depuis 1940 (5 s de calcul chez Open-Meteo) : une seule demande, sans la doubler ; sinon
+     * [httpGet]. Avant lui : [httpGet] reste le dernier paramètre, celui qu'on passe en lambda.
+     */
+    private val slowHttpGet: (suspend (String) -> String)? = null,
     val httpGet: suspend (String) -> String = ::defaultHttpGet,
 ) {
     suspend fun forecast(place: Place, force: Boolean): Loaded<Forecast> =
@@ -41,6 +47,44 @@ class WeatherRepository(
         cached("ensembles_${place.id}", OpenMeteoApi.ensembleUrl(place), ENSEMBLE_MAX_AGE_MS, force) {
             OpenMeteoApi.parseEnsemble(it)
         }
+
+    /**
+     * Le temps passé du lieu, de 1940 à hier. La demande depuis 1940 pèse lourd dans le quota d'Open-Meteo (plus de
+     * 30 000 jours : 2 000 à 4 500 des 10 000 appels gratuits par jour) : les années finies ne sont demandées qu'une
+     * fois et gardées, puis seulement ce qui manque depuis, toutes les 6 heures. Sans ce complément (réseau absent),
+     * les années finies suffisent.
+     */
+    suspend fun history(place: Place, today: LocalDate, force: Boolean): Loaded<DailyHistory> {
+        val yesterday = today.minusDays(1)
+        suspend fun fetchPast(refetch: Boolean) = cached(
+            "history_past_${place.id}",
+            OpenMeteoApi.archiveUrl(place, OpenMeteoApi.ARCHIVE_START, LocalDate.of(today.year - 1, 12, 31)),
+            HISTORY_PAST_MAX_AGE_MS,
+            force = refetch,
+            get = slowHttpGet ?: httpGet,
+        ) { OpenMeteoApi.parseHistory(it) }
+        var past = fetchPast(refetch = false)
+        // Au bout de trois ans, le complément devient lourd lui aussi : on redemande tout, une fois.
+        if (past.value.end.year < today.year - 3) past = fetchPast(refetch = true)
+        val from = past.value.end.plusDays(1)
+        val recent = if (from.isAfter(yesterday)) null else try {
+            cached(
+                "history_recent_${place.id}",
+                OpenMeteoApi.archiveUrl(place, from, yesterday),
+                HISTORY_RECENT_MAX_AGE_MS,
+                force,
+            ) { OpenMeteoApi.parseHistory(it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+        val merged = past.value.followedBy(recent?.value)
+        return Loaded(merged, recent?.fetchedAt ?: past.fetchedAt, stale = recent?.stale ?: (from <= yesterday), downloaded = recent?.downloaded == true)
+    }
+
+    /** Vrai si les années finies du lieu sont déjà gardées : afficher son historique ne coûte presque rien. */
+    suspend fun hasHistory(place: Place): Boolean = withContext(Dispatchers.IO) { File(cacheDir, "history_past_${place.id}.json").exists() }
 
     /**
      * La dernière prévision gardée du lieu quand elle n'est plus fraîche (moins d'un jour) : elle s'affiche tout de
@@ -83,6 +127,7 @@ class WeatherRepository(
         url: String,
         maxAgeMs: Long,
         force: Boolean,
+        get: suspend (String) -> String = httpGet,
         parse: (String) -> T,
     ): Loaded<T> = withContext(Dispatchers.IO) {
         val file = File(cacheDir, "$key.json")
@@ -92,7 +137,7 @@ class WeatherRepository(
             if (cachedValue != null) return@withContext Loaded(cachedValue, file.lastModified(), stale = false)
         }
         try {
-            val body = httpGet(url)
+            val body = get(url)
             // On lit la réponse avant de l'écrire : une réponse invalide n'écrase jamais un bon cache.
             val value = parse(body)
             cacheDir.mkdirs()
@@ -113,5 +158,8 @@ class WeatherRepository(
         const val ENSEMBLE_MAX_AGE_MS = 3 * 60 * 60 * 1000L
         /** Au-delà d'un jour, une prévision gardée ne s'affiche plus en attendant la nouvelle. */
         const val LAST_MAX_AGE_MS = 24 * 60 * 60 * 1000L
+        /** Les années finies ne changent plus : gardées (voir [history] pour le moment où on les redemande). */
+        const val HISTORY_PAST_MAX_AGE_MS = Long.MAX_VALUE / 2
+        const val HISTORY_RECENT_MAX_AGE_MS = 6 * 60 * 60 * 1000L
     }
 }

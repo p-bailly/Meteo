@@ -129,6 +129,7 @@ fun WebApp(viewModel: MeteoViewModel, radar: RadarViewModel, layers: LayersViewM
     val scope = rememberCoroutineScope()
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var showAltitude by rememberSaveable { mutableStateOf(false) }
+    var showHistory by rememberSaveable { mutableStateOf(false) }
     var showCompare by rememberSaveable { mutableStateOf(false) }
     var openDay by rememberSaveable { mutableIntStateOf(-1) }
     val place = state.place
@@ -139,6 +140,7 @@ fun WebApp(viewModel: MeteoViewModel, radar: RadarViewModel, layers: LayersViewM
     fun goTo(tab: Tab) {
         showSettings = false
         showAltitude = false
+        showHistory = false
         showCompare = false
         openDay = -1
         scope.launch { pager.scrollToPage(WebTabs.indexOf(tab)) }
@@ -201,6 +203,15 @@ fun WebApp(viewModel: MeteoViewModel, radar: RadarViewModel, layers: LayersViewM
                 showAltitude -> Centered(DETAIL_MAX) {
                     AltitudeScreen(state = state, place = place, onRefresh = viewModel::refresh, onBack = { showAltitude = false })
                 }
+                showHistory -> Centered(DETAIL_MAX) {
+                    HistoryScreen(
+                        state = state,
+                        place = place,
+                        onHistoryNeeded = { viewModel.ensureHistory(always = true) },
+                        onRetry = viewModel::retryHistory,
+                        onBack = { showHistory = false },
+                    )
+                }
                 else -> HorizontalPager(
                     state = pager,
                     // Sur la carte, le glissement sert à la déplacer : on change d'onglet par la barre du bas.
@@ -224,6 +235,8 @@ fun WebApp(viewModel: MeteoViewModel, radar: RadarViewModel, layers: LayersViewM
                             onOpenDay = { openDay = it },
                             onRefresh = viewModel::refresh,
                             onMultiModelNeeded = viewModel::ensureMultiModel,
+                            onHistoryNeeded = { viewModel.ensureHistory() },
+                            onOpenHistory = { showHistory = true },
                         )
                         Tab.METEOGRAM -> MeteogramsScreen(
                             state = state,

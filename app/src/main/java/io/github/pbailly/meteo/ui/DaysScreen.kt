@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -38,6 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.data.Altitude
 import io.github.pbailly.meteo.data.AltitudeDay
+import io.github.pbailly.meteo.data.DailyHistory
+import io.github.pbailly.meteo.data.DayNormal
+import io.github.pbailly.meteo.data.History
 import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.Outlook
 import io.github.pbailly.meteo.data.Place
@@ -68,12 +72,15 @@ private class DayLine(
     val snow: Double,
     /** Indice de confiance de 1 à 5, quand l'ensemble (ou la comparaison des modèles) est chargé. */
     val confidence: Int?,
+    /** Normales du jour, quand l'historique est chargé. */
+    val normal: DayNormal?,
 )
 
 /**
  * Onglet « Prévisions » : les 14 jours, avec pour chacun le ciel, le mini et le maxi, puis la pluie, le vent (et sa
  * direction), l'ensoleillement et l'indice de confiance l'un sous l'autre ; la neige s'il en tombe. Toucher un jour
- * ouvre son détail heure par heure.
+ * ouvre son détail heure par heure. En haut à droite, la normale et les records du jour (toucher ouvre la page
+ * « Données historiques ») ; sur chaque jour, la normale marquée sur la barre et l'écart du maxi à la normale.
  */
 @Composable
 fun DaysScreen(
@@ -82,22 +89,39 @@ fun DaysScreen(
     onOpenDay: (Int) -> Unit,
     onRefresh: () -> Unit,
     onMultiModelNeeded: () -> Unit,
+    onHistoryNeeded: () -> Unit,
+    onOpenHistory: () -> Unit,
 ) {
-    // L'indice de confiance vient de la comparaison des modèles.
-    LaunchedEffect(Unit) { onMultiModelNeeded() }
+    // L'indice de confiance vient de la comparaison des modèles ; les normales, de l'historique.
+    LaunchedEffect(Unit) {
+        onMultiModelNeeded()
+        onHistoryNeeded()
+    }
     val remote = state.forecast
     val terrain = state.terrain.data
     val multiModel = state.multiModel.data
     val ensemble = state.ensemble.data
-    val lines = remember(remote.data, terrain, multiModel, ensemble) {
-        remote.data?.let { dayLines(it, snowReference(it, terrain), ensemble, multiModel) }.orEmpty()
+    val history = state.history.data
+    val lines = remember(remote.data, terrain, multiModel, ensemble, history) {
+        remote.data?.let { dayLines(it, snowReference(it, terrain), ensemble, multiModel, history) }.orEmpty()
     }
     PullToRefreshBox(isRefreshing = remote.loading && remote.data != null, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
         val f = remote.data
         LazyColumn(Modifier.fillMaxSize()) {
             item(key = "title") {
-                ScreenHeader("Prévisions")
-                PlaceLine(place.name, place.elevation ?: f?.elevation)
+                Row {
+                    Column(Modifier.weight(1f)) {
+                        ScreenHeader("Prévisions")
+                        PlaceLine(place.name, place.elevation ?: f?.elevation)
+                    }
+                    HistoryCard(
+                        state.history,
+                        today = f?.daily?.date?.firstOrNull() ?: LocalDate.now(),
+                        forecastMax = lines.firstOrNull()?.max,
+                        onClick = onOpenHistory,
+                        modifier = Modifier.statusBarsPadding().padding(top = 10.dp, end = 16.dp),
+                    )
+                }
                 StatusLine(statusText(remote), Modifier.padding(top = 6.dp))
                 Gap(8.dp)
                 HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
@@ -113,8 +137,9 @@ fun DaysScreen(
                 return@LazyColumn
             }
             val today = f.daily.date.firstOrNull() ?: LocalDate.now()
-            val low = lines.minOfOrNull { it.min.takeIf { v -> !v.isNaN() } ?: Double.MAX_VALUE } ?: 0.0
-            val high = lines.maxOfOrNull { it.max.takeIf { v -> !v.isNaN() } ?: -Double.MAX_VALUE } ?: 1.0
+            // L'échelle des barres couvre aussi les normales, pour qu'on les voie toutes.
+            val low = lines.minOfOrNull { minOf(it.min.takeIf { v -> !v.isNaN() } ?: Double.MAX_VALUE, it.normal?.min ?: Double.MAX_VALUE) } ?: 0.0
+            val high = lines.maxOfOrNull { maxOf(it.max.takeIf { v -> !v.isNaN() } ?: -Double.MAX_VALUE, it.normal?.max ?: -Double.MAX_VALUE) } ?: 1.0
             lines.forEach { line ->
                 item(key = "day-${line.index}") {
                     DayTableRow(line, today, low, high, snowReference(f, terrain), onClick = { onOpenDay(line.index) })
@@ -130,7 +155,7 @@ fun DaysScreen(
 private fun snowReference(f: Forecast, terrain: TerrainProfile?): Double =
     Outlook.snowReference(Altitude.ground(f), terrain?.elevations?.maxOrNull())
 
-private fun dayLines(f: Forecast, reference: Double, ensemble: EnsembleForecast?, multiModel: MultiModelForecast?): List<DayLine> {
+private fun dayLines(f: Forecast, reference: Double, ensemble: EnsembleForecast?, multiModel: MultiModelForecast?, history: DailyHistory?): List<DayLine> {
     val d = f.daily
     val altitudeDays = Altitude.days(f).associateBy { it.date }
     return (0 until minOf(d.size, 14)).map { i ->
@@ -148,6 +173,7 @@ private fun dayLines(f: Forecast, reference: Double, ensemble: EnsembleForecast?
             altitude = alt,
             snow = alt?.let { Altitude.snow(f, it.hours, reference) } ?: 0.0,
             confidence = Predictability.daily(ensemble, multiModel, d.date[i]),
+            normal = history?.let { History.normal(it, d.date[i]) },
         )
     }
 }
@@ -180,15 +206,27 @@ private fun DayTableRow(line: DayLine, today: LocalDate, low: Double, high: Doub
             Box(Modifier.width(ICON_WIDTH)) { WeatherIcon(line.code, true, size = 30.dp) }
             Row(Modifier.weight(1f).padding(start = 4.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                 MonoText(Fmt.temp(line.min), color = colors.primary, size = 12.sp, modifier = Modifier.width(30.sp.asWidth()))
-                TemperatureBar(line.min, line.max, low, high, Modifier.weight(1f).height(7.dp))
-                Text(
-                    Fmt.temp(line.max),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    textAlign = TextAlign.End,
-                    maxLines = 1,
-                    modifier = Modifier.width(36.sp.asWidth()),
-                )
+                TemperatureBar(line.min, line.max, low, high, line.normal, Modifier.weight(1f).height(7.dp))
+                Column(Modifier.width(36.sp.asWidth()), horizontalAlignment = Alignment.End) {
+                    Text(
+                        Fmt.temp(line.max),
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp,
+                        textAlign = TextAlign.End,
+                        maxLines = 1,
+                    )
+                    // Écart du maxi à la normale du jour.
+                    val normal = line.normal
+                    if (normal != null && !line.max.isNaN()) {
+                        val gap = (line.max - normal.max).roundToInt()
+                        MonoText(
+                            (if (gap > 0) "+" else if (gap < 0) "−" else "±") + kotlin.math.abs(gap) + "°",
+                            color = if (gap >= 0) chart.accent else colors.primary,
+                            size = 9.5.sp,
+                            bold = true,
+                        )
+                    }
+                }
             }
             // Pluie, vent et soleil l'un sous l'autre, chacun avec son pictogramme.
             Column(Modifier.width(DETAILS_WIDTH.asWidth())) {
@@ -248,23 +286,36 @@ private fun sunshineHours(seconds: Double): String = when {
     else -> Fmt.decimal(Math.round(seconds / 1800.0) / 2.0)
 }
 
-/** Barre mini-maxi sur l'échelle des jours affichés, du bleu (mini) à l'orange (maxi). */
+/**
+ * Barre mini-maxi sur l'échelle des jours affichés, du bleu (mini) à l'orange (maxi) ; la normale du jour en deux
+ * petits traits qui dépassent de la barre.
+ */
 @Composable
-private fun TemperatureBar(min: Double, max: Double, low: Double, high: Double, modifier: Modifier) {
+private fun TemperatureBar(min: Double, max: Double, low: Double, high: Double, normal: DayNormal?, modifier: Modifier) {
     val track = MaterialTheme.colorScheme.outlineVariant
     val cold = MaterialTheme.colorScheme.primary
     val warm = LocalChartColors.current.accent
+    val mark = MaterialTheme.colorScheme.onSurfaceVariant
     Canvas(modifier) {
         val r = CornerRadius(size.height / 2)
         drawRoundRect(track, size = size, cornerRadius = r)
-        if (min.isNaN() || max.isNaN() || high <= low) return@Canvas
-        val x0 = ((min - low) / (high - low) * size.width).toFloat()
-        val x1 = ((max - low) / (high - low) * size.width).toFloat().coerceAtLeast(x0 + size.height)
-        drawRoundRect(
-            Brush.horizontalGradient(listOf(cold, warm), startX = 0f, endX = size.width),
-            topLeft = Offset(x0, 0f),
-            size = Size(x1 - x0, size.height),
-            cornerRadius = r,
-        )
+        if (high <= low) return@Canvas
+        if (!min.isNaN() && !max.isNaN()) {
+            val x0 = ((min - low) / (high - low) * size.width).toFloat()
+            val x1 = ((max - low) / (high - low) * size.width).toFloat().coerceAtLeast(x0 + size.height)
+            drawRoundRect(
+                Brush.horizontalGradient(listOf(cold, warm), startX = 0f, endX = size.width),
+                topLeft = Offset(x0, 0f),
+                size = Size(x1 - x0, size.height),
+                cornerRadius = r,
+            )
+        }
+        if (normal != null) {
+            val out = 3.dp.toPx()
+            for (t in listOf(normal.min, normal.max)) {
+                val x = ((t - low) / (high - low) * size.width).toFloat()
+                drawLine(mark, Offset(x, -out), Offset(x, size.height + out), 1.5.dp.toPx())
+            }
+        }
     }
 }
