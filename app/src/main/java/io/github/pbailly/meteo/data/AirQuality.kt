@@ -43,7 +43,7 @@ object AirQualityApi {
 /** La qualité de l'air d'un lieu, gardée une heure : elle change lentement. */
 class AirQualityRepository(
     private val cacheDir: File,
-    private val httpGet: (String) -> String,
+    private val httpGet: suspend (String) -> String,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     suspend fun of(place: Place): AirQuality = withContext(Dispatchers.IO) {

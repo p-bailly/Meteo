@@ -56,7 +56,7 @@ import androidx.compose.ui.unit.sp
 import io.github.pbailly.meteo.ui.theme.AppMono
 import io.github.pbailly.meteo.ui.theme.AppSans
 
-/** Les cinq onglets de la barre du bas. */
+/** Les cinq onglets de la barre du bas (la webapp n'a pas les cartes). */
 enum class Tab(val label: String, val icon: ImageVector) {
     TODAY("Aujourd'hui", Icons.Outlined.WbSunny),
     FORECAST("Prévisions", Icons.Outlined.CalendarMonth),
@@ -70,16 +70,16 @@ enum class Tab(val label: String, val icon: ImageVector) {
  * Tous les libellés ont la même taille : la plus grande à laquelle le plus long tient encore dans sa case.
  */
 @Composable
-fun BottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
+fun BottomBar(selected: Tab, onSelect: (Tab) -> Unit, tabs: List<Tab> = Tab.entries) {
     val colors = MaterialTheme.colorScheme
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     Surface(color = colors.surfaceContainerLowest) {
         BoxWithConstraints(Modifier.navigationBarsPadding()) {
-            val cell = with(density) { (maxWidth / Tab.entries.size - 4.dp).toPx() }
+            val cell = with(density) { (maxWidth / tabs.size - 4.dp).toPx() }
             val labelSize = remember(cell, density) {
                 generateSequence(12f) { it - 0.5f }.takeWhile { it >= 9f }.firstOrNull { size ->
-                    Tab.entries.all { tab ->
+                    tabs.all { tab ->
                         measurer.measure(tab.label, labelStyle(size.sp, FontWeight.SemiBold), maxLines = 1, softWrap = false).size.width <= cell
                     }
                 }?.sp ?: 9.sp
@@ -87,7 +87,7 @@ fun BottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
             Column {
                 HorizontalDivider(color = colors.outlineVariant)
                 Row(Modifier.fillMaxWidth().height(64.dp)) {
-                    Tab.entries.forEach { tab ->
+                    tabs.forEach { tab ->
                         val active = tab == selected
                         val tint = if (active) colors.primary else colors.onSurfaceVariant
                         Column(

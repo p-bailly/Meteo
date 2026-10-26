@@ -91,6 +91,38 @@ class PressureLevel(
     val windDirection: DoubleArray,
 )
 
+/** Les niveaux de pression d'une prévision, demandés à part ([OpenMeteoApi.levelsUrl]), à ses heures [time]. */
+class PressureLevels(val time: List<LocalDateTime>, val levels: List<PressureLevel>)
+
+/** La prévision avec ses niveaux de pression ; telle quelle s'ils ne sont pas aux mêmes heures (autre téléchargement). */
+fun Forecast.withLevels(levels: PressureLevels?): Forecast {
+    if (levels == null || levels.levels.isEmpty() || levels.time != hourly.time) return this
+    val h = hourly
+    val merged = HourlySeries(
+        time = h.time,
+        temperature = h.temperature,
+        apparentTemperature = h.apparentTemperature,
+        humidity = h.humidity,
+        precipitation = h.precipitation,
+        snowfall = h.snowfall,
+        precipitationProbability = h.precipitationProbability,
+        weatherCode = h.weatherCode,
+        cloudCoverLow = h.cloudCoverLow,
+        cloudCoverMid = h.cloudCoverMid,
+        cloudCoverHigh = h.cloudCoverHigh,
+        windSpeed = h.windSpeed,
+        windDirection = h.windDirection,
+        windGusts = h.windGusts,
+        pressure = h.pressure,
+        isDay = h.isDay,
+        uvIndex = h.uvIndex,
+        freezingLevel = h.freezingLevel,
+        snowDepth = h.snowDepth,
+        levels = levels.levels,
+    )
+    return Forecast(latitude, longitude, elevation, timezone, utcOffsetSeconds, current, merged, daily)
+}
+
 class DailySeries(
     val date: List<LocalDate>,
     val weatherCode: IntArray,

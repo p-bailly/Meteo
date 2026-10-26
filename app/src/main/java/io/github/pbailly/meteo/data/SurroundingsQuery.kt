@@ -187,8 +187,8 @@ object SurroundingsQuery {
 /** L'environnement d'un lieu, gardé sur le téléphone : on ne le demande qu'une fois à OpenStreetMap. */
 class SurroundingsRepository(
     private val cacheDir: File,
-    private val httpGet: (String) -> String,
-    private val overpassGet: (String) -> String = httpGet,
+    private val httpGet: suspend (String) -> String,
+    private val overpassGet: suspend (String) -> String = httpGet,
 ) {
     private fun file(place: Place) = File(cacheDir, "surroundings3_${place.id}.json")
 

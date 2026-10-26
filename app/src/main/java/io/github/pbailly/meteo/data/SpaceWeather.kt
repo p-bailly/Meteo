@@ -50,7 +50,7 @@ object SpaceWeather {
 /** L'indice Kp, gardé trois heures (il est donné par tranches de trois heures). */
 class SpaceWeatherRepository(
     private val cacheDir: File,
-    private val httpGet: (String) -> String,
+    private val httpGet: suspend (String) -> String,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     suspend fun kp(): Double? = withContext(Dispatchers.IO) {

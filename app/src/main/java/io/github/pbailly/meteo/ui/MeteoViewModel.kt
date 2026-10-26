@@ -9,6 +9,8 @@ import io.github.pbailly.meteo.data.Forecast
 import io.github.pbailly.meteo.data.MultiModelForecast
 import io.github.pbailly.meteo.data.OpenMeteoException
 import io.github.pbailly.meteo.data.Place
+import io.github.pbailly.meteo.data.PressureLevels
+import io.github.pbailly.meteo.data.withLevels
 import io.github.pbailly.meteo.data.PlaceNames
 import io.github.pbailly.meteo.data.PlacesStore
 import io.github.pbailly.meteo.data.SettingsStore
@@ -120,6 +122,9 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     val state: StateFlow<MeteoUiState> = _state.asStateFlow()
 
     private var forecastJob: Job? = null
+    private var levelsJob: Job? = null
+    /** Les niveaux de pression du lieu affiché, ajoutés à chaque prévision qui arrive (pour « Neige & altitude »). */
+    private var levels: PressureLevels? = null
     private var multiModelJob: Job? = null
     private var ensembleJob: Job? = null
     private var searchJob: Job? = null
@@ -204,6 +209,8 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         store.saveRecents(recents)
         _state.update { it.copy(recents = recents) }
         multiModelJob?.cancel()
+        levelsJob?.cancel()
+        levels = null
         _state.update {
             it.copy(place = place, forecast = Remote(), multiModel = Remote(), ensemble = Remote(), terrain = Remote(), surroundings = Remote(), airQuality = Remote(), search = SearchState())
         }
@@ -358,7 +365,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
                 runLoading { repository.lastForecast(place) }.getOrNull()?.let { last ->
                     _state.update {
                         if (it.place?.id != place.id || it.forecast.data != null) it
-                        else it.copy(forecast = it.forecast.copy(data = last.value, fetchedAt = last.fetchedAt, stale = true))
+                        else it.copy(forecast = it.forecast.copy(data = last.value.withLevels(levels), fetchedAt = last.fetchedAt, stale = true))
                     }
                 }
             }
@@ -366,12 +373,30 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { state ->
                 if (state.place?.id != place.id) return@update state
                 result.fold(
-                    onSuccess = { state.copy(forecast = Remote(it.value, it.fetchedAt, stale = it.stale)) },
+                    onSuccess = { state.copy(forecast = Remote(it.value.withLevels(levels), it.fetchedAt, stale = it.stale)) },
                     onFailure = { state.copy(forecast = state.forecast.copy(loading = false, error = (it as Exception).userMessage())) },
                 )
             }
+            if (result.isSuccess) loadLevels(place, force)
             // Les widgets relisent le cache tout juste écrit : même lieu et même prévision que l'app.
             if (result.isSuccess) Widgets.updateAll(getApplication())
+        }
+    }
+
+    /**
+     * Les niveaux de pression, une fois la prévision affichée (Open-Meteo les calcule lentement) ; sans eux, « Neige &
+     * altitude » se contente de l'iso 0 °C.
+     */
+    private fun loadLevels(place: Place, force: Boolean) {
+        levelsJob?.cancel()
+        levelsJob = viewModelScope.launch {
+            val loaded = runLoading { repository.levels(place, force) }.getOrNull() ?: return@launch
+            if (_state.value.place?.id != place.id) return@launch
+            levels = loaded.value
+            _state.update { state ->
+                val f = state.forecast.data ?: return@update state
+                state.copy(forecast = state.forecast.copy(data = f.withLevels(loaded.value)))
+            }
         }
     }
 

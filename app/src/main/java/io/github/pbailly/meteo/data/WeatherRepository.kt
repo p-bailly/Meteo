@@ -3,8 +3,6 @@ package io.github.pbailly.meteo.data
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -19,11 +17,17 @@ data class Loaded<T>(val value: T, val fetchedAt: Long, val stale: Boolean, val 
  */
 class WeatherRepository(
     private val cacheDir: File,
-    val httpGet: (String) -> String = ::defaultHttpGet,
+    val httpGet: suspend (String) -> String = ::defaultHttpGet,
 ) {
     suspend fun forecast(place: Place, force: Boolean): Loaded<Forecast> =
         cached("forecast_${place.id}", OpenMeteoApi.forecastUrl(place), FORECAST_MAX_AGE_MS, force) {
             OpenMeteoApi.parseForecast(it)
+        }
+
+    /** Les niveaux de pression (pour « Neige & altitude »), après la prévision : leur calcul est lent chez Open-Meteo. */
+    suspend fun levels(place: Place, force: Boolean): Loaded<PressureLevels> =
+        cached("levels_${place.id}", OpenMeteoApi.levelsUrl(place), FORECAST_MAX_AGE_MS, force) {
+            OpenMeteoApi.parseLevels(it)
         }
 
     suspend fun multiModel(place: Place, force: Boolean): Loaded<MultiModelForecast> {
@@ -109,36 +113,5 @@ class WeatherRepository(
         const val ENSEMBLE_MAX_AGE_MS = 3 * 60 * 60 * 1000L
         /** Au-delà d'un jour, une prévision gardée ne s'affiche plus en attendant la nouvelle. */
         const val LAST_MAX_AGE_MS = 24 * 60 * 60 * 1000L
-    }
-}
-
-private fun defaultHttpGet(url: String): String = retryOnNetworkError { httpGetOnce(url) }
-
-/**
- * Pour OpenStreetMap (Overpass) : une requête sur les environs d'un lieu prend souvent 15 à 25 s, au-delà des 20 s
- * accordées à Open-Meteo. Un serveur qui ne répond pas en 30 s n'est pas réessayé : on passe au suivant.
- */
-fun slowHttpGet(url: String): String = httpGetOnce(url, readTimeoutMs = 30_000)
-
-private fun httpGetOnce(url: String, readTimeoutMs: Int = 20_000): String {
-    val connection = URL(url).openConnection() as HttpURLConnection
-    try {
-        // Un serveur surchargé ne répond parfois même pas à la connexion : mieux vaut réessayer tôt qu'attendre.
-        connection.connectTimeout = 8_000
-        connection.readTimeout = readTimeoutMs
-        connection.setRequestProperty("Accept", "application/json")
-        connection.setRequestProperty("User-Agent", "Meteo-perso/1.0 (Android; github.com/p-bailly/Meteo)")
-        val code = connection.responseCode
-        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-        val body = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-        if (code in 502..504) throw ServerBusyException(code)
-        if (code !in 200..299) {
-            // Open-Meteo renvoie {"error":true,"reason":"..."} : on laisse le parseur en tirer le message.
-            if (body.contains("\"reason\"")) return body
-            throw HttpStatusException(code)
-        }
-        return body
-    } finally {
-        connection.disconnect()
     }
 }

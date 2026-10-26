@@ -20,8 +20,42 @@ class OpenMeteoApiTest {
         assertTrue(url.contains("wind_speed_unit=kmh"))
         assertTrue(url.contains("forecast_days=14"))
         assertTrue(url.contains("hourly=temperature_2m%2Capparent_temperature"))
-        assertTrue(url.contains("freezing_level_height%2Ctemperature_925hPa%2Cgeopotential_height_925hPa%2Cwind_speed_925hPa"))
+        assertTrue(url.contains("freezing_level_height"))
+        // Les niveaux de pression, lents à calculer pour Open-Meteo, sont demandés à part.
+        assertFalse(url.contains("hPa"))
+    }
+
+    @Test
+    fun `levels url asks for every pressure level at the forecast hours`() {
+        val url = OpenMeteoApi.levelsUrl(lyon)
+        assertTrue(url.contains("hourly=temperature_925hPa%2Cgeopotential_height_925hPa%2Cwind_speed_925hPa%2Cwind_direction_925hPa"))
         assertTrue(url.contains("wind_direction_500hPa"))
+        assertTrue(url.contains("timezone=auto"))
+        assertTrue(url.contains("forecast_days=14"))
+        assertTrue(url.contains("wind_speed_unit=kmh"))
+        assertFalse(url.contains("temperature_2m"))
+    }
+
+    @Test
+    fun `levels are added to the forecast with the same hours only`() {
+        val forecast = OpenMeteoApi.parseForecast(FORECAST.replace("\"temperature_850hPa\"", "\"ignored\""))
+        assertTrue(forecast.hourly.levels.isEmpty())
+        val levels = OpenMeteoApi.parseLevels(
+            """{"hourly":{"time":["2026-10-19T00:00","2026-10-19T01:00","2026-10-19T02:00"],
+                "temperature_700hPa":[-1.0,-1.5,-2.0],"geopotential_height_700hPa":[3010,3008,3005],
+                "wind_speed_700hPa":[40,42,45],"wind_direction_700hPa":[270,275,280]}}""",
+        )
+        val merged = forecast.withLevels(levels)
+        assertEquals(listOf(700), merged.hourly.levels.map { it.hPa })
+        assertEquals(-1.5, merged.hourly.levels[0].temperature[1], 0.0)
+        assertEquals(forecast.hourly.temperature.toList(), merged.hourly.temperature.toList())
+        assertEquals(forecast.daily, merged.daily)
+        // Un autre téléchargement (autres heures) : la prévision reste telle quelle.
+        val shifted = OpenMeteoApi.parseLevels(
+            """{"hourly":{"time":["2026-10-19T01:00","2026-10-19T02:00","2026-10-19T03:00"],"temperature_700hPa":[1,2,3]}}""",
+        )
+        assertTrue(forecast.withLevels(shifted).hourly.levels.isEmpty())
+        assertTrue(forecast.withLevels(null) === forecast)
     }
 
     @Test

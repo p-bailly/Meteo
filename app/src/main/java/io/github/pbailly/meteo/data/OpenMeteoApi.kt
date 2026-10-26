@@ -45,9 +45,16 @@ object OpenMeteoApi {
         "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "pressure_msl", "is_day", "uv_index",
         // Neige au sol (pour le dessin d'Aujourd'hui).
         "snow_depth",
-        // Altitude : iso 0 °C, puis température, altitude réelle et vent de chaque niveau de pression.
+        // Altitude : iso 0 °C (les niveaux de pression sont demandés à part : [levelsUrl]).
         "freezing_level_height",
-    ) + PRESSURE_LEVELS.flatMap { p ->
+    )
+
+    /**
+     * Température, altitude réelle et vent de chaque niveau de pression : seulement pour « Neige & altitude ». Demandés
+     * avec la prévision, ils multipliaient par dix le temps de calcul d'Open-Meteo (jusqu'à 17 s, au lieu d'une) : ils
+     * arrivent maintenant à part, après elle.
+     */
+    private val LEVELS_HOURLY = PRESSURE_LEVELS.flatMap { p ->
         listOf("temperature_${p}hPa", "geopotential_height_${p}hPa", "wind_speed_${p}hPa", "wind_direction_${p}hPa")
     }
     private val DAILY = listOf(
@@ -87,6 +94,34 @@ object OpenMeteoApi {
         "forecast_days" to FORECAST_DAYS.toString(),
         "wind_speed_unit" to "kmh",
     )
+
+    /** Les niveaux de pression du lieu, aux mêmes heures que [forecastUrl]. */
+    fun levelsUrl(place: Place): String = buildUrl(
+        FORECAST_URL,
+        "latitude" to coord(place.latitude),
+        "longitude" to coord(place.longitude),
+        "hourly" to LEVELS_HOURLY.joinToString(","),
+        "timezone" to "auto",
+        "forecast_days" to FORECAST_DAYS.toString(),
+        "wind_speed_unit" to "kmh",
+    )
+
+    fun parseLevels(body: String): PressureLevels {
+        val h = parseRoot(body).obj("hourly")
+        val times = h.strings("time").map { LocalDateTime.parse(it) }
+        return PressureLevels(times, levelsOf(h, times.size))
+    }
+
+    private fun levelsOf(h: JsonObject, n: Int): List<PressureLevel> =
+        PRESSURE_LEVELS.filter { h.containsKey("temperature_${it}hPa") }.map { p ->
+            PressureLevel(
+                hPa = p,
+                temperature = h.doubles("temperature_${p}hPa", n),
+                height = h.doubles("geopotential_height_${p}hPa", n),
+                windSpeed = h.doubles("wind_speed_${p}hPa", n),
+                windDirection = h.doubles("wind_direction_${p}hPa", n),
+            )
+        }
 
     fun multiModelUrl(place: Place, models: List<WeatherModel>): String = buildUrl(
         FORECAST_URL,
@@ -216,15 +251,8 @@ object OpenMeteoApi {
             uvIndex = h.doubles("uv_index", n),
             freezingLevel = h.doubles("freezing_level_height", n),
             snowDepth = h.doubles("snow_depth", n),
-            levels = PRESSURE_LEVELS.filter { h.containsKey("temperature_${it}hPa") }.map { p ->
-                PressureLevel(
-                    hPa = p,
-                    temperature = h.doubles("temperature_${p}hPa", n),
-                    height = h.doubles("geopotential_height_${p}hPa", n),
-                    windSpeed = h.doubles("wind_speed_${p}hPa", n),
-                    windDirection = h.doubles("wind_direction_${p}hPa", n),
-                )
-            },
+            // Une prévision gardée d'avant la séparation les contient encore.
+            levels = levelsOf(h, n),
         )
 
         val d = root.obj("daily")
