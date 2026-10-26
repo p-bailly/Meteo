@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
@@ -192,6 +193,10 @@ fun RadarRoute(
 }
 private val clock = DateTimeFormatter.ofPattern("HH:mm")
 
+/** Largeur au plus des fenêtres de la carte (clés) et de l'image d'une webcam, pour un grand écran (la webapp). */
+private val CARD_MAX_WIDTH = 560.dp
+private val WEBCAM_MAX_WIDTH = 760.dp
+
 @Composable
 fun RadarScreen(
     place: Place,
@@ -267,16 +272,16 @@ fun RadarScreen(
                         onSaveKey(it)
                     },
                     onCancel = if (state.hasKey) ({ editingKey = false }) else null,
-                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp).widthIn(max = CARD_MAX_WIDTH),
                 )
                 layer == MapLayer.WEBCAMS && layerState.windyKey == null -> WindyKeyCard(
                     onSave = onSaveWindyKey,
-                    modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    modifier = Modifier.align(Alignment.Center).padding(16.dp).widthIn(max = CARD_MAX_WIDTH),
                 )
                 layerState.openWebcam != null && layer == MapLayer.WEBCAMS -> WebcamCard(
                     layerState,
                     onClose = onCloseWebcam,
-                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 8.dp),
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 8.dp).widthIn(max = WEBCAM_MAX_WIDTH),
                 )
                 layerState.openStation != null && layer == MapLayer.TEMPERATURE -> StationCard(
                     layerState.openStation,
@@ -419,7 +424,7 @@ private fun ControlStrip(layer: MapLayer, onLayer: (MapLayer) -> Unit, choices: 
     val colors = MaterialTheme.colorScheme
     val layers = choices.filter { it != MapLayer.WEBCAMS }
     Column(Modifier.fillMaxWidth().background(colors.surfaceContainerLowest).padding(horizontal = 8.dp, vertical = 6.dp)) {
-        SegmentedToggle(layers.map { it.label }, layers.indexOf(layer), { onLayer(layers[it]) }, fill = true)
+        SegmentedToggle(layers.map { it.label }, layers.indexOf(layer), { onLayer(layers[it]) }, Modifier.widthIn(max = CARD_MAX_WIDTH), fill = true)
         Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             when (layer) {
                 MapLayer.RAIN -> Legend(Modifier.weight(1f), horizontal = true)
