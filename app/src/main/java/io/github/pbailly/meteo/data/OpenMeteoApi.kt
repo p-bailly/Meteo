@@ -24,6 +24,10 @@ object OpenMeteoApi {
     private const val GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
     private const val ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
     private const val ENSEMBLE_URL = "https://ensemble-api.open-meteo.com/v1/ensemble"
+    private const val ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+
+    /** Premier jour de la réanalyse ERA5 d'Open-Meteo. */
+    val ARCHIVE_START: LocalDate = LocalDate.of(1940, 1, 1)
 
     /** Niveaux de pression demandés : de 925 hPa (vers 750 m) à 500 hPa (vers 5 500 m, au-dessus du mont Blanc). */
     val PRESSURE_LEVELS = listOf(925, 850, 700, 600, 500)
@@ -79,6 +83,12 @@ object OpenMeteoApi {
     private val SUMMARY_DAILY = listOf(
         "weather_code", "temperature_2m_max", "temperature_2m_min", "precipitation_sum", "wind_speed_10m_max",
         "wind_direction_10m_dominant", "sunshine_duration",
+    )
+
+    /** Données historiques : de quoi calculer les normales et les records. */
+    private val ARCHIVE_DAILY = listOf(
+        "weather_code", "temperature_2m_max", "temperature_2m_min", "precipitation_sum", "snowfall_sum",
+        "wind_gusts_10m_max", "sunshine_duration",
     )
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -217,6 +227,36 @@ object OpenMeteoApi {
     fun searchKey(text: String): String =
         java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
             .lowercase(java.util.Locale.ROOT).replace(Regex("[-'’]"), " ").replace(Regex("\\s+"), " ").trim()
+
+    /** Le temps jour par jour de [from] à [to] (compris), en heure locale du lieu. */
+    fun archiveUrl(place: Place, from: LocalDate, to: LocalDate): String = buildUrl(
+        ARCHIVE_URL,
+        "latitude" to coord(place.latitude),
+        "longitude" to coord(place.longitude),
+        "start_date" to from.toString(),
+        "end_date" to to.toString(),
+        "daily" to ARCHIVE_DAILY.joinToString(","),
+        "timezone" to "auto",
+        "wind_speed_unit" to "kmh",
+    )
+
+    /** Les jours se suivent sans trou : seule la première date est lue (plus de 30 000 jours depuis 1940). */
+    fun parseHistory(body: String): DailyHistory {
+        val d = parseRoot(body).obj("daily")
+        val times = d["time"] as? JsonArray ?: throw OpenMeteoException("Réponse incomplète : « time » manquant")
+        val first = times.firstOrNull()?.jsonPrimitive?.contentOrNull ?: throw OpenMeteoException("Réponse vide")
+        val n = times.size
+        return DailyHistory(
+            start = LocalDate.parse(first),
+            temperatureMax = d.doubles("temperature_2m_max", n),
+            temperatureMin = d.doubles("temperature_2m_min", n),
+            precipitation = d.doubles("precipitation_sum", n),
+            snowfall = d.doubles("snowfall_sum", n),
+            windGusts = d.doubles("wind_gusts_10m_max", n),
+            sunshine = d.doubles("sunshine_duration", n),
+            weatherCode = d.ints("weather_code", n),
+        )
+    }
 
     fun parseForecast(body: String): Forecast = forecastOf(parseRoot(body))
 

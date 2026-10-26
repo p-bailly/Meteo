@@ -3,6 +3,7 @@ package io.github.pbailly.meteo.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.pbailly.meteo.data.DailyHistory
 import io.github.pbailly.meteo.data.DeviceLocation
 import io.github.pbailly.meteo.data.EnsembleForecast
 import io.github.pbailly.meteo.data.Forecast
@@ -67,6 +68,8 @@ data class MeteoUiState(
     val multiModel: Remote<MultiModelForecast> = Remote(),
     /** Prévisions d'ensemble de cinq centres (environ 194 scénarios), pour l'indice de confiance. */
     val ensemble: Remote<EnsembleForecast> = Remote(),
+    /** Le temps passé du lieu depuis 1940 : normales et records (onglet Prévisions et page « Données historiques »). */
+    val history: Remote<DailyHistory> = Remote(),
     val search: SearchState = SearchState(),
     val locating: Boolean = false,
     val locationError: String? = null,
@@ -96,7 +99,7 @@ data class MeteoUiState(
 }
 
 class MeteoViewModel(app: Application) : AndroidViewModel(app) {
-    private val repository = WeatherRepository(File(app.cacheDir, "openmeteo"))
+    private val repository = WeatherRepository(File(app.cacheDir, "openmeteo"), slowHttpGet = ::slowHttpGet)
     // Overpass répond lentement : ces deux-là attendent plus longtemps (slowHttpGet).
     private val terrainRepository = TerrainRepository(File(app.filesDir, "terrain"), repository.httpGet, ::slowHttpGet)
     private val surroundingsRepository = SurroundingsRepository(File(app.filesDir, "terrain"), repository.httpGet, ::slowHttpGet)
@@ -127,6 +130,7 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
     private var levels: PressureLevels? = null
     private var multiModelJob: Job? = null
     private var ensembleJob: Job? = null
+    private var historyJob: Job? = null
     private var searchJob: Job? = null
     private var terrainJob: Job? = null
     private var airJob: Job? = null
@@ -210,9 +214,10 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(recents = recents) }
         multiModelJob?.cancel()
         levelsJob?.cancel()
+        historyJob?.cancel()
         levels = null
         _state.update {
-            it.copy(place = place, forecast = Remote(), multiModel = Remote(), ensemble = Remote(), terrain = Remote(), surroundings = Remote(), airQuality = Remote(), search = SearchState())
+            it.copy(place = place, forecast = Remote(), multiModel = Remote(), ensemble = Remote(), history = Remote(), terrain = Remote(), surroundings = Remote(), airQuality = Remote(), search = SearchState())
         }
         loadForecast(place, force = false)
         // Les modèles servent aussi à la page principale : prévisibilité et fourchettes de pluie.
@@ -240,6 +245,48 @@ class MeteoViewModel(app: Application) : AndroidViewModel(app) {
             loadMultiModel(place, force = false)
         } else if (_state.value.ensemble.data == null && ensembleJob?.isActive != true) {
             loadEnsemble(place, force = false)
+        }
+    }
+
+    /**
+     * Appelé à l'ouverture de l'onglet Prévisions ([always] faux) et de la page « Données historiques » ([always] vrai).
+     * La première demande d'un lieu pèse lourd dans le quota d'Open-Meteo (des milliers d'appels comptés) : dans l'onglet,
+     * elle ne part seule que pour un favori ; pour un autre lieu, il faut ouvrir la page (sauf s'il est déjà gardé).
+     */
+    fun ensureHistory(always: Boolean = false) {
+        val place = _state.value.place ?: return
+        val history = _state.value.history
+        if (history.data != null || historyJob?.isActive == true) return
+        if (always || _state.value.isFavorite) {
+            loadHistory(place, force = false)
+            return
+        }
+        viewModelScope.launch {
+            if (repository.hasHistory(place) && _state.value.place?.id == place.id && historyJob?.isActive != true) {
+                loadHistory(place, force = false)
+            }
+        }
+    }
+
+    fun retryHistory() {
+        _state.value.place?.let { loadHistory(it, force = true) }
+    }
+
+    private fun loadHistory(place: Place, force: Boolean) {
+        historyJob?.cancel()
+        _state.update { it.copy(history = it.history.copy(loading = true, error = null)) }
+        historyJob = viewModelScope.launch {
+            // Après la comparaison des modèles et l'ensemble : la grosse demande ne leur prend pas le quota de la minute.
+            multiModelJob?.join()
+            ensembleJob?.join()
+            val result = runLoading { repository.history(place, java.time.LocalDate.now(), force) }
+            _state.update { state ->
+                if (state.place?.id != place.id) return@update state
+                result.fold(
+                    onSuccess = { state.copy(history = Remote(it.value, it.fetchedAt, stale = it.stale)) },
+                    onFailure = { state.copy(history = state.history.copy(loading = false, error = (it as Exception).userMessage())) },
+                )
+            }
         }
     }
 
