@@ -9,7 +9,7 @@ const FILES = [
   "./", "index.html", "manifest.webmanifest", "icon.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png",
   "meteo.mjs", "meteo.import-object.mjs", "meteo.js-builtins.mjs", "meteo.wasm",
   "skiko.mjs", "skiko.wasm", "js-joda.esm.js",
-  "map.mjs", "maplibre/maplibre-gl.mjs", "maplibre/maplibre-gl-worker.mjs", "maplibre/maplibre-gl.css",
+  "map.mjs", "hdf.mjs", "maplibre/maplibre-gl.mjs", "maplibre/maplibre-gl-worker.mjs", "maplibre/maplibre-gl.css",
   "fonts/archivo_condensed_light.ttf", "fonts/archivo_condensed_regular.ttf", "fonts/archivo_condensed_semibold.ttf",
   "fonts/archivo_medium.ttf", "fonts/archivo_regular.ttf", "fonts/archivo_semibold.ttf",
   "fonts/martian_mono_condensed_medium.ttf", "fonts/martian_mono_condensed_regular.ttf",
@@ -36,7 +36,11 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) return;
   event.respondWith(
     caches.open(CACHE).then((cache) =>
-      cache.match(request, { ignoreSearch: true }).then((hit) => hit || fetch(request))
+      cache.match(request, { ignoreSearch: true }).then((hit) => hit || fetch(request).then((response) => {
+        // Le lecteur du radar (h5wasm, 4 Mo) n'est téléchargé qu'à la première image radar, puis gardé.
+        if (response.ok && new URL(request.url).pathname.includes("/h5wasm/")) cache.put(request, response.clone());
+        return response;
+      }))
     )
   );
 });

@@ -2,7 +2,6 @@ package io.github.pbailly.meteo.data.maps
 
 import io.github.pbailly.meteo.data.Bzip2
 import io.github.pbailly.meteo.data.HttpStatusException
-import io.github.pbailly.meteo.data.retryOnNetworkError
 import io.github.pbailly.meteo.data.radar.GeoBounds
 import io.github.pbailly.meteo.data.radar.GeoTiffImage
 import kotlinx.coroutines.Dispatchers
@@ -11,8 +10,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 import java.time.Duration
 import java.time.Instant
@@ -164,25 +161,6 @@ object WindyWebcams {
                 pageUrl = o.obj("urls")?.str("detail") ?: "https://www.windy.com/webcams/$id",
                 updated = o.str("lastUpdatedOn"),
             )
-        }
-    }
-}
-
-/** GET simple ; [headers] pour les clés d'API. Réessaie deux fois si la connexion est coupée en route. */
-suspend fun httpBytes(url: String, headers: Map<String, String> = emptyMap()): ByteArray = withContext(Dispatchers.IO) {
-    retryOnNetworkError {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        try {
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 30_000
-            headers.forEach { (k, v) -> connection.setRequestProperty(k, v) }
-            when (val code = connection.responseCode) {
-                in 200..299 -> connection.inputStream.use { it.readBytes() }
-                401, 403 -> throw MapKeyException()
-                else -> throw HttpStatusException(code)
-            }
-        } finally {
-            connection.disconnect()
         }
     }
 }

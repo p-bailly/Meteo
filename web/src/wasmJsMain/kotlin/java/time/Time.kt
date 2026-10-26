@@ -152,6 +152,8 @@ class LocalDateTime private constructor(
 
     fun atZone(zone: ZoneId): ZonedDateTime = ZonedDateTime(this)
 
+    fun toInstant(offset: ZoneOffset): Instant = Instant.ofEpochMilli(toEpochSecond(offset) * 1000)
+
     fun isBefore(other: LocalDateTime): Boolean = this < other
     fun isAfter(other: LocalDateTime): Boolean = this > other
     fun isEqual(other: LocalDateTime): Boolean = this == other
@@ -190,6 +192,9 @@ class LocalDateTime private constructor(
         fun ofInstant(instant: Instant, zone: ZoneId): LocalDateTime =
             ofLocalSeconds(instant.epochSecond + zone.offsetSecondsAt(instant.epochSecond))
 
+        /** Selon un motif à chiffres seulement (« yyyyMMddHHmmss »). */
+        fun parse(text: CharSequence, formatter: DateTimeFormatter): LocalDateTime = formatter.parseLocal(text.toString())
+
         /** « 2026-10-25T14:00 » ou « 2026-10-25T14:00:30 ». */
         fun parse(text: CharSequence): LocalDateTime {
             val s = text.toString()
@@ -223,6 +228,16 @@ class Instant private constructor(private val millis: Long) : Comparable<Instant
     fun plus(d: Duration): Instant = Instant(millis + d.toMillis())
     fun minus(d: Duration): Instant = Instant(millis - d.toMillis())
     fun minusSeconds(seconds: Long): Instant = Instant(millis - seconds * 1000)
+    fun truncatedTo(unit: ChronoUnit): Instant {
+        val step = when (unit) {
+            ChronoUnit.SECONDS -> 1000L
+            ChronoUnit.MINUTES -> 60_000L
+            ChronoUnit.HOURS -> 3_600_000L
+            ChronoUnit.DAYS -> 86_400_000L
+        }
+        return Instant(floorDiv(millis, step) * step)
+    }
+    fun atOffset(offset: ZoneOffset): OffsetDateTime = OffsetDateTime(LocalDateTime.ofInstant(this, offset))
     override fun toString(): String = java.time.format.DateTimeFormatter.ISO_INSTANT.format(this)
     fun isBefore(other: Instant): Boolean = millis < other.millis
     fun isAfter(other: Instant): Boolean = millis > other.millis
@@ -262,7 +277,18 @@ class Instant private constructor(private val millis: Long) : Comparable<Instant
     }
 }
 
-class ZonedDateTime internal constructor(private val local: LocalDateTime) {
+/** Une date-heure à un décalage fixe : ses champs. */
+class OffsetDateTime internal constructor(private val local: LocalDateTime) : Temporal {
+    val year: Int get() = local.year
+    val monthValue: Int get() = local.monthValue
+    val dayOfMonth: Int get() = local.dayOfMonth
+    val hour: Int get() = local.hour
+    val minute: Int get() = local.minute
+    fun toLocalDateTime(): LocalDateTime = local
+    fun format(formatter: DateTimeFormatter): String = local.format(formatter)
+}
+
+class ZonedDateTime internal constructor(private val local: LocalDateTime) : Temporal {
     fun toLocalDateTime(): LocalDateTime = local
     fun toLocalDate(): LocalDate = local.toLocalDate()
     val hour: Int get() = local.hour
@@ -299,6 +325,8 @@ class ZoneOffset private constructor(val totalSeconds: Int) : ZoneId() {
 
 class Duration private constructor(val seconds: Long) : Comparable<Duration> {
     fun toMinutes(): Long = seconds / 60
+    fun toSeconds(): Long = seconds
+    fun getSeconds(): Long = seconds
     fun toHours(): Long = seconds / 3600
     fun toMillis(): Long = seconds * 1000
     val isNegative: Boolean get() = seconds < 0

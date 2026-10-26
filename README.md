@@ -19,9 +19,9 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
 ## Version web, pour iPhone
 
 La même appli, dans le navigateur : **https://p-bailly.github.io/Meteo/** (Aujourd'hui avec son dessin, Prévisions,
-Courbes, Cartes, Lieux et les réglages d'affichage ; pas de widgets). Les Cartes y montrent la pluie d'après le radar
-RainViewer (sans clé, les deux dernières heures : le radar de Météo-France arrive dans un format que le navigateur ne sait
-pas lire), le satellite et la foudre de Meteosat.
+Courbes, Cartes, Lieux et les réglages d'affichage ; pas de widgets). Les Cartes sont celles de l'appli : radar
+Météo-France et sa prévision à 3 h (avec la clé, voir plus bas), satellite et foudre de Meteosat, webcams Windy. Seule la
+carte de température manque : le serveur du DWD n'accepte pas les navigateurs.
 
 Sur iPhone (iOS 18.2 ou plus récent) :
 
@@ -30,7 +30,17 @@ Sur iPhone (iOS 18.2 ou plus récent) :
 3. L'icône Météo s'ouvre en plein écran, comme une appli. Elle marche aussi hors ligne (dernière prévision gardée) et
    se met à jour toute seule.
 
-Les favoris et les réglages restent dans le téléphone (stockage du navigateur). Sur Android ou sur ordinateur, le même
+**Les clés, en un lien.** Les clés Météo-France et Windy se saisissent sur chaque appareil (bouton clé de l'écran
+Cartes), ou d'un coup en ouvrant une fois le lien
+
+```
+https://p-bailly.github.io/Meteo/#cle=<clé Météo-France>&windy=<clé Windy>
+```
+
+La webapp les enregistre dans le navigateur puis les efface de l'adresse (ce qui suit « # » n'est jamais envoyé au
+serveur). Ce lien contient les clés : à n'envoyer qu'à des proches.
+
+Les favoris, les réglages et les clés restent dans le téléphone (stockage du navigateur). Sur Android ou sur ordinateur, le même
 lien marche dans Chrome, Edge ou Firefox récents.
 
 La webapp est publiée par GitHub Actions (`.github/workflows/web.yml`) à chaque modification de la branche par défaut.
@@ -342,6 +352,9 @@ Webapp (`web/`) : le code de `app/` compilé en WebAssembly avec Compose Multipl
 quels sont listés dans `web/build.gradle.kts` (`shared`) ; ce qu'ils utilisent de Java et d'Android (dates, `String.format`,
 préférences, fichiers du cache, autorisation de position) est imité pour le navigateur dans `web/src/wasmJsMain/kotlin`
 (paquets `java.*`, `android.*`, `androidx.*`), et les téléchargements passent par `fetch` (`web/…/data/HttpGet.kt`).
+Les fichiers (cache, images radar) sont gardés dans IndexedDB ; les images sont encodées par Skia ; le radar
+Météo-France (HDF5) est lu par h5wasm (`hdf.mjs`) ; la carte est MapLibre GL JS (`map.mjs`), sous laquelle l'écran des
+Cartes pose ses contrôles (`controlsOverMap = false`), rien ne pouvant s'afficher par-dessus.
 Les dépôts réutilisés prennent donc une fonction de téléchargement `suspend`.
 
 ```sh

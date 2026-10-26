@@ -10,10 +10,17 @@ open class Context {
 
     fun getSharedPreferences(name: String, mode: Int): SharedPreferences = SharedPreferences(name)
 
+    /** Ouvre le lien de [intent] dans un nouvel onglet. */
+    fun startActivity(intent: Intent) {
+        intent.data?.toString()?.let(::openUrl)
+    }
+
     companion object {
         const val MODE_PRIVATE = 0
     }
 }
+
+private fun openUrl(url: String): Unit = js("{ window.open(url, '_blank', 'noopener'); }")
 
 /** Préférences gardées dans le stockage local du navigateur (« pref:<nom>:<clé> »). */
 class SharedPreferences internal constructor(private val name: String) {

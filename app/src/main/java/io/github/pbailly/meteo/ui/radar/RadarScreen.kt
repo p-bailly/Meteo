@@ -9,6 +9,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -98,6 +100,7 @@ import io.github.pbailly.meteo.data.radar.RainClass
 import io.github.pbailly.meteo.ui.DetailHeader
 import io.github.pbailly.meteo.ui.Fmt
 import io.github.pbailly.meteo.ui.ScreenHeader
+import io.github.pbailly.meteo.ui.SegmentedToggle
 import io.github.pbailly.meteo.ui.drawLabel
 import io.github.pbailly.meteo.ui.theme.AppMono
 import io.github.pbailly.meteo.ui.theme.HeaderBlue
@@ -125,6 +128,10 @@ fun RadarRoute(
     onBack: () -> Unit,
     /** Faux dans la barre du bas : l'écran est un onglet, sans flèche de retour. */
     showBack: Boolean = true,
+    /** Les couches du menu (la webapp n'a pas la température, que le DWD ne sert pas aux navigateurs). */
+    layerChoices: List<MapLayer> = MapLayer.entries,
+    /** Faux dans la webapp : rien ne s'y affiche par-dessus la carte (contrôles en dessous, fenêtres à sa place). */
+    controlsOverMap: Boolean = true,
     viewModel: RadarViewModel = viewModel(),
     layers: LayersViewModel = viewModel(),
 ) {
@@ -153,6 +160,8 @@ fun RadarRoute(
     BackHandler(onBack = onBack)
     RadarScreen(
         place = place,
+        layerChoices = layerChoices,
+        controlsOverMap = controlsOverMap,
         state = state,
         layerState = layerState,
         onBack = onBack.takeIf { showBack },
@@ -186,6 +195,8 @@ private val clock = DateTimeFormatter.ofPattern("HH:mm")
 @Composable
 fun RadarScreen(
     place: Place,
+    layerChoices: List<MapLayer> = MapLayer.entries,
+    controlsOverMap: Boolean = true,
     state: RadarUiState,
     layerState: LayerUiState,
     onBack: (() -> Unit)?,
@@ -216,8 +227,14 @@ fun RadarScreen(
     }
     Column(Modifier.fillMaxSize()) {
         if (onBack != null) DetailHeader("Cartes", onBack, trailing = actions) else ScreenHeader("Cartes", trailing = actions)
+        val error = if (rain) state.error else layerState.error
+        val loading = state.loading && rain || layerState.loading && !rain
+        // Une fenêtre (clé, webcam, station) : dans la webapp, elle prend la place de la carte le temps de la fermer.
+        val cardShown = rain && (!state.hasKey || editingKey) ||
+            layer == MapLayer.WEBCAMS && (layerState.windyKey == null || layerState.openWebcam != null) ||
+            layer == MapLayer.TEMPERATURE && layerState.openStation != null
         Box(Modifier.weight(1f).fillMaxWidth().padding(top = 6.dp)) {
-            WeatherMap(
+            if (controlsOverMap || !cardShown) WeatherMap(
                 overlay = if (rain) MapOverlay.Image(state.currentImage, state.bounds) else layerState.overlay,
                 center = LatLng(place.latitude, place.longitude),
                 modifier = Modifier.fillMaxSize(),
@@ -225,22 +242,23 @@ fun RadarScreen(
                 stations = if (layer == MapLayer.TEMPERATURE) layerState.stations else emptyList(),
                 onStationClick = onStationClick,
             )
-            when (layer) {
-                MapLayer.RAIN -> Legend(Modifier.align(Alignment.BottomStart))
-                MapLayer.TEMPERATURE -> TemperatureLegend(Modifier.align(Alignment.BottomStart))
-                MapLayer.LIGHTNING -> LightningLegend(Modifier.align(Alignment.BottomStart))
-                else -> Unit
+            if (controlsOverMap) {
+                when (layer) {
+                    MapLayer.RAIN -> Legend(Modifier.align(Alignment.BottomStart))
+                    MapLayer.TEMPERATURE -> TemperatureLegend(Modifier.align(Alignment.BottomStart))
+                    MapLayer.LIGHTNING -> LightningLegend(Modifier.align(Alignment.BottomStart))
+                    else -> Unit
+                }
+                // Décalée à droite des légendes pour ne pas les recouvrir.
+                Attribution(layer, Modifier.align(Alignment.BottomEnd).padding(start = 110.dp))
+                LayerMenu(layer, onLayer, layerChoices, Modifier.align(Alignment.TopEnd).padding(8.dp))
+                if (loading) {
+                    CircularProgressIndicator(
+                        Modifier.align(Alignment.TopCenter).padding(top = 16.dp).size(28.dp),
+                        strokeWidth = 3.dp,
+                    )
+                }
             }
-            // Décalée à droite des légendes pour ne pas les recouvrir.
-            Attribution(layer, Modifier.align(Alignment.BottomEnd).padding(start = 110.dp))
-            LayerMenu(layer, onLayer, Modifier.align(Alignment.TopEnd).padding(8.dp))
-            if (state.loading && rain || layerState.loading && !rain) {
-                CircularProgressIndicator(
-                    Modifier.align(Alignment.TopCenter).padding(top = 16.dp).size(28.dp),
-                    strokeWidth = 3.dp,
-                )
-            }
-            val error = if (rain) state.error else layerState.error
             when {
                 rain && (!state.hasKey || editingKey) -> KeyCard(
                     initial = state.apiKey.orEmpty(),
@@ -279,10 +297,13 @@ fun RadarScreen(
                         Text(line, color = Color.White, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
                     }
                 }
-                error != null -> Card(Modifier.align(Alignment.TopCenter).padding(16.dp)) {
+                error != null && controlsOverMap -> Card(Modifier.align(Alignment.TopCenter).padding(16.dp)) {
                     Text(error, Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium)
                 }
             }
+        }
+        if (!controlsOverMap) {
+            ControlStrip(layer, onLayer, layerChoices, loading, error)
         }
         when (layer) {
             MapLayer.RAIN -> Timeline(
@@ -337,7 +358,7 @@ private fun WebcamsButton(active: Boolean, onClick: () -> Unit) {
 
 /** Choix de la couche météo (pluie, température, satellite, foudre) : un menu déroulant posé sur la carte. */
 @Composable
-private fun LayerMenu(selected: MapLayer, onLayer: (MapLayer) -> Unit, modifier: Modifier = Modifier) {
+private fun LayerMenu(selected: MapLayer, onLayer: (MapLayer) -> Unit, choices: List<MapLayer>, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     Box(modifier) {
@@ -361,7 +382,7 @@ private fun LayerMenu(selected: MapLayer, onLayer: (MapLayer) -> Unit, modifier:
             }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            MapLayer.entries.filter { it != MapLayer.WEBCAMS }.forEach { layer ->
+            choices.filter { it != MapLayer.WEBCAMS }.forEach { layer ->
                 DropdownMenuItem(
                     text = { Text(layer.label, fontWeight = if (layer == selected) FontWeight.SemiBold else null) },
                     onClick = {
@@ -389,17 +410,53 @@ private fun rainHeader(slot: RadarSlot?): String = when {
     }
 }
 
+/**
+ * Les contrôles de la carte dans la webapp, sous elle (un menu déroulant s'ouvrirait sous la carte) : les couches en
+ * boutons, la légende en ligne, la source ; une erreur ou le chargement à la place de la source.
+ */
+@Composable
+private fun ControlStrip(layer: MapLayer, onLayer: (MapLayer) -> Unit, choices: List<MapLayer>, loading: Boolean, error: String?) {
+    val colors = MaterialTheme.colorScheme
+    val layers = choices.filter { it != MapLayer.WEBCAMS }
+    Column(Modifier.fillMaxWidth().background(colors.surfaceContainerLowest).padding(horizontal = 8.dp, vertical = 6.dp)) {
+        SegmentedToggle(layers.map { it.label }, layers.indexOf(layer), { onLayer(layers[it]) }, fill = true)
+        Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            when (layer) {
+                MapLayer.RAIN -> Legend(Modifier.weight(1f), horizontal = true)
+                MapLayer.LIGHTNING -> LightningLegend(Modifier.weight(1f), horizontal = true)
+                else -> Spacer(Modifier.weight(1f))
+            }
+            if (loading) CircularProgressIndicator(Modifier.padding(start = 8.dp).size(20.dp), strokeWidth = 2.dp)
+        }
+        if (error != null) {
+            Text(error, color = colors.error, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
+        } else {
+            Attribution(layer, Modifier.align(Alignment.End))
+        }
+    }
+}
+
+/** Les cases d'une légende : en colonne sur la carte, en ligne (défilante) sous elle dans la webapp. */
+@Composable
+private fun LegendCells(horizontal: Boolean, modifier: Modifier, content: @Composable (cell: Modifier) -> Unit) {
+    if (horizontal) {
+        Row(modifier.horizontalScroll(rememberScrollState()).height(IntrinsicSize.Min)) { content(Modifier.fillMaxHeight()) }
+    } else {
+        Column(modifier.padding(bottom = 8.dp).width(IntrinsicSize.Max)) { content(Modifier.fillMaxWidth()) }
+    }
+}
+
 /** Légende des intensités, en bas à gauche comme sur Meteoblue. */
 @Composable
-private fun Legend(modifier: Modifier = Modifier) {
-    Column(modifier.padding(bottom = 8.dp).width(IntrinsicSize.Max)) {
+private fun Legend(modifier: Modifier = Modifier, horizontal: Boolean = false) {
+    LegendCells(horizontal, modifier) { cell ->
         Text(
             "Précipitations",
             color = Color.White,
             style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
             softWrap = false,
-            modifier = Modifier.fillMaxWidth().background(HeaderBlue.copy(alpha = 0.85f)).padding(horizontal = 6.dp, vertical = 3.dp),
+            modifier = cell.background(HeaderBlue.copy(alpha = 0.85f)).padding(horizontal = 6.dp, vertical = 3.dp),
         )
         RainClass.entries.forEach { c ->
             Text(
@@ -408,7 +465,7 @@ private fun Legend(modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 softWrap = false,
-                modifier = Modifier.fillMaxWidth().background(Color(c.argb)).padding(horizontal = 6.dp, vertical = 3.dp),
+                modifier = cell.background(Color(c.argb)).padding(horizontal = 6.dp, vertical = 3.dp),
             )
         }
     }
@@ -440,15 +497,15 @@ private fun TemperatureLegend(modifier: Modifier = Modifier) {
 
 /** Légende de la foudre : nombre d'éclairs en 5 minutes (échelle d'EUMETSAT). */
 @Composable
-private fun LightningLegend(modifier: Modifier = Modifier) {
-    Column(modifier.padding(bottom = 8.dp).width(IntrinsicSize.Max)) {
+private fun LightningLegend(modifier: Modifier = Modifier, horizontal: Boolean = false) {
+    LegendCells(horizontal, modifier) { cell ->
         Text(
             "Éclairs / 5 min",
             color = Color.White,
             style = MaterialTheme.typography.labelMedium,
             maxLines = 1,
             softWrap = false,
-            modifier = Modifier.fillMaxWidth().background(HeaderBlue.copy(alpha = 0.85f)).padding(horizontal = 6.dp, vertical = 3.dp),
+            modifier = cell.background(HeaderBlue.copy(alpha = 0.85f)).padding(horizontal = 6.dp, vertical = 3.dp),
         )
         listOf(
             "1" to Color(0xFFFFF6B8), "3" to Color(0xFFFDD380), "5" to Color(0xFFFCA350),
@@ -460,7 +517,7 @@ private fun LightningLegend(modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
                 softWrap = false,
-                modifier = Modifier.fillMaxWidth().background(color).padding(horizontal = 6.dp, vertical = 3.dp),
+                modifier = cell.background(color).padding(horizontal = 6.dp, vertical = 3.dp),
             )
         }
     }

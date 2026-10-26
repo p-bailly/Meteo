@@ -1,7 +1,6 @@
 package io.github.pbailly.meteo.data.radar
 
 import io.github.pbailly.meteo.data.HttpStatusException
-import io.github.pbailly.meteo.data.retryOnNetworkError
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -17,8 +16,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import java.io.File
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.Duration
 import java.time.Instant
 
@@ -37,7 +34,7 @@ class RadarPixels(val width: Int, val height: Int, val argb: IntArray)
  */
 class MeteoFranceRadar(
     private val dir: File,
-    private val http: (url: String, apiKey: String, accept: String) -> ByteArray = ::meteoFranceGet,
+    private val http: suspend (url: String, apiKey: String, accept: String) -> ByteArray = ::meteoFranceGet,
 ) {
     private val mutex = Mutex()
     private var lookup: MercatorLookup? = null
@@ -75,7 +72,7 @@ class MeteoFranceRadar(
         RadarPixels(bitmap.width, bitmap.height, pixels).also { bitmap.recycle() }
     }
 
-    private fun latestValidityTime(apiKey: String): Instant? = runCatching {
+    private suspend fun latestValidityTime(apiKey: String): Instant? = runCatching {
         val body = http(BASE, apiKey, "application/json").decodeToString()
         parseLatestValidityTime(body)
     }.getOrElse { if (it is RadarAuthException) throw it else null }
@@ -124,24 +121,5 @@ class MeteoFranceRadar(
             walk(Json.parseToJsonElement(body))
             return (candidates.filter { "maille=500" in it.first }.ifEmpty { candidates }).maxOfOrNull { it.second }
         }
-    }
-}
-
-/** GET sur les API Météo-France, avec la clé dans l'en-tête `apikey`. */
-internal fun meteoFranceGet(url: String, apiKey: String, accept: String): ByteArray = retryOnNetworkError {
-    val connection = URL(url).openConnection() as HttpURLConnection
-    try {
-        connection.connectTimeout = 15_000
-        connection.readTimeout = 30_000
-        connection.setRequestProperty("apikey", apiKey)
-        connection.setRequestProperty("Accept", accept)
-        when (val code = connection.responseCode) {
-            in 200..299 -> connection.inputStream.use { it.readBytes() }
-            401, 403 -> throw RadarAuthException()
-            429 -> throw HttpStatusException(429, "Trop de demandes à Météo-France, réessaie dans quelques minutes")
-            else -> throw HttpStatusException(code, "Météo-France indisponible (erreur $code), réessaie plus tard")
-        }
-    } finally {
-        connection.disconnect()
     }
 }

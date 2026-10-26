@@ -100,9 +100,10 @@ fun WebSettingsScreen(
         }
         SectionLabel("Sources")
         MonoText(
-            "Prévisions : Open-Meteo.com (CC BY 4.0). Relief : Copernicus DEM (via Open-Meteo), sommets et environs " +
-                "© contributeurs OpenStreetMap. Polices : Archivo et Martian Mono (SIL OFL 1.1). Cette version web n'a pas " +
-                "les cartes (radar, satellite…), ni les widgets : ils sont dans l'appli Android.",
+            "Prévisions : Open-Meteo.com (CC BY 4.0). Radar et prévision immédiate : Météo-France (Licence Ouverte). " +
+                "Satellite et foudre : EUMETSAT. Webcams : Windy. Relief : Copernicus DEM (via Open-Meteo), sommets et " +
+                "environs © contributeurs OpenStreetMap. Fond de carte : OpenFreeMap, © OpenStreetMap. Lecture du radar : " +
+                "h5wasm (NIST). Polices : Archivo et Martian Mono (SIL OFL 1.1).",
             size = 10.5.sp,
             maxLines = 12,
             modifier = Modifier.padding(horizontal = 20.dp),
