@@ -8,6 +8,7 @@ import androidx.compose.ui.window.ComposeViewport
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.pbailly.meteo.ui.MeteoViewModel
 import io.github.pbailly.meteo.ui.WebApp
+import io.github.pbailly.meteo.ui.maps.MapsViewModel
 import io.github.pbailly.meteo.ui.theme.MeteoTheme
 import io.github.pbailly.meteo.ui.theme.WebFonts
 import kotlinx.browser.document
@@ -34,6 +35,7 @@ fun main() {
     MainScope().launch {
         WebFonts.load(::fetchBytes)
         val viewModel = MeteoViewModel(WebApplication)
+        val maps = MapsViewModel()
         document.getElementById("loading")?.remove()
         ComposeViewport(document.body!!) {
             val state by viewModel.state.collectAsStateWithLifecycle()
@@ -43,7 +45,7 @@ fun main() {
                 else -> isSystemInDarkTheme()
             }
             MeteoTheme(darkTheme = dark, textSize = state.textSize) {
-                WebApp(viewModel)
+                WebApp(viewModel, maps)
             }
         }
     }

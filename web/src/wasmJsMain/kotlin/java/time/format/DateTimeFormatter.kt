@@ -9,6 +9,21 @@ import java.util.Locale
  * yyyy, HH, H, mm. Le texte entre apostrophes est recopié tel quel.
  */
 class DateTimeFormatter private constructor(private val pattern: String) {
+    /** Une date, une date-heure, ou un instant pour [ISO_INSTANT] (« 2026-10-26T04:50:00Z »). */
+    fun format(temporal: java.time.temporal.Temporal): String = when (temporal) {
+        is LocalDate -> format(temporal, null)
+        is LocalDateTime -> format(temporal.toLocalDate(), temporal)
+        is java.time.Instant -> {
+            val t = LocalDateTime.ofInstant(temporal, java.time.ZoneOffset.UTC)
+            if (this === ISO_INSTANT) {
+                t.toLocalDate().toString() + "T" + listOf(t.hour, t.minute, t.second).joinToString(":") { it.toString().padStart(2, '0') } + "Z"
+            } else {
+                format(t.toLocalDate(), t)
+            }
+        }
+        else -> throw IllegalArgumentException("Date non prise en charge")
+    }
+
     internal fun format(date: LocalDate, time: LocalDateTime?): String {
         val out = StringBuilder()
         var i = 0
@@ -63,6 +78,8 @@ class DateTimeFormatter private constructor(private val pattern: String) {
         private val MONTHS_SHORT = listOf(
             "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc.",
         )
+
+        val ISO_INSTANT = DateTimeFormatter("yyyy-MM-dd'T'HH:mm:ss'Z'")
 
         fun ofPattern(pattern: String): DateTimeFormatter = DateTimeFormatter(pattern)
         fun ofPattern(pattern: String, locale: Locale): DateTimeFormatter = DateTimeFormatter(pattern)

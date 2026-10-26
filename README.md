@@ -19,7 +19,9 @@ seulement depuis la branche par défaut du dépôt (`.github/workflows/apk.yml`)
 ## Version web, pour iPhone
 
 La même appli, dans le navigateur : **https://p-bailly.github.io/Meteo/** (Aujourd'hui avec son dessin, Prévisions,
-Courbes, Lieux et les réglages d'affichage ; pas de cartes ni de widgets).
+Courbes, Cartes, Lieux et les réglages d'affichage ; pas de widgets). Les Cartes y montrent la pluie d'après le radar
+RainViewer (sans clé, les deux dernières heures : le radar de Météo-France arrive dans un format que le navigateur ne sait
+pas lire), le satellite et la foudre de Meteosat.
 
 Sur iPhone (iOS 18.2 ou plus récent) :
 

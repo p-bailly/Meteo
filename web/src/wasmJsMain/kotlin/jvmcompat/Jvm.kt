@@ -213,3 +213,22 @@ class SortedMutableMap<K : Comparable<K>, V> : AbstractMutableMap<K, V>() {
     override val entries: MutableSet<MutableMap.MutableEntry<K, V>>
         get() = map.entries.sortedBy { it.key }.toMutableSet()
 }
+
+/** sortedSetOf() de la JVM : un ensemble parcouru dans l'ordre. */
+class SortedMutableSet<T : Comparable<T>> : AbstractMutableSet<T>() {
+    private val set = HashSet<T>()
+    override val size: Int get() = set.size
+    override fun add(element: T): Boolean = set.add(element)
+    override fun contains(element: T): Boolean = set.contains(element)
+    override fun iterator(): MutableIterator<T> {
+        val sorted = set.sorted().iterator()
+        var last: T? = null
+        return object : MutableIterator<T> {
+            override fun hasNext() = sorted.hasNext()
+            override fun next(): T = sorted.next().also { last = it }
+            override fun remove() {
+                set.remove(last)
+            }
+        }
+    }
+}

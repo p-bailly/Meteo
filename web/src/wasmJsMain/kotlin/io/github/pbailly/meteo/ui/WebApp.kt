@@ -18,18 +18,20 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.pbailly.meteo.ui.maps.MapsScreen
+import io.github.pbailly.meteo.ui.maps.MapsViewModel
 import kotlinx.coroutines.launch
 
-/** Les onglets de la webapp : ceux de l'appli, sans les cartes. */
-private val WebTabs = listOf(Tab.TODAY, Tab.FORECAST, Tab.METEOGRAM, Tab.PLACES)
+/** Les onglets de la webapp, ceux de l'appli. */
+private val WebTabs = listOf(Tab.TODAY, Tab.FORECAST, Tab.METEOGRAM, Tab.RADAR, Tab.PLACES)
 
 /**
- * Navigation de la webapp, comme MeteoApp sur le téléphone : quatre onglets (Aujourd'hui, Prévisions, Courbes, Lieux),
- * dans la barre du bas ou en glissant ; le détail d'un jour, « Neige & altitude », la comparaison des lieux et les
+ * Navigation de la webapp, comme MeteoApp sur le téléphone : cinq onglets (Aujourd'hui, Prévisions, Courbes, Cartes,
+ * Lieux), dans la barre du bas ou en glissant (sauf sur la carte, où le glissement la déplace) ; le détail d'un jour, « Neige & altitude », la comparaison des lieux et les
  * réglages s'ouvrent par-dessus.
  */
 @Composable
-fun WebApp(viewModel: MeteoViewModel) {
+fun WebApp(viewModel: MeteoViewModel, maps: MapsViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val pager = rememberPagerState(initialPage = 0) { WebTabs.size }
     val scope = rememberCoroutineScope()
@@ -102,6 +104,8 @@ fun WebApp(viewModel: MeteoViewModel) {
                 showAltitude -> AltitudeScreen(state = state, place = place, onRefresh = viewModel::refresh, onBack = { showAltitude = false })
                 else -> HorizontalPager(
                     state = pager,
+                    // Sur la carte, le glissement sert à la déplacer : on change d'onglet par la barre du bas.
+                    userScrollEnabled = pager.settledPage != WebTabs.indexOf(Tab.RADAR),
                     key = { it },
                     modifier = Modifier.fillMaxSize(),
                 ) { page ->
@@ -127,6 +131,7 @@ fun WebApp(viewModel: MeteoViewModel) {
                             onMultiModelNeeded = viewModel::ensureMultiModel,
                             onRetryMultiModel = viewModel::retryMultiModel,
                         )
+                        Tab.RADAR -> MapsScreen(place, maps)
                         else -> placesScreen()
                     }
                 }
