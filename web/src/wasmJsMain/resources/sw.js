@@ -1,6 +1,8 @@
 // Hors ligne : toute la webapp est gardée dans le téléphone, version par version (@VERSION@ est remplacé à la
-// construction). Une nouvelle version se télécharge en entier en arrière-plan, puis sert au lancement suivant : on ne
-// mélange jamais les fichiers de deux versions. Les prévisions, elles, passent par le réseau (et le cache de l'appli).
+// construction). Une nouvelle version se télécharge en entier en arrière-plan, puis prend la place de l'ancienne dès
+// qu'elle est complète, et la page se recharge (index.html) : on ne mélange jamais les fichiers de deux versions. Sans
+// skipWaiting, elle attendait que toutes les pages de la webapp soient fermées, ce qui n'arrive presque jamais sur un
+// téléphone. Les prévisions, elles, passent par le réseau (et le cache de l'appli).
 const VERSION = "@VERSION@";
 const CACHE = "meteo-" + VERSION;
 const FILES = [
@@ -14,7 +16,11 @@ const FILES = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(FILES.map((f) => new Request(f, { cache: "reload" })))));
+  event.waitUntil(
+    caches.open(CACHE)
+      .then((cache) => cache.addAll(FILES.map((f) => new Request(f, { cache: "reload" }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (event) => {

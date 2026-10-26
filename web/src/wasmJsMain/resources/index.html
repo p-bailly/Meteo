@@ -42,7 +42,28 @@
 <script type="module" src="map.mjs"></script>
 <script type="module" src="meteo.mjs"></script>
 <script>
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+    // Une nouvelle version, une fois téléchargée en entier, remplace l'ancienne : la page se recharge pour l'afficher
+    // (pas au premier lancement, où rien n'était encore gardé). On en cherche une à chaque retour dans la webapp :
+    // ouverte depuis l'écran d'accueil, elle reprend souvent sans recharger la page.
+    if ("serviceWorker" in navigator) {
+        // Le premier changement d'une page ouverte sans version gardée est l'installation, pas une mise à jour.
+        let installed = !!navigator.serviceWorker.controller;
+        let reloaded = false;
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+            if (!installed) {
+                installed = true;
+                return;
+            }
+            if (reloaded) return;
+            reloaded = true;
+            location.reload();
+        });
+        navigator.serviceWorker.register("sw.js").then((registration) => {
+            document.addEventListener("visibilitychange", () => {
+                if (document.visibilityState === "visible") registration.update();
+            });
+        });
+    }
 </script>
 </body>
 </html>
