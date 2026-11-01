@@ -302,7 +302,7 @@ private fun NowBlock(f: Forecast, text: SketchText) {
         }
         Spacer(Modifier.weight(1f))
         // Pas de pictogramme : le dessin du fond montre déjà le temps qu'il fait, et prend sa place.
-        Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(top = 70.dp)) {
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(top = 50.dp)) {
             Text(
                 weatherDescription(c.weatherCode),
                 fontWeight = FontWeight.SemiBold,

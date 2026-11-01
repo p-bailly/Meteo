@@ -379,12 +379,12 @@ private fun labels(item: Item, width: Float): List<Label> {
     val right = width - dp(18)
     val sky = font("archivo_semibold", 24f)
     val words = describe(item.code)
-    out += Label(words, right - sky.measureTextWidth(words), dp(168), sky, ink)
+    out += Label(words, right - sky.measureTextWidth(words), dp(148), sky, ink)
     val mono = font("martian_mono_condensed_medium", 19f)
     val lo = " / ${item.temperature - 6}°"
     val hi = "${item.temperature + 3}°"
-    out += Label(lo, right - mono.measureTextWidth(lo), dp(200), mono, blue)
-    out += Label(hi, right - mono.measureTextWidth(lo) - mono.measureTextWidth(hi), dp(200), mono, accent)
+    out += Label(lo, right - mono.measureTextWidth(lo), dp(180), mono, blue)
+    out += Label(hi, right - mono.measureTextWidth(lo) - mono.measureTextWidth(hi), dp(180), mono, accent)
     return out
 }
 
