@@ -503,10 +503,10 @@ internal class Pencil(val scope: DrawScope, val color: Color, val rnd: Random, p
     var text: List<Rect> = emptyList()
 
     /**
-     * Du papier blanc autour du [text] ([clearText]) ; sans lui (Nimbus), le ciel passe sous les lettres, et seuls le
+     * Du papier blanc autour du [text] ([clearText]), faux par défaut : le ciel passe sous les lettres, et seuls le
      * soleil, les nuages et ce qui vole s'écartent, rayons compris.
      */
-    var blank = true
+    var blank = false
 
     /**
      * L'écriture à la main (noms des sommets), fournie par l'appli : du texte centré sur [at] (sa ligne de base), de
