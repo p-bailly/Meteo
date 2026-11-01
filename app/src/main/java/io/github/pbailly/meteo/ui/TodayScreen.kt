@@ -306,7 +306,7 @@ private fun NowBlock(f: Forecast, text: SketchText) {
             Text(
                 weatherDescription(c.weatherCode),
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 17.sp,
+                fontSize = 24.sp,
                 maxLines = 1,
                 onTextLayout = text.layout("sky"),
                 modifier = text.of("sky"),
@@ -314,12 +314,12 @@ private fun NowBlock(f: Forecast, text: SketchText) {
             val high = f.daily.temperatureMax.getOrElse(today) { Double.NaN }
             val low = f.daily.temperatureMin.getOrElse(today) { Double.NaN }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                MonoText(Fmt.temp(high), color = accent, bold = true, size = 13.sp, modifier = text.of("high"), onTextLayout = text.layout("high"))
+                MonoText(Fmt.temp(high), color = accent, bold = true, size = 19.sp, modifier = text.of("high"), onTextLayout = text.layout("high"))
                 MonoText(
                     " / " + Fmt.temp(low),
                     color = MaterialTheme.colorScheme.primary,
                     bold = true,
-                    size = 13.sp,
+                    size = 19.sp,
                     modifier = text.of("low"),
                     onTextLayout = text.layout("low"),
                 )
