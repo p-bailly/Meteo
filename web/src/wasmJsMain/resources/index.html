@@ -21,6 +21,8 @@
         #loading { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
             font: 16px -apple-system, system-ui, sans-serif; color: #4B5F73; gap: 12px; }
         #loading .note { font-size: 13px; max-width: 280px; text-align: center; display: none; }
+        #loading button { font: inherit; font-size: 15px; padding: 10px 18px; border-radius: 10px; border: 1px solid currentColor;
+            background: transparent; color: inherit; display: none; }
         @media (prefers-color-scheme: dark) { #loading { color: #A9BDCF; } }
     </style>
 </head>
@@ -28,12 +30,61 @@
 <div id="loading">
     <div>Météo…</div>
     <div class="note" id="unsupported">Ce navigateur est trop ancien pour la webapp : il faut iOS 18.2 (ou un navigateur récent).</div>
+    <div class="note" id="problem"></div>
+    <button id="reset" type="button">Réinitialiser la webapp</button>
 </div>
 <script>
     // Kotlin/Wasm a besoin du « ramasse-miettes » de WebAssembly (Safari 18.2, Chrome 119, Firefox 120).
     (function () {
         var ok = typeof WebAssembly === "object" && WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 95, 1, 120, 0]));
         if (!ok) document.getElementById("unsupported").style.display = "block";
+    })();
+
+    // Jamais de page vide sans explication. Si la webapp ne démarre pas (erreur, démarrage précédent interrompu :
+    // Safari tue la page qui manque de mémoire, ou trop long), on le dit et on propose de tout retélécharger : cache
+    // des prévisions, fichiers de la webapp et service worker. Lieux, favoris, clés et réglages (localStorage) restent.
+    (function () {
+        var loading = document.getElementById("loading");
+        var problem = document.getElementById("problem");
+        var button = document.getElementById("reset");
+        function show(text) {
+            if (!loading.isConnected) return;
+            if (text) {
+                problem.textContent = text;
+                problem.style.display = "block";
+            }
+            button.style.display = "block";
+        }
+        var previous = null;
+        try {
+            previous = localStorage.getItem("meteo-demarrage");
+            localStorage.setItem("meteo-demarrage", String(Date.now()));
+        } catch (e) {}
+        if (previous) show("La dernière ouverture n'a pas abouti. Si la page reste ainsi, réinitialisez la webapp.");
+        setTimeout(function () { show("Le démarrage est bien long."); }, 20000);
+        window.addEventListener("error", function (e) {
+            show("Erreur au démarrage : " + (e.message || (e.target && (e.target.src || e.target.href)) || "inconnue"));
+        }, true);
+        window.addEventListener("unhandledrejection", function (e) {
+            var r = e.reason;
+            show("Erreur au démarrage : " + ((r && (r.message || String(r))) || "inconnue"));
+        });
+        button.addEventListener("click", async function () {
+            button.disabled = true;
+            button.textContent = "Réinitialisation…";
+            try { globalThis.meteoFilesDb && globalThis.meteoFilesDb.close(); } catch (e) {}
+            try {
+                await new Promise(function (done) {
+                    var request = indexedDB.deleteDatabase("meteo-fichiers");
+                    request.onsuccess = request.onerror = request.onblocked = done;
+                    setTimeout(done, 3000);
+                });
+            } catch (e) {}
+            try { for (const key of await caches.keys()) await caches.delete(key); } catch (e) {}
+            try { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); } catch (e) {}
+            try { localStorage.removeItem("meteo-demarrage"); } catch (e) {}
+            location.reload();
+        });
     })();
 </script>
 <script type="importmap">

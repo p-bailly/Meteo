@@ -13,6 +13,10 @@ class FileNotFoundException(message: String? = null) : IOException(message)
 // le téléphone, et recopiés dans IndexedDB, où le navigateur les garde d'une visite à l'autre ([WebFiles.load] les
 // relit au démarrage). IndexedDB tient des dizaines de Mo, là où le stockage local s'arrête à 5.
 
+// Tout est relu en mémoire au démarrage : les fichiers périmés qui ne servent plus à rien y sont effacés au passage,
+// sans quoi le cache grossit à chaque lieu consulté (les ensembles pèsent ~7 Mo par lieu) jusqu'à faire planter
+// Safari sur iPhone (page blanche). Images radar et PIAF : gardées 2 h par l'appli. Ensembles : utiles 3 h, et plus
+// du tout au-delà d'un jour (une prévision plus vieille ne s'affiche plus, même hors ligne).
 private fun idbLoad(): Promise<JsAny?> = js(
     """new Promise((resolve) => {
         try {
@@ -22,11 +26,27 @@ private fun idbLoad(): Promise<JsAny?> = js(
             open.onsuccess = () => {
                 const db = open.result;
                 globalThis.meteoFilesDb = db;
-                const tx = db.transaction("f", "readonly");
-                const store = tx.objectStore("f");
-                const keys = store.getAllKeys();
-                const values = store.getAll();
-                tx.oncomplete = () => resolve({ keys: keys.result, values: values.result });
+                const hour = 3600 * 1000;
+                const maxAge = [[/^cache\/(radar|piaf)\//, 3 * hour], [/^cache\/openmeteo\/ensembles_/, 24 * hour]];
+                const now = Date.now();
+                const keys = [];
+                const values = [];
+                const tx = db.transaction("f", "readwrite");
+                const cursor = tx.objectStore("f").openCursor();
+                cursor.onsuccess = () => {
+                    const c = cursor.result;
+                    if (!c) return;
+                    const key = String(c.key);
+                    const rule = maxAge.find((r) => r[0].test(key));
+                    if (rule && now - (c.value?.t ?? 0) > rule[1]) {
+                        c.delete();
+                    } else {
+                        keys.push(c.key);
+                        values.push(c.value);
+                    }
+                    c.continue();
+                };
+                tx.oncomplete = () => resolve({ keys: keys, values: values });
                 tx.onerror = () => resolve(null);
             };
         } catch (e) {

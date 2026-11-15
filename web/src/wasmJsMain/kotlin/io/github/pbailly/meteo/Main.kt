@@ -53,6 +53,9 @@ private fun saveKeysFromLink() {
 
 private fun decodeComponent(text: String): String = js("decodeURIComponent(text)")
 
+/** Le démarrage a abouti : index.html ne proposera pas de réinitialiser la webapp à la prochaine ouverture. */
+private fun startupDone(): Unit = js("{ try { localStorage.removeItem('meteo-demarrage'); } catch (e) {} }")
+
 /** Les polices d'abord (tout le texte en dépend), puis l'appli dans toute la page. */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
@@ -75,5 +78,6 @@ fun main() {
                 WebApp(viewModel, radar, layers)
             }
         }
+        startupDone()
     }
 }
